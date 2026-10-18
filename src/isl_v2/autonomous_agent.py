@@ -107,7 +107,8 @@ def run_cycle(job: dict[str, Any]) -> dict[str, Any]:
     hypotheses = _hypotheses(prices, as_of)
     # Never convert an asset reference price into an executable simulated quote.
     run_id = fingerprint({"run_key": job["run_key"], "as_of": as_of,
-                          "observations": job["observations"], "version": job["code_version"]})
+                          "observations": job["observations"], "requirements": job.get("requirements", {}),
+                          "version": job["code_version"]})
     return {"run_key": job["run_key"], "input_sha256": run_id,
             "as_of": as_of, "code_version": job["code_version"],
             "cycle_status": "COMPLETED_RESEARCH_ONLY", "observations_available": len(prices),
