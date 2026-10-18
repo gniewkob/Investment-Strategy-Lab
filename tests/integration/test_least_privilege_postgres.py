@@ -79,6 +79,9 @@ class LeastPrivilegeSecurityTests(unittest.TestCase):
             assert_research_runtime(cur)
             self.assertTrue(store_cycle(cur,result))
             self.assertFalse(store_cycle(cur,result))
+            conflicting=dict(result,input_sha256='f'*64)
+            with self.assertRaises(ValueError):
+                store_cycle(cur,conflicting)
             cur.execute("SELECT count(*) FROM investment_lab.agent_paper_decisions WHERE run_key=%s",(result["run_key"],))
             self.assertEqual(cur.fetchone()[0],3)
             self.assertTrue(all(x["decision_type"]=="HOLD_CASH" for x in result["paper_decisions"]))
