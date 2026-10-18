@@ -1,0 +1,31 @@
+name: Neon preflight offline tests (no secrets)
+
+on:
+  pull_request:
+    paths:
+      - scripts/staging_preflight.py
+      - tests/test_staging_preflight.py
+      - .github/workflows/staging-preflight*.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/staging_preflight.py
+      - tests/test_staging_preflight.py
+      - .github/workflows/staging-preflight*.yml
+
+permissions:
+  contents: read
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install DSN parser dependency
+        run: python -m pip install 'psycopg[binary]>=3.2,<4'
+      - name: Validate offline security guards
+        run: python -m unittest discover -s tests -v
