@@ -1,0 +1,61 @@
+name: Opportunity & geopolitical evidence pipeline — offline (no secrets)
+
+on:
+  pull_request:
+    paths:
+      - scripts/opportunity_research_pipeline.py
+      - scripts/opportunity_demo_fixture.py
+      - scripts/economic_geopolitical_context.py
+      - tests/test_opportunity_research_pipeline.py
+      - .github/workflows/opportunity-evidence-pipeline-ci.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/opportunity_research_pipeline.py
+      - scripts/opportunity_demo_fixture.py
+      - scripts/economic_geopolitical_context.py
+      - tests/test_opportunity_research_pipeline.py
+      - .github/workflows/opportunity-evidence-pipeline-ci.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-research-evidence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate all deterministic research and safety tests
+        run: python -m unittest discover -s tests -v
+      - name: Build clearly synthetic offline price experiment
+        run: python -m scripts.opportunity_demo_fixture --output /tmp/isl-synthetic-educational-prices.json
+      - name: Run anomaly radar, explanation ledger and macro context pipeline
+        run: python -m scripts.opportunity_research_pipeline --input /tmp/isl-synthetic-educational-prices.json --out-dir artifacts/educational-evidence
+      - name: Verify report statuses without brokerage or database access
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          folder=Path("artifacts/educational-evidence")
+          data=json.loads((folder/"manifest.json").read_text())
+          assert data["input_dataset_kind"] == "SYNTHETIC_OFFLINE_FIXTURE"
+          assert data["real_orders"] == 0
+          assert data["hypothetical_allocation_changes"] == 0
+          assert data["database_writes"] == 0
+          assert data["source_vintage"] == "UNVERIFIED_HISTORICAL_PUBLICATION"
+          assert data["schedule_enabled"] is False
+          assert (folder/"economic_geopolitical_context.json").exists()
+          print("OFFLINE_EDUCATIONAL_RADAR_LEDGER_MACRO_SUCCESS")
+          PY
+      - name: Upload synthetic demo only
+        uses: actions/upload-artifact@v4
+        with:
+          name: synthetic-educational-opportunity-evidence
+          path: artifacts/educational-evidence/
+          retention-days: 7
+          if-no-files-found: error
