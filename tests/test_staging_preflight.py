@@ -122,6 +122,75 @@ class PreflightDSNTests(unittest.TestCase):
         self.assertEqual(out.getvalue().strip(),
                          "STAGING_PREFLIGHT_CONNECT: AUTHENTICATION_FAILED")
 
+    def test_read_only_staging_session_succeeds_without_backend_ssl_flag(self):
+        # Neon may terminate TLS at its proxy. This test confirms the driver
+        # enforces verify-full while server-side pg_stat_ssl isn't a gate.
+        class StubCursor:
+            def __init__(self):
+                self.queries = []
+                self.last_sql = ""
+
+            def __enter__(self): return self
+            def __exit__(self, *exc): return False
+
+            def execute(self, sql, params=None):
+                self.last_sql = sql
+                self.queries.append((sql, params))
+
+            def fetchone(self):
+                if "FROM pg_roles AS r WHERE r.rolname = current_user" in self.last_sql:
+                    return ("isl_agent_staging_limited", "investment_lab", "on",
+                            False, False, False, False, False, False, False, False,
+                            True, False, True, False, True, True, False, False,
+                            True, True, True, False, False)
+                if "agent_cycles WHERE run_key" in self.last_sql:
+                    return (1,)
+                if "agent_paper_decisions " in self.last_sql:
+                    return (3,)
+                if "prices_asof" in self.last_sql:
+                    return (0,)
+                raise AssertionError("Unknown test SQL")
+
+        class StubConnection:
+            def __init__(self):
+                self.cursor_obj = StubCursor()
+            def __enter__(self): return self
+            def __exit__(self, *exc): return False
+            def cursor(self): return self.cursor_obj
+
+        db = StubConnection()
+        with patch("psycopg.connect", return_value=db) as connect:
+            result = check_connection(GOOD)
+        self.assertEqual(result["status"], "READ_ONLY_TLS_VALIDATED")
+        self.assertEqual(result["writes"], 0)
+        self.assertEqual(result["real_orders"], 0)
+        self.assertEqual(connect.call_args.kwargs["sslmode"], "verify-full")
+        self.assertEqual(connect.call_args.kwargs["sslrootcert"],
+                         "/etc/ssl/certs/ca-certificates.crt")
+        self.assertFalse(any("pg_stat_ssl" in q for q, _ in db.cursor_obj.queries))
+        self.assertTrue(any("SET TRANSACTION READ ONLY" in q
+                            for q, _ in db.cursor_obj.queries))
+
+    def test_overprivileged_role_fails_with_same_read_only_staging_mock(self):
+        class PermissionCursor:
+            def __enter__(self): return self
+            def __exit__(self, *exc): return False
+            def execute(self, sql, params=None): pass
+            def fetchone(self):
+                return ("isl_agent_staging_limited", "investment_lab", "on",
+                        False, False, False, False, False, False, False, True,
+                        True, False, True, False, True, True, False, False,
+                        True, True, True, False, False)
+
+        class PermissionConnection:
+            def __enter__(self): return self
+            def __exit__(self, *exc): return False
+            def cursor(self): return PermissionCursor()
+
+        with patch("psycopg.connect", return_value=PermissionConnection()):
+            with self.assertRaisesRegex(RuntimeError, "permissions"):
+                check_connection(GOOD)
+
     def test_fail_before_any_network_request(self):
         with patch("psycopg.connect") as connect:
             with self.assertRaises(ValueError):
