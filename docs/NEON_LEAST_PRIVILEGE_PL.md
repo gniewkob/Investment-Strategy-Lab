@@ -99,3 +99,12 @@ Gotowe w PR #1:
 **Nie wklejaj całego DSN ani hasła w zgłoszeniu, rozmowie czy komentarzu.** Brak uprawnienia do zapisu środowiskowych sekretów przez aktualną integrację GitHub, dlatego konfiguracja hasła i sekretu nie została wykonana przez agenta.
 
 Ten preflight nie sprawdza jeszcze rzeczywistej powtarzalności cykli, harmonogramu, alertów ani skuteczności prognostycznej. To osobne bramki projektu.
+
+
+## Neon initial password bootstrap — 18.10.2026
+
+Neon Console → Reset password nie obsługuje tożsamości SQL utworzonej z `PASSWORD NULL`: w panelu występuje komunikat `cannot update password for role without password`.
+
+Rozwiązanie zastosowane wyłącznie na gałęzi testowej `br-wandering-union-ba6ogf6l`: po weryfikacji braku `neon_superuser`, `CREATEROLE` i `CREATEDB`, jednorazowy blok `DO` utworzył losowe hasło inicjalne przy użyciu trzech `gen_random_uuid()` po stronie PostgreSQL, a następnie `ALTER ROLE` bez ujawniania sekretu w narzędziach, kodzie ani logach. Kontrola `pg_authid` potwierdziła `rolpassword IS NOT NULL`. Ponowna kontrola ACL wykazała `journal_write=true` i `market_write=false`. Produkcyjny `main` pozostał bez zmian.
+
+Właściciel powinien teraz odświeżyć Neon Console i użyć **Reset password** dla istniejącej roli `isl_agent_staging_limited`. Wyłącznie hasło z tego resetu należy zapisać w menedżerze haseł. **Nie używać niedostępnego hasła inicjalnego**. Nie wysyłać sekretu w czacie ani nie kopiować go do publicznego repozytorium. Następnie skonfigurować chroniony sekret środowiskowy GitHub i wykonać ręczny test TLS read-only. Konto nie jest jeszcze połączone z GitHub Actions.
