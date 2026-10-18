@@ -15,6 +15,7 @@ from pathlib import Path
 import sys
 
 from scripts import evidence_decision_ledger, opportunity_radar
+from scripts import economic_geopolitical_context
 
 
 def _json(obj: object) -> str:
@@ -30,6 +31,7 @@ def run_pipeline(snapshot: dict) -> dict:
         raise ValueError("Explicit, research-only dataset identity is required")
     radar = opportunity_radar.analyze(snapshot)
     ledger = evidence_decision_ledger.make_ledger(radar)
+    context = economic_geopolitical_context.analyze_context(snapshot, radar)
     if (ledger["source_radar_sha256"] != radar["data_sha256"]
             or radar["source_vintage"] != "UNVERIFIED_HISTORICAL_PUBLICATION"
             or radar["pit_backtest_certified"] is not False
@@ -42,6 +44,8 @@ def run_pipeline(snapshot: dict) -> dict:
         "source_vintage": "UNVERIFIED_HISTORICAL_PUBLICATION",
         "as_of": radar["as_of"],
         "input_dataset_kind": snapshot["dataset_kind"],
+        "context_status": context["status"],
+        "context_events": context["context_events"],
         "input_rows": radar["price_records"],
         "series_analyzed": radar["series_analyzed"],
         "historical_events": sum(s["shock_samples"] for s in radar["series"]),
@@ -49,6 +53,8 @@ def run_pipeline(snapshot: dict) -> dict:
         "radar_data_sha256": radar["data_sha256"],
         "radar_report_sha256": hashlib.sha256(_json(radar).encode()).hexdigest(),
         "decision_ledger_sha256": hashlib.sha256(_json(ledger).encode()).hexdigest(),
+        "context_sha256": context.get("context_sha256"),
+        "macroeconomic_geopolitical_causality_established": False,
         "uncertainty": "Unverified publication vintages; overlapping forward windows;"
                        " cannot establish investment performance or optimal allocation",
         "decision": "INVESTIGATE_OR_HOLD_NO_CHANGE_ONLY",
@@ -59,11 +65,11 @@ def run_pipeline(snapshot: dict) -> dict:
         "schedule_enabled": False,
         "requires_verified_data_for_allocation_simulation": True,
     }
-    return {"radar": radar, "ledger": ledger, "manifest": manifest}
+    return {"radar": radar, "ledger": ledger, "context": context, "manifest": manifest}
 
 
 def report(result: dict) -> str:
-    manifest, ledger = result["manifest"], result["ledger"]
+    manifest, ledger, context = result["manifest"], result["ledger"], result["context"]
     lines = [
         "# Opportunity & Decision Intelligence — educational evidence report",
         "",
@@ -74,6 +80,12 @@ def report(result: dict) -> str:
         f"Analyzed reference series: {manifest['series_analyzed']}",
         f"Historical anomaly events: {manifest['historical_events']}",
         f"Questions for independent review: {manifest['questions_for_independent_review']}",
+        "",
+        "## Economic and geopolitical evidence",
+        "",
+        f"Verified historical causal claims: 0; context events to investigate: {context['context_events']}",
+        "Events have publication/retrieval timestamps, official source URLs and counterarguments.",
+        "This context informs further questions, not retrospective trade signals.",
         "",
         "## Evidence ledger",
         "",
@@ -122,6 +134,7 @@ def main() -> int:
         for name, key in (
             ("radar.json", "radar"),
             ("decision_ledger.json", "ledger"),
+            ("economic_geopolitical_context.json", "context"),
             ("manifest.json", "manifest"),
         ):
             (output / name).write_text(_json(result[key]) + "\n", encoding="utf-8")
