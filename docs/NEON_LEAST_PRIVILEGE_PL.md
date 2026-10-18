@@ -79,3 +79,23 @@ Dla tej tożsamości sprawdzono:
 Kolejny krok: nadać silne hasło przez bezpieczny kanał zarządzania SQL/psql (np. interaktywne `\password` w lokalnym `psql`; nie w publicznym pliku SQL), skonfigurować chroniony sekret GitHub tylko dla środowiska testowego, potwierdzić endpoint gałęzi i SSL, następnie wykonać odczyt i jeden testowy cykl. **Nie należy wklejać hasła ani URL zawierającego hasło do czatu, Issue ani Pull Request.**
 
 Produkcja `main` pozostaje bez zmian; osobne zatwierdzenie jest wymagane przed wdrożeniem na produkcję.
+
+
+## Read-only connectivity preflight — 18 października 2026
+
+Gotowe w PR #1:
+- `src/isl_v2/staging_healthcheck.py`: odczytuje sekret wyłącznie ze środowiska w czasie wykonania, wymaga nazwy użytkownika `isl_agent_staging_limited`, bazy `investment_lab` i jednego oficjalnego hosta `*.neon.tech`; odmawia logowania z kontem owner, bez hasła, przez IP, przy niewłaściwej bazie i przy `sslmode=require/disable`.
+- Realne połączenie wykorzystuje `sslmode=verify-full` oraz wymusza `default_transaction_read_only=on`. Kontrola czyta `pg_stat_ssl`, uprawnienia przez `assert_research_runtime()`, liczbę widocznych wersji cen i istniejące cykle; **nie wykonuje INSERT/UPDATE/DELETE**.
+- `.github/workflows/staging-readonly-preflight.yml`: ręczne uruchomienie `workflow_dispatch` tylko na gałęzi `main`, wymagane środowisko `research-staging`, sekret `NEON_RESEARCH_DATABASE_URL`; brak uruchamiania podczas publicznych `push`/PR.
+- 11 niezależnych testów walidacji celu (w tym odrzucenie właściciela, innej bazy, zewnętrznego hosta, braku hasła i słabszego TLS), bez łączenia się z Neon.
+
+**Jednorazowa konfiguracja wymagająca interakcji właściciela**:
+
+1. Wybierz w [Neon Console](https://console.neon.tech) projekt `red-lake-53043722`, gałąź TESTOWĄ `br-wandering-union-ba6ogf6l` i bazę `investment_lab`. Nie wybieraj `main`.
+2. W bezpiecznej interaktywnej sesji `psql` z uprawnieniami zarządzania tą rolą uruchom `\password isl_agent_staging_limited`. Ustal unikalne długie losowe hasło i nie wklejaj go do SQL w repo, historii powłoki, chatu ani logów. Jeśli uprawnienia `psql` lub mechanizm Neon nie pozwoli zmienić hasła, przerwij i nie twórz ponownie roli przez Neon API (mogłaby odzyskać `neon_superuser`).
+3. W repozytorium GitHub przejdź `Settings → Environments → New environment`, utwórz `research-staging`; ustaw ograniczenie gałęzi do `main` i zatwierdzanie przez opiekuna (jeśli plan to udostępnia). W środowisku wybierz `Environment secrets → Add secret` i dodaj `NEON_RESEARCH_DATABASE_URL` z DSN **wyłącznie dla gałęzi staging i konta `isl_agent_staging_limited`**. DSN ma zawierać `sslmode=verify-full` oraz poprawnie zakodowane hasło. Nie ustawiaj sekretu na poziomie całego repozytorium.
+4. Po zatwierdzonym przeglądzie i scaleniu PR #1 uruchom ręcznie `Actions → Neon Staging — verified TLS read-only preflight → Run workflow` z `main`. Oczekiwane: `READ_ONLY_TLS_VALIDATED`, `writes=0`, `real_orders=0`. Wynik negatywny zatrzymuje dalsze wdrożenie. Nie uruchamiaj jeszcze `Autonomous Investment Research`.
+
+**Nie wklejaj całego DSN ani hasła w zgłoszeniu, rozmowie czy komentarzu.** Brak uprawnienia do zapisu środowiskowych sekretów przez aktualną integrację GitHub, dlatego konfiguracja hasła i sekretu nie została wykonana przez agenta.
+
+Ten preflight nie sprawdza jeszcze rzeczywistej powtarzalności cykli, harmonogramu, alertów ani skuteczności prognostycznej. To osobne bramki projektu.
