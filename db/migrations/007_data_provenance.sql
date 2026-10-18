@@ -39,7 +39,9 @@ CREATE TABLE IF NOT EXISTS investment_lab.price_observation_versions (
 CREATE INDEX IF NOT EXISTS price_versions_pit_idx
   ON investment_lab.price_observation_versions(instrument_code,source_code,observed_for,available_at DESC,revision_no DESC);
 
--- Publication gate resides in a pure SQL SECURITY INVOKER function, not in a trigger.
+-- Public release and local receipt/ingestion gates reside in a SQL SECURITY INVOKER function.
+-- A quote known publicly before an experiment but fetched later is not available
+-- to the autonomous agent on that historical run date. Do not backfill "known" records retroactively.
 -- All research reads MUST call prices_asof(cutoff). The function also enforces
 -- conservative NEXT-DAY availability for documents with DAY-precision dates.
 CREATE OR REPLACE FUNCTION investment_lab.prices_asof(cutoff timestamptz)
@@ -52,18 +54,18 @@ SELECT DISTINCT ON (v.instrument_code,v.source_code,v.observed_for,v.interval_co
   v.value_concept,v.revision_no,
   GREATEST(v.available_at,CASE WHEN s.publication_precision=''DAY''
     THEN (((s.published_at AT TIME ZONE ''UTC'')::date+1)::timestamp AT TIME ZONE ''UTC'')
-    ELSE s.published_at END),
+    ELSE s.published_at END, v.recorded_at, s.retrieved_at),
   v.document_id
 FROM investment_lab.price_observation_versions v
 JOIN investment_lab.source_documents s USING(document_id)
 WHERE s.source_code = v.source_code
   AND GREATEST(v.available_at,CASE WHEN s.publication_precision=''DAY''
     THEN (((s.published_at AT TIME ZONE ''UTC'')::date+1)::timestamp AT TIME ZONE ''UTC'')
-    ELSE s.published_at END) <= cutoff
+    ELSE s.published_at END, v.recorded_at, s.retrieved_at) <= cutoff
 ORDER BY v.instrument_code,v.source_code,v.observed_for,v.interval_code,
          GREATEST(v.available_at,CASE WHEN s.publication_precision=''DAY''
     THEN (((s.published_at AT TIME ZONE ''UTC'')::date+1)::timestamp AT TIME ZONE ''UTC'')
-    ELSE s.published_at END) DESC, v.revision_no DESC
+    ELSE s.published_at END, v.recorded_at, s.retrieved_at) DESC, v.revision_no DESC
 ';
 
 CREATE TABLE IF NOT EXISTS investment_lab.pipeline_runs (
