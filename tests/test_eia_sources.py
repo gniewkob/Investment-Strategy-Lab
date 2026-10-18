@@ -51,7 +51,7 @@ class EIASourceTests(unittest.TestCase):
 
     def test_reject_future_dated_observation(self):
         with self.assertRaises(SourceFormatError):
-            parse_snapshot("brent", fixture(replace_cell=(3, 3, "120.00")), NOW)
+            parse_snapshot("brent", fixture(replace_cell=(3, 4, "120.00")), NOW)
 
     def test_reject_malformed_numeric_quote(self):
         with self.assertRaises(SourceFormatError):
