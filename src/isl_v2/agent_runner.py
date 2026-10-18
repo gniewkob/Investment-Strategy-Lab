@@ -11,10 +11,45 @@ import json
 import os
 from pathlib import Path
 import sys
+from urllib.parse import urlsplit
 
 from .autonomous_agent import run_cycle, evaluate_hypothesis
 from .agent_cli import report
 from .provenance import canonical_json
+
+
+
+# Dedicated *staging* endpoint: do not accidentally point research at main.
+STAGING_HOST = "ep-summer-star-ba5trfu5.c-8.eu-central-1.aws.neon.tech"
+STAGING_ROLE = "isl_agent_staging_limited"
+STAGING_DATABASE = "investment_lab"
+
+
+def validate_staging_dsn(dsn: str) -> None:
+    """Refuse owner credentials, pooled/main hosts, weak TLS or missing auth."""
+    if not dsn:
+        raise ValueError("Missing research-only staging connection secret")
+    from psycopg.conninfo import conninfo_to_dict
+    try:
+        uri = urlsplit(dsn)
+        if uri.scheme not in ("postgresql", "postgres"):
+            raise ValueError("Expected PostgreSQL URI")
+        if uri.hostname != STAGING_HOST or uri.port not in (None, 5432):
+            raise ValueError("Unexpected Neon staging endpoint")
+        data = conninfo_to_dict(dsn)
+    except Exception:
+        # Parsing errors can contain secrets: never propagate those messages.
+        raise ValueError("Invalid research staging connection settings") from None
+    if data.get("host") != STAGING_HOST:
+        raise ValueError("Unexpected staging compute")
+    if data.get("user") != STAGING_ROLE or data.get("dbname") != STAGING_DATABASE:
+        raise ValueError("Unexpected staging identity")
+    if not data.get("password"):
+        raise ValueError("Missing staging authentication")
+    if data.get("sslmode") != "verify-full":
+        raise ValueError("TLS peer and hostname verification required")
+    if any(data.get(k) for k in ("hostaddr", "service", "passfile")):
+        raise ValueError("Indirect connection settings prohibited")
 
 
 def scheduled_cutoff(now: datetime) -> datetime:
@@ -167,10 +202,11 @@ def execute(dsn: str, out_dir: Path, now: datetime) -> dict:
         import psycopg  # Installed in isolated GitHub job, not a runtime requirement for offline tests.
     except ImportError as exc:
         raise RuntimeError("psycopg is required for autonomous Neon scheduling") from exc
-    if not dsn:
-        raise RuntimeError("NEON_DATABASE_URL is missing: agent has NOT run; configure secret")
+    validate_staging_dsn(dsn)
     cutoff=scheduled_cutoff(now)
-    with psycopg.connect(dsn,connect_timeout=15,sslmode="require",autocommit=False) as conn:
+    with psycopg.connect(dsn,connect_timeout=15,sslmode="verify-full",
+                         sslrootcert="/etc/ssl/certs/ca-certificates.crt",
+                         autocommit=False) as conn:
         with conn.cursor() as cur:
             assert_research_runtime(cur)
             price_rows=load_observations(cur,cutoff)
