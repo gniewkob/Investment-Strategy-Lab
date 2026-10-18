@@ -1,10 +1,14 @@
-name: Investment Strategy Lab v2 Sprint1 CI
+name: Investment Strategy Lab v2 — CI
 on:
   push:
+    branches: [main]
   pull_request:
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: isl-ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 jobs:
   test:
     runs-on: ubuntu-latest
