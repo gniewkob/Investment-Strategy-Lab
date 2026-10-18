@@ -1,0 +1,30 @@
+name: Neon Staging — verified TLS read-only preflight
+
+# Manual-only. Workflow never writes to Neon and never runs on PR/push.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: isl-staging-tls-preflight
+  cancel-in-progress: false
+
+jobs:
+  read-only-neon-connectivity:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: research-staging
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install PostgreSQL connection adapter
+        run: python -m pip install 'psycopg[binary]>=3.2,<4'
+      - name: Validate staging identity, TLS, ACL and historical read (no DB writes)
+        env:
+          NEON_DATABASE_URL: ${{ secrets.NEON_RESEARCH_DATABASE_URL }}
+        run: python -m src.isl_v2.staging_healthcheck
