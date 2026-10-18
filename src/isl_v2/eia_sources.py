@@ -21,7 +21,7 @@ SOURCES = {
 MONTHS = {k: v for v, k in enumerate(("Jan", "Feb", "Mar", "Apr", "May", "Jun",
                                       "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"), 1)}
 ROW = re.compile(r"^\s*(\d{4})\s+([A-Za-z]{3})-\s*(\d{1,2})\s+to\s+([A-Za-z]{3})-\s*(\d{1,2})\s*$")
-RELEASE = re.compile(r"\bRelease\s+Date:\s*(\d{1,2})/(\d{1,2})/(\d{4})\b", re.I)
+RELEASE = re.compile(r"(?<!Next )\bRelease\s+Date:\s*(\d{1,2})/(\d{1,2})/(\d{4})\b", re.I)
 NUMBER = re.compile(r"\d+(?:\.\d+)?")
 MISSING = {"", "-", "--", "NA", "W"}
 
