@@ -64,6 +64,9 @@ def check_connection(dsn: str) -> dict:
     with psycopg.connect(
         dsn,
         sslmode="verify-full",
+        # On GitHub Ubuntu runners, libpq must be given the system CA bundle.
+        # Keep hostname validation; never downgrade to sslmode=require.
+        sslrootcert="/etc/ssl/certs/ca-certificates.crt",
         connect_timeout=12,
         options="-c default_transaction_read_only=on",
     ) as conn:
@@ -133,6 +136,32 @@ def check_connection(dsn: str) -> dict:
             "visible_market_observations": visible, "writes": 0, "real_orders": 0}
 
 
+def classify_operational_error(exc: Exception) -> str:
+    """Map driver errors to safe codes. Never emit raw libpq error text.
+
+    libpq may include hostnames, usernames or connection details in errors.
+    Keyword checks influence ONLY a fixed public category, not log contents.
+    """
+    state = getattr(exc, "sqlstate", None)
+    if state in ("28P01", "28000"):
+        return "AUTHENTICATION_FAILED"
+    message = str(exc).lower()
+    if ("password authentication failed" in message
+            or "sasl authentication failed" in message):
+        return "AUTHENTICATION_FAILED"
+    if ("root certificate" in message or "certificate verify failed" in message
+            or "certificate validation failed" in message
+            or "could not verify server certificate" in message):
+        return "TLS_CERTIFICATE_FAILED"
+    if "could not translate host name" in message or "name or service not known" in message:
+        return "DNS_LOOKUP_FAILED"
+    if "timeout" in message or "timed out" in message:
+        return "CONNECTION_TIMEOUT"
+    if "connection refused" in message:
+        return "CONNECTION_REFUSED"
+    return "OTHER_CONNECTION_FAILURE"
+
+
 def main() -> int:
     try:
         result = check_connection(os.getenv("NEON_DATABASE_URL", ""))
@@ -143,8 +172,11 @@ def main() -> int:
         print("STAGING_PREFLIGHT_CONFIG: " + str(exc), file=sys.stderr)
         return 2
     except Exception as exc:
-        # Driver exceptions can contain credentials, so only the type is safe.
-        print("STAGING_PREFLIGHT_FAILED: " + type(exc).__name__, file=sys.stderr)
+        # Only output an allowlisted category, never an unfiltered exception.
+        if type(exc).__name__ == "OperationalError":
+            print("STAGING_PREFLIGHT_CONNECT: " + classify_operational_error(exc), file=sys.stderr)
+        else:
+            print("STAGING_PREFLIGHT_FAILED: " + type(exc).__name__, file=sys.stderr)
         return 2
 
 
