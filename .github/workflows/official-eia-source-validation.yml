@@ -1,0 +1,21 @@
+name: Official EIA source validation — no database writes
+on:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify-eia:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate live official EIA Brent daily page (read only)
+        run: python -m src.isl_v2.eia_ingest --source brent
+      - name: Validate live official EIA WTI daily page (read only)
+        run: python -m src.isl_v2.eia_ingest --source wti
+      - name: Validate live official EIA Henry Hub daily page (read only)
+        run: python -m src.isl_v2.eia_ingest --source henry_hub
