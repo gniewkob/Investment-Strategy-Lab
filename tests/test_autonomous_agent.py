@@ -22,6 +22,11 @@ class AgentTests(unittest.TestCase):
         self.assertTrue(r['no_live_execution'])
     def test_reproducible(self):
         a=run_cycle(self.job());b=run_cycle(self.job());self.assertEqual(a,b)
+    def test_research_requirements_are_part_of_input_fingerprint(self):
+        first=self.job()
+        second=self.job()
+        second['requirements']={'EQUITY_TR_PLN':{'basis':'TOTAL_RETURN_INDEX','currency':'PLN'}}
+        self.assertNotEqual(run_cycle(first)['input_sha256'],run_cycle(second)['input_sha256'])
     def test_cannot_use_later_published_reference_price(self):
         d=self.job();d['observations']=[obs('COPPER_WB_USD_T','2026-09-30T00:00:00Z',
                                '2026-10-18T00:00:00Z',14474)]
