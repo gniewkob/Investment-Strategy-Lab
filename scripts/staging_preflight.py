@@ -16,29 +16,44 @@ EXPECTED_USER = "isl_agent_staging_limited"
 EXPECTED_CANARY = "staging-security-canary-2026-10-18"
 
 
-def validate_dsn(dsn: str) -> None:
-    """Reject wrong identities, compute endpoints and TLS settings before connecting."""
-    if not dsn:
-        raise ValueError("missing secret")
-    # conninfo_to_dict accepts URI and keyword DSNs; the workflow requires URI.
-    parsed = urlsplit(dsn)
-    if parsed.scheme not in ("postgresql", "postgres"):
-        raise ValueError("expected PostgreSQL URI")
-    if parsed.hostname != EXPECTED_HOST or parsed.port not in (None, 5432):
-        raise ValueError("unexpected staging endpoint")
-    from psycopg.conninfo import conninfo_to_dict
+class ConfigurationError(ValueError):
+    """A fixed public status code, never derived from secret material."""
 
-    parts = conninfo_to_dict(dsn)
-    if parts.get("user") != EXPECTED_USER or parts.get("dbname") != EXPECTED_DATABASE:
-        raise ValueError("unexpected database identity")
+
+def validate_dsn(dsn: str) -> None:
+    """Fail closed with non-sensitive, stable configuration error codes."""
+    if not dsn:
+        raise ConfigurationError("MISSING_SECRET")
+    try:
+        parsed = urlsplit(dsn)
+        if parsed.scheme not in ("postgresql", "postgres"):
+            raise ConfigurationError("NOT_POSTGRESQL_URL")
+        host, port = parsed.hostname, parsed.port
+    except (TypeError, ValueError) as exc:
+        if isinstance(exc, ConfigurationError):
+            raise
+        raise ConfigurationError("MALFORMED_URL") from None
+    if host != EXPECTED_HOST or port not in (None, 5432):
+        raise ConfigurationError("HOST_OR_POOLING_MISMATCH")
+
+    from psycopg.conninfo import conninfo_to_dict
+    try:
+        parts = conninfo_to_dict(dsn)
+    except Exception:
+        # psycopg errors may contain user-provided DSN fragments. Never log them.
+        raise ConfigurationError("MALFORMED_URL") from None
+    if parts.get("user") != EXPECTED_USER:
+        raise ConfigurationError("ROLE_MISMATCH")
+    if parts.get("dbname") != EXPECTED_DATABASE:
+        raise ConfigurationError("DATABASE_MISMATCH")
     if parts.get("host") != EXPECTED_HOST:
-        raise ValueError("unexpected database host")
+        raise ConfigurationError("HOST_OR_POOLING_MISMATCH")
     if not parts.get("password"):
-        raise ValueError("missing database password")
+        raise ConfigurationError("PASSWORD_MISSING")
     if parts.get("sslmode") != "verify-full":
-        raise ValueError("TLS hostname verification required")
+        raise ConfigurationError("TLS_VERIFY_FULL_REQUIRED")
     if any(parts.get(k) for k in ("hostaddr", "service", "passfile")):
-        raise ValueError("indirect endpoint or credential lookup forbidden")
+        raise ConfigurationError("INDIRECT_CONNECTION_FORBIDDEN")
 
 
 def check_connection(dsn: str) -> dict:
@@ -123,8 +138,12 @@ def main() -> int:
         result = check_connection(os.getenv("NEON_DATABASE_URL", ""))
         print(json.dumps(result, sort_keys=True))
         return 0
+    except ConfigurationError as exc:
+        # Only fixed internal error codes are printed: no host/URI/password data.
+        print("STAGING_PREFLIGHT_CONFIG: " + str(exc), file=sys.stderr)
+        return 2
     except Exception as exc:
-        # Do not render driver exception messages: some contain connection info.
+        # Driver exceptions can contain credentials, so only the type is safe.
         print("STAGING_PREFLIGHT_FAILED: " + type(exc).__name__, file=sys.stderr)
         return 2
 
