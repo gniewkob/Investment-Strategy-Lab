@@ -249,7 +249,7 @@ def main() -> None:
         out_dir=Path(args.out_dir)
         first=execute(dsn,out_dir,CANARY_NOW)
         second=execute(dsn,out_dir,CANARY_NOW)
-        if (not first["newly_written"] or second["newly_written"]
+        if (second["newly_written"]
             or first["input_sha256"] != second["input_sha256"]
             or first["paper_decisions"] != second["paper_decisions"]
             or first["evaluated_hypotheses"] != 0 or second["evaluated_hypotheses"] != 0):
@@ -259,7 +259,7 @@ def main() -> None:
                  "input_sha256":first["input_sha256"],
                  "records_seen":first["observations_available"],
                  "paper_decisions":len(first["paper_decisions"]),
-                 "all_hold_cash":True,"first_write":True,"replay_write":False,
+                 "all_hold_cash":True,"first_write":first["newly_written"],"replay_write":False,
                  "paper_fills":0,"real_orders":0,"scheduled":False}
         (out_dir/"manifest.json").write_text(canonical_json(summary)+"\n",encoding="utf-8")
     except Exception as e:
