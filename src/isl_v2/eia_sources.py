@@ -122,6 +122,11 @@ def parse_snapshot(source: str, html: bytes, downloaded_at: datetime,
             raise SourceFormatError("EIA row is not a Monday-Friday interval")
         for offset, raw_price in enumerate(cells[1:]):
             quoted_day = start + timedelta(days=offset)
+            # WTI includes legitimate historical negative spot observations (2020).
+            # Only this recent-window importer uses positive-price Neon columns:
+            # filter obsolete dates BEFORE numeric/domain validation.
+            if quoted_day < cutoff:
+                continue
             price_text = raw_price.strip().replace("\xa0", " ")
             if price_text.upper() in MISSING:
                 continue
@@ -134,8 +139,6 @@ def parse_snapshot(source: str, html: bytes, downloaded_at: datetime,
             if not price.is_finite() or price <= 0 or quoted_day > released:
                 raise SourceFormatError("Invalid EIA price or future observation")
             raw_count += 1
-            if quoted_day < cutoff:
-                continue
             prior = observations.setdefault(quoted_day, price)
             if prior != price:
                 raise SourceFormatError("Conflicting EIA prices for the same date")
