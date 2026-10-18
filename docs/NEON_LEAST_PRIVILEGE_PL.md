@@ -84,10 +84,10 @@ Produkcja `main` pozostaje bez zmian; osobne zatwierdzenie jest wymagane przed w
 ## Read-only connectivity preflight — 18 października 2026
 
 Gotowe w PR #1:
-- `src/isl_v2/staging_healthcheck.py`: odczytuje sekret wyłącznie ze środowiska w czasie wykonania, wymaga nazwy użytkownika `isl_agent_staging_limited`, bazy `investment_lab` i jednego oficjalnego hosta `*.neon.tech`; odmawia logowania z kontem owner, bez hasła, przez IP, przy niewłaściwej bazie i przy `sslmode=require/disable`.
+- `scripts/staging_preflight.py` (już w `main`): wymusza dokładny testowy endpoint Neon, rolę `isl_agent_staging_limited`, bazę `investment_lab`, `sslmode=verify-full` i znacznik testowy; nie łączy się z inną gałęzią ani nie zapisuje danych.
 - Realne połączenie wykorzystuje `sslmode=verify-full` oraz wymusza `default_transaction_read_only=on`. Kontrola czyta `pg_stat_ssl`, uprawnienia przez `assert_research_runtime()`, liczbę widocznych wersji cen i istniejące cykle; **nie wykonuje INSERT/UPDATE/DELETE**.
-- `.github/workflows/staging-readonly-preflight.yml`: ręczne uruchomienie `workflow_dispatch` tylko na gałęzi `main`, wymagane środowisko `research-staging`, sekret `NEON_RESEARCH_DATABASE_URL`; brak uruchamiania podczas publicznych `push`/PR.
-- 11 niezależnych testów walidacji celu (w tym odrzucenie właściciela, innej bazy, zewnętrznego hosta, braku hasła i słabszego TLS), bez łączenia się z Neon.
+- `.github/workflows/staging-preflight.yml` (już w `main`): ręczne `workflow_dispatch`, środowisko `research-staging` i sekret `NEON_RESEARCH_DATABASE_URL`; ostatni odczytowy test zakończony sukcesem: https://github.com/gniewkob/Investment-Strategy-Lab/actions/runs/39157477363.
+- 22 niezależne testy walidacji i bezpieczeństwa połączenia (w tym odrzucenie właściciela, innej bazy, zewnętrznego hosta, braku hasła i słabszego TLS), bez łączenia się z Neon.
 
 **Jednorazowa konfiguracja wymagająca interakcji właściciela**:
 
@@ -108,3 +108,10 @@ Neon Console → Reset password nie obsługuje tożsamości SQL utworzonej z `PA
 Rozwiązanie zastosowane wyłącznie na gałęzi testowej `br-wandering-union-ba6ogf6l`: po weryfikacji braku `neon_superuser`, `CREATEROLE` i `CREATEDB`, jednorazowy blok `DO` utworzył losowe hasło inicjalne przy użyciu trzech `gen_random_uuid()` po stronie PostgreSQL, a następnie `ALTER ROLE` bez ujawniania sekretu w narzędziach, kodzie ani logach. Kontrola `pg_authid` potwierdziła `rolpassword IS NOT NULL`. Ponowna kontrola ACL wykazała `journal_write=true` i `market_write=false`. Produkcyjny `main` pozostał bez zmian.
 
 Właściciel powinien teraz odświeżyć Neon Console i użyć **Reset password** dla istniejącej roli `isl_agent_staging_limited`. Wyłącznie hasło z tego resetu należy zapisać w menedżerze haseł. **Nie używać niedostępnego hasła inicjalnego**. Nie wysyłać sekretu w czacie ani nie kopiować go do publicznego repozytorium. Następnie skonfigurować chroniony sekret środowiskowy GitHub i wykonać ręczny test TLS read-only. Konto nie jest jeszcze połączone z GitHub Actions.
+
+
+## Wynik review agenta i staging smoke — 18 października 2026
+
+**Aktualny stan (nadrzędny względem wcześniejszych kroków konfiguracji):** sekret środowiskowy jest już skonfigurowany przez właściciela i preflight w `main` zwrócił `READ_ONLY_TLS_VALIDATED`. `src/isl_v2/agent_runner.py` w PR #1 został poprawiony: weryfikuje dokładny host testowy, rolę, bazę i certyfikat przez `verify-full` oraz Ubuntu CA bundle. Oddzielny stary preflight z PR #1 usunięto — jedyną obowiązującą wersją jest `scripts/staging_preflight.py` w `main`.
+
+Staging SQL smoke (bezpośrednia rola `isl_agent_staging_limited`): `staging-paper-smoke-2026-10-18-v2` zapisał 3 × `HOLD_CASH`, `paper_fills=0` i `real_orders=0`; powtórna próba zapisu utworzyła 0 duplikatów. To test fragmentu zapisu dziennika, **nie** pełne uruchomienie procesu `agent_runner.execute()` przez Actions. PR #1 nadal Draft, harmonogram wyłączony. Przy użyciu jedynie jednej kwalifikującej się obserwacji PIT modele powinny pozostać przy `HOLD_CASH`.
