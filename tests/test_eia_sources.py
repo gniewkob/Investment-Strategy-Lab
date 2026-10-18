@@ -70,6 +70,19 @@ class EIASourceTests(unittest.TestCase):
         with self.assertRaises(SourceFormatError):
             parse_snapshot("brent", fixture(), NOW, max_age_days=1)
 
+    def test_historical_negative_wti_not_in_recent_import_window(self):
+        # April 2020 WTI spot prices can legitimately be negative. A recent-only
+        # importer must not reject the entire source because of old observations.
+        old = ('<tr><td>2020 Apr-20 to Apr-24</td>'
+               '<td>-36.98</td><td>8.91</td><td>13.64</td>'
+               '<td>16.52</td><td>16.94</td></tr>')
+        snapshot = parse_snapshot("wti", fixture(extra_row=old), NOW)
+        self.assertEqual(len(snapshot.observations), 18)
+
+    def test_recent_negative_quote_fails_closed(self):
+        with self.assertRaises(SourceFormatError):
+            parse_snapshot("wti", fixture(replace_cell=(0, 0, "-10.00")), NOW)
+
     def test_reject_unknown_source(self):
         with self.assertRaises(SourceFormatError):
             parse_snapshot("unlisted", fixture(), NOW)
