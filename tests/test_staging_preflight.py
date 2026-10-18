@@ -4,7 +4,7 @@ from io import StringIO
 from contextlib import redirect_stderr
 from unittest.mock import patch
 
-from scripts.staging_preflight import validate_dsn, check_connection, main, ConfigurationError, EXPECTED_HOST
+from scripts.staging_preflight import validate_dsn, check_connection, main, ConfigurationError, EXPECTED_HOST, classify_operational_error
 
 GOOD = (f"postgresql://isl_agent_staging_limited:nonsecret-ci-dummy@{EXPECTED_HOST}/"
         "investment_lab?sslmode=verify-full")
@@ -85,6 +85,42 @@ class PreflightDSNTests(unittest.TestCase):
                          "STAGING_PREFLIGHT_CONFIG: TLS_VERIFY_FULL_REQUIRED")
         self.assertNotIn("do-not-print-this", out.getvalue())
         self.assertNotIn(EXPECTED_HOST, out.getvalue())
+
+    def test_postgres_uses_system_ca_bundle_for_hostname_verification(self):
+        with patch("psycopg.connect", side_effect=RuntimeError("no-network-test")) as connect:
+            with self.assertRaises(RuntimeError):
+                check_connection(GOOD)
+            self.assertEqual(connect.call_args.kwargs["sslmode"], "verify-full")
+            self.assertEqual(connect.call_args.kwargs["sslrootcert"],
+                             "/etc/ssl/certs/ca-certificates.crt")
+            self.assertIn("default_transaction_read_only=on",
+                          connect.call_args.kwargs["options"])
+
+    def test_tls_error_emits_fixed_code_without_sensitive_details(self):
+        from psycopg import OperationalError
+        error = OperationalError("root certificate file: synthetic-hidden-host: fake-password")
+        self.assertEqual(classify_operational_error(error), "TLS_CERTIFICATE_FAILED")
+        out = StringIO()
+        with patch.dict("os.environ", {"NEON_DATABASE_URL": GOOD}):
+            with patch("psycopg.connect", side_effect=error):
+                with redirect_stderr(out):
+                    self.assertEqual(main(), 2)
+        self.assertEqual(out.getvalue().strip(),
+                         "STAGING_PREFLIGHT_CONNECT: TLS_CERTIFICATE_FAILED")
+        self.assertNotIn("fake-password", out.getvalue())
+        self.assertNotIn("synthetic-hidden-host", out.getvalue())
+
+    def test_auth_error_emits_fixed_code(self):
+        from psycopg import OperationalError
+        error = OperationalError("password authentication failed for user 'fictional'")
+        self.assertEqual(classify_operational_error(error), "AUTHENTICATION_FAILED")
+        out = StringIO()
+        with patch.dict("os.environ", {"NEON_DATABASE_URL": GOOD}):
+            with patch("psycopg.connect", side_effect=error):
+                with redirect_stderr(out):
+                    self.assertEqual(main(), 2)
+        self.assertEqual(out.getvalue().strip(),
+                         "STAGING_PREFLIGHT_CONNECT: AUTHENTICATION_FAILED")
 
     def test_fail_before_any_network_request(self):
         with patch("psycopg.connect") as connect:
