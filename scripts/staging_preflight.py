@@ -75,7 +75,6 @@ def check_connection(dsn: str) -> dict:
             cur.execute("""
                 SELECT current_user, current_database(),
                        current_setting('transaction_read_only'),
-                       (SELECT ssl FROM pg_stat_ssl WHERE pid = pg_backend_pid()),
                        r.rolcreaterole, r.rolcreatedb, r.rolsuper, r.rolbypassrls,
                        pg_has_role(current_user, 'neon_superuser', 'MEMBER'),
                        has_database_privilege(current_user, current_database(), 'CREATE'),
@@ -99,14 +98,17 @@ def check_connection(dsn: str) -> dict:
             row = cur.fetchone()
             if not row:
                 raise RuntimeError("database identity missing")
-            (user, dbname, ro, tls, createrole, createdb, superuser, bypassrls,
+            (user, dbname, ro, createrole, createdb, superuser, bypassrls,
              neon_admin, db_create, schema_create, public_create,
              source_read, source_insert, versions_read, versions_insert,
              journal_read, journal_insert, journal_update, journal_delete,
              paper_insert, hypotheses_insert, evaluations_insert,
              pipeline_insert, old_positions_read) = row
-            if user != EXPECTED_USER or dbname != EXPECTED_DATABASE or ro != "on" or tls is not True:
-                raise RuntimeError("unexpected role, database or session security")
+            # Neon terminates client TLS at its proxy. pg_stat_ssl reports
+            # the backend leg and can be false even with verified client TLS.
+            # TLS is enforced by libpq sslmode=verify-full + trusted CA above.
+            if user != EXPECTED_USER or dbname != EXPECTED_DATABASE or ro != "on":
+                raise RuntimeError("unexpected role, database or read-only session")
             forbidden = (createrole, createdb, superuser, bypassrls, neon_admin,
                          db_create, schema_create, public_create, source_insert,
                          versions_insert, journal_update, journal_delete,
