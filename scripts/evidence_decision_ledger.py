@@ -8,8 +8,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from pathlib import Path
 import sys
+
+from scripts.opportunity_radar import SUPPORTED
 
 ALLOWED_DECISIONS = ("OBSERVE", "INVESTIGATE_RESEARCH_ONLY", "INSUFFICIENT_EVIDENCE")
 REQUIRED_VINTAGE = "UNVERIFIED_HISTORICAL_PUBLICATION"
@@ -33,7 +36,7 @@ def _validated_radar(radar: dict) -> list[dict]:
     series = radar.get("series")
     if not isinstance(series, list) or len(series) > 30:
         raise ValueError("Series collection invalid")
-    if not isinstance(radar.get("data_sha256"),str) or len(radar["data_sha256"]) != 64:
+    if not isinstance(radar.get("data_sha256"),str) or not re.fullmatch(r"[a-f0-9]{64}",radar["data_sha256"]):
         raise ValueError("Missing research provenance fingerprint")
     return series
 
@@ -42,11 +45,13 @@ def make_ledger(radar: dict) -> dict:
     series = _validated_radar(radar)
     questions = []
     for entry in series:
+        if not isinstance(entry, dict):
+            raise ValueError("Unexpected evidence record")
         name = entry["instrument_code"]
         interval = entry["interval_code"]
         count = entry["shock_samples"]
         samples = entry["five_bar_baseline_samples"]
-        if not isinstance(name,str) or interval not in ("1d","1mo"):
+        if name not in SUPPORTED or interval not in ("1d","1mo"):
             raise ValueError("Unexpected market series")
         if (type(count) is not int or count < 0
                 or type(samples) is not int or samples < 0 or count > samples):
