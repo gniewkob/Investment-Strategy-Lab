@@ -29,6 +29,7 @@ def scheduled_cutoff(now: datetime) -> datetime:
 def load_observations(cur, as_of: datetime) -> list[dict]:
     """Public availability AND local receipt time must precede autonomous cycle.
 
+    The returned effective_available_at is at least the source retrieval and ingestion timestamps.
     A late-loaded older PDF must not leak retrospectively into an earlier
     autonomous cycle; v.recorded_at and d.retrieved_at are checked explicitly.
     """
@@ -41,7 +42,7 @@ def load_observations(cur, as_of: datetime) -> list[dict]:
              GREATEST(v.available_at,
                  CASE WHEN d.publication_precision='DAY'
                       THEN (((d.published_at AT TIME ZONE 'UTC')::date+1)::timestamp AT TIME ZONE 'UTC')
-                      ELSE d.published_at END) AS effective_available_at,
+                      ELSE d.published_at END, v.recorded_at, d.retrieved_at) AS effective_available_at,
              d.canonical_url,d.sha256_hex,d.published_at,d.publication_precision
       FROM investment_lab.price_observation_versions AS v
       JOIN investment_lab.source_documents AS d ON d.document_id=v.document_id
@@ -50,12 +51,12 @@ def load_observations(cur, as_of: datetime) -> list[dict]:
         AND GREATEST(v.available_at,
                  CASE WHEN d.publication_precision='DAY'
                       THEN (((d.published_at AT TIME ZONE 'UTC')::date+1)::timestamp AT TIME ZONE 'UTC')
-                      ELSE d.published_at END)<=%s
+                      ELSE d.published_at END, v.recorded_at, d.retrieved_at)<=%s
       ORDER BY v.instrument_code,v.source_code,v.observed_for,v.interval_code,
                GREATEST(v.available_at,
                  CASE WHEN d.publication_precision='DAY'
                       THEN (((d.published_at AT TIME ZONE 'UTC')::date+1)::timestamp AT TIME ZONE 'UTC')
-                      ELSE d.published_at END) DESC,
+                      ELSE d.published_at END, v.recorded_at, d.retrieved_at) DESC,
                v.revision_no DESC
     """,(as_of,as_of,as_of))
     rows=[]
