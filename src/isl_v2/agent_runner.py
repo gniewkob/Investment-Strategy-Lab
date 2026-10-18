@@ -132,6 +132,36 @@ def evaluate_pending(cur, observations: list[dict], as_of: datetime) -> int:
     return count
 
 
+
+def assert_research_runtime(cur) -> None:
+    """Fail closed if GitHub points at an owner, ingester or broad DB identity.
+
+    Checks actual database privileges, not only a role name in configuration.
+    Required evidence is SELECT-only; journal is INSERT+SELECT with no UPDATE.
+    """
+    cur.execute("""
+      SELECT
+        has_schema_privilege(current_user,'investment_lab','USAGE'),
+        NOT has_schema_privilege(current_user,'investment_lab','CREATE'),
+        NOT has_database_privilege(current_user,current_database(),'CREATE'),
+        has_table_privilege(current_user,'investment_lab.source_documents','SELECT'),
+        has_table_privilege(current_user,'investment_lab.price_observation_versions','SELECT'),
+        NOT has_table_privilege(current_user,'investment_lab.source_documents','INSERT'),
+        NOT has_table_privilege(current_user,'investment_lab.price_observation_versions','INSERT'),
+        has_table_privilege(current_user,'investment_lab.agent_cycles','SELECT'),
+        has_table_privilege(current_user,'investment_lab.agent_cycles','INSERT'),
+        NOT has_table_privilege(current_user,'investment_lab.agent_cycles','UPDATE'),
+        NOT has_table_privilege(current_user,'investment_lab.agent_cycles','DELETE'),
+        has_table_privilege(current_user,'investment_lab.agent_paper_decisions','INSERT'),
+        has_table_privilege(current_user,'investment_lab.agent_hypotheses','INSERT'),
+        has_table_privilege(current_user,'investment_lab.agent_hypothesis_evaluations','INSERT'),
+        NOT has_table_privilege(current_user,'investment_lab.pipeline_runs','INSERT')
+    """)
+    permissions=cur.fetchone()
+    if not permissions or not all(permissions):
+        raise RuntimeError("Unsafe PostgreSQL research role: required least-privilege boundary failed")
+
+
 def execute(dsn: str, out_dir: Path, now: datetime) -> dict:
     try:
         import psycopg  # Installed in isolated GitHub job, not a runtime requirement for offline tests.
@@ -142,6 +172,7 @@ def execute(dsn: str, out_dir: Path, now: datetime) -> dict:
     cutoff=scheduled_cutoff(now)
     with psycopg.connect(dsn,connect_timeout=15,sslmode="require",autocommit=False) as conn:
         with conn.cursor() as cur:
+            assert_research_runtime(cur)
             price_rows=load_observations(cur,cutoff)
             job={"run_key":f"daily-research-{cutoff:%Y-%m-%d}","as_of":cutoff.isoformat(),
                  "code_version":"2.0.0-rc1","observations":price_rows,"requirements":{}}
