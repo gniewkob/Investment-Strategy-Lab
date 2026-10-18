@@ -3,9 +3,15 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: isl-research-manual-${{ github.ref }}
+  cancel-in-progress: false
 jobs:
   research:
+    # A pull-request or feature-branch dispatch must never receive DB secrets.
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    environment: research-staging
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
@@ -14,9 +20,10 @@ jobs:
           python-version: '3.12'
       - name: Install minimal DB adapter
         run: python -m pip install 'psycopg[binary]>=3.2,<4'
-      - name: Run autonomous research, log decisions, evaluate mature hypotheses
+      - name: Run research with limited INSERT-only journal access
         env:
-          NEON_DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+          # GitHub environment secret, distinct from EIA ingestion identity.
+          NEON_DATABASE_URL: ${{ secrets.NEON_RESEARCH_DATABASE_URL }}
         run: python -m src.isl_v2.agent_runner --out-dir artifacts
       - uses: actions/upload-artifact@v4
         if: always()
