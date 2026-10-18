@@ -1,0 +1,29 @@
+name: Neon staging verified TLS (read-only manual check)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: isl-neon-staging-preflight
+  cancel-in-progress: false
+
+jobs:
+  verify-staging:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: research-staging
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install PostgreSQL adapter
+        run: python -m pip install 'psycopg[binary]>=3.2,<4'
+      - name: Validate staging endpoint, full TLS verification and read-only permissions
+        env:
+          NEON_DATABASE_URL: ${{ secrets.NEON_RESEARCH_DATABASE_URL }}
+        run: python -m scripts.staging_preflight
