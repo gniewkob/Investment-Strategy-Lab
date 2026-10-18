@@ -24,6 +24,10 @@ def _json(obj: object) -> str:
 
 def run_pipeline(snapshot: dict) -> dict:
     """Build both reports from a single fingerprinted, validated input."""
+    if (not isinstance(snapshot, dict)
+            or snapshot.get("dataset_kind") not in
+            ("SYNTHETIC_OFFLINE_FIXTURE", "LEGACY_REFERENCE_SNAPSHOT_UNVERIFIED")):
+        raise ValueError("Explicit, research-only dataset identity is required")
     radar = opportunity_radar.analyze(snapshot)
     ledger = evidence_decision_ledger.make_ledger(radar)
     if (ledger["source_radar_sha256"] != radar["data_sha256"]
@@ -37,6 +41,7 @@ def run_pipeline(snapshot: dict) -> dict:
         "status": "EDUCATIONAL_EVIDENCE_PIPELINE_COMPLETE",
         "source_vintage": "UNVERIFIED_HISTORICAL_PUBLICATION",
         "as_of": radar["as_of"],
+        "input_dataset_kind": snapshot["dataset_kind"],
         "input_rows": radar["price_records"],
         "series_analyzed": radar["series_analyzed"],
         "historical_events": sum(s["shock_samples"] for s in radar["series"]),
@@ -63,6 +68,7 @@ def report(result: dict) -> str:
         "# Opportunity & Decision Intelligence — educational evidence report",
         "",
         "**This is a historical research exercise, not investment advice.**",
+        f"Dataset identity: `{manifest['input_dataset_kind']}`",
         "",
         f"Historical input rows: {manifest['input_rows']}",
         f"Analyzed reference series: {manifest['series_analyzed']}",
