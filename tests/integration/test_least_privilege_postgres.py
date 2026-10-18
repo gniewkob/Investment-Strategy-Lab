@@ -100,15 +100,15 @@ class LeastPrivilegeSecurityTests(unittest.TestCase):
                 cur.execute("SET ROLE isl_market_reader")
                 cur.execute("SELECT count(*) FROM investment_lab.prices_asof(%s)",(datetime.now(timezone.utc),))
                 self.assertGreaterEqual(cur.fetchone()[0],0)
-                with conn.transaction():
-                    with self.assertRaises(psycopg.errors.InsufficientPrivilege):
+                with self.assertRaises(psycopg.errors.InsufficientPrivilege):
+                    with conn.transaction():
                         cur.execute("INSERT INTO investment_lab.agent_cycles(run_key,as_of,input_sha256,code_version,records_seen) VALUES ('not-authorized',now(),repeat('a',64),'test',0)")
             conn.rollback()
         with psycopg.connect(DSN) as conn:
             with conn.cursor() as cur:
                 cur.execute("SET ROLE isl_agent_runtime")
-                with conn.transaction():
-                    with self.assertRaises(psycopg.errors.InsufficientPrivilege):
+                with self.assertRaises(psycopg.errors.InsufficientPrivilege):
+                    with conn.transaction():
                         cur.execute("INSERT INTO investment_lab.pipeline_runs(run_key,pipeline_name,code_version,status) VALUES ('no-source-write','not_allowed','x','STARTED')")
             conn.rollback()
 
