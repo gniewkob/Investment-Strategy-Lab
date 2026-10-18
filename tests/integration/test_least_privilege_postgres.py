@@ -11,7 +11,7 @@ import unittest
 import psycopg
 
 from src.isl_v2.autonomous_agent import run_cycle
-from src.isl_v2.agent_runner import store_cycle
+from src.isl_v2.agent_runner import store_cycle, assert_research_runtime
 from src.isl_v2.eia_sources import parse_snapshot
 from src.isl_v2.eia_ingest import store
 from test_eia_sources import fixture
@@ -76,6 +76,7 @@ class LeastPrivilegeSecurityTests(unittest.TestCase):
                           "observations":[],"requirements":{}})
         with psycopg.connect(DSN) as conn, conn.cursor() as cur:
             cur.execute("SET ROLE isl_agent_runtime")
+            assert_research_runtime(cur)
             self.assertTrue(store_cycle(cur,result))
             self.assertFalse(store_cycle(cur,result))
             cur.execute("SELECT count(*) FROM investment_lab.agent_paper_decisions WHERE run_key=%s",(result["run_key"],))
@@ -93,6 +94,19 @@ class LeastPrivilegeSecurityTests(unittest.TestCase):
             self.assertGreaterEqual(result["new"],1)
             self.assertFalse(result["duplicate_run"])
             self.assertTrue(store(cur,snapshot)["duplicate_run"])
+
+    def test_owner_and_ingester_fail_agent_startup_guard(self):
+        with psycopg.connect(DSN) as conn, conn.cursor() as cur:
+            # The CI database owner must not be usable by scheduled agent.
+            with self.assertRaises(RuntimeError):
+                assert_research_runtime(cur)
+            cur.execute("SET ROLE isl_eia_ingest")
+            with self.assertRaises(RuntimeError):
+                assert_research_runtime(cur)
+            cur.execute("RESET ROLE")
+            cur.execute("SET ROLE isl_market_reader")
+            with self.assertRaises(RuntimeError):
+                assert_research_runtime(cur)
 
     def test_roles_separation_is_real_not_just_acl_metadata(self):
         with psycopg.connect(DSN) as conn:
