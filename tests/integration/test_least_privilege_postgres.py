@@ -11,6 +11,7 @@ import unittest
 import psycopg
 
 from src.isl_v2.autonomous_agent import run_cycle
+from src.isl_v2.agent_cli import report
 from src.isl_v2.agent_runner import store_cycle, assert_research_runtime
 from src.isl_v2.eia_sources import parse_snapshot
 from src.isl_v2.eia_ingest import store
@@ -87,6 +88,48 @@ class LeastPrivilegeSecurityTests(unittest.TestCase):
             self.assertTrue(all(x["decision_type"]=="HOLD_CASH" for x in result["paper_decisions"]))
             self.assertEqual(result["paper_fills_created"],0)
             self.assertEqual(result["real_orders_created"],0)
+
+    def test_one_observation_still_holds_cash_and_produces_report(self):
+        """Reproduce staging-like scarcity without internet or DB secrets."""
+        cutoff=datetime.now(timezone.utc).replace(microsecond=0)
+        result=run_cycle({
+            "run_key":"ci-staging-like-report-v1",
+            "as_of":cutoff.isoformat(),
+            "code_version":"2.0.1-staging-report-check",
+            "requirements":{},
+            "observations":[{
+                "instrument_code":"BRENT_EIA_USD_BBL",
+                "source_code":"eia_brent_daily",
+                "observed_for":"2026-10-14T00:00:00+00:00",
+                "interval_code":"1d",
+                "price_value":"101.00",
+                "value_concept":"DAILY_SPOT",
+                "revision_no":1,
+                "available_at":"2026-10-16T00:00:00+00:00",
+                "document":{
+                    "canonical_url":"https://www.eia.gov/dnav/pet/hist/RBRTED.htm",
+                    "sha256_hex":"a"*64,
+                    "published_at":"2026-10-15T00:00:00+00:00",
+                    "publication_precision":"DAY"}
+            }]})
+        self.assertEqual(result["observations_available"],1)
+        self.assertEqual(result["paper_fills_created"],0)
+        self.assertEqual(result["real_orders_created"],0)
+        self.assertEqual([x["decision_type"] for x in result["paper_decisions"]],
+                         ["HOLD_CASH"]*3)
+        markdown=report(result)
+        self.assertIn("HOLD_CASH",markdown)
+        self.assertIn("Uwzględnione rekordy PIT: 1",markdown)
+        with psycopg.connect(DSN) as conn, conn.cursor() as cur:
+            cur.execute("SET ROLE isl_agent_runtime")
+            self.assertTrue(store_cycle(cur,result))
+            self.assertFalse(store_cycle(cur,result))
+            cur.execute("SELECT count(*) FROM investment_lab.agent_paper_decisions WHERE run_key=%s",
+                        (result["run_key"],))
+            self.assertEqual(cur.fetchone()[0],3)
+            cur.execute("SELECT input_sha256,paper_fills,real_orders FROM investment_lab.agent_cycles WHERE run_key=%s",
+                        (result["run_key"],))
+            self.assertEqual(cur.fetchone(),(result["input_sha256"],0,0))
 
     def test_market_source_ingester_can_append_only(self):
         when=datetime.now(timezone.utc)-timedelta(seconds=30)
