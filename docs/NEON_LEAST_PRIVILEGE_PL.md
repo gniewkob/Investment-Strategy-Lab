@@ -76,6 +76,6 @@ Dla tej tożsamości sprawdzono:
 
 **Brak rzeczywistego logowania**: `SET ROLE` nie potwierdza działania połączenia SSL z kontem i hasłem. Na tym etapie *nie* tworzono tajnego hasła, GitHub environment secret, automatycznego harmonogramu, wirtualnych zakupów ani żadnych zleceń.
 
-Kolejny krok: nadać silne hasło przez bezpieczny kanał zarządzania SQL/psql (np. interaktywne `\\password` w lokalnym `psql`; nie w publicznym pliku SQL), skonfigurować chroniony sekret GitHub tylko dla środowiska testowego, potwierdzić endpoint gałęzi i SSL, następnie wykonać odczyt i jeden testowy cykl. **Nie należy wklejać hasła ani URL zawierającego hasło do czatu, Issue ani Pull Request.**
+Kolejny krok: nadać silne hasło przez bezpieczny kanał zarządzania SQL/psql (np. interaktywne `\password` w lokalnym `psql`; nie w publicznym pliku SQL), skonfigurować chroniony sekret GitHub tylko dla środowiska testowego, potwierdzić endpoint gałęzi i SSL, następnie wykonać odczyt i jeden testowy cykl. **Nie należy wklejać hasła ani URL zawierającego hasło do czatu, Issue ani Pull Request.**
 
 Produkcja `main` pozostaje bez zmian; osobne zatwierdzenie jest wymagane przed wdrożeniem na produkcję.
