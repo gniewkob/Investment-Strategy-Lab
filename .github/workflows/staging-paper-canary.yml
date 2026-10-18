@@ -1,0 +1,41 @@
+name: Neon staging synthetic paper journal canary (manual only)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: isl-staging-paper-canary
+  cancel-in-progress: false
+
+jobs:
+  staging-paper-journal:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: research-staging
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install PostgreSQL adapter
+        run: python -m pip install 'psycopg[binary]>=3.2,<4'
+      - name: Recheck read-only TLS, identity, permissions and staging canary
+        env:
+          NEON_DATABASE_URL: ${{ secrets.NEON_RESEARCH_DATABASE_URL }}
+        run: python -m scripts.staging_preflight
+      - name: Run exactly one fixed-date SYNTHETIC HOLD_CASH cycle and verify replay
+        env:
+          NEON_DATABASE_URL: ${{ secrets.NEON_RESEARCH_DATABASE_URL }}
+        run: python -m scripts.staging_paper_canary --out-dir artifacts/staging-canary
+      - name: Upload paper-only report and manifest
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: synthetic-staging-canary-report
+          path: artifacts/staging-canary/
+          if-no-files-found: error
+          retention-days: 7
