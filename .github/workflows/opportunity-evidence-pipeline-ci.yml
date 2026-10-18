@@ -30,6 +30,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Install PostgreSQL parser adapter for inherited offline DSN unit tests only
+        run: python -m pip install 'psycopg[binary]>=3.2,<4'
       - name: Validate all deterministic research and safety tests
         run: python -m unittest discover -s tests -v
       - name: Build clearly synthetic offline price experiment
