@@ -1,0 +1,9 @@
+{
+  "run_key": "fixture-2026-10-17-001",
+  "pipeline_name": "offline_pit_validation",
+  "code_version": "sprint1.0",
+  "as_of": "2026-10-03T00:00:00+00:00",
+  "observations": [
+    {"instrument_code":"COPPER_WB_USD_T","source_code":"wb_pink_monthly","observed_for":"2026-09-30T00:00:00+00:00","interval_code":"1mo","revision_no":1,"price_value":"14474","value_concept":"MONTHLY_AVERAGE","document":{"canonical_url":"https://thedocs.worldbank.org/example/Pink-Sheet-October-2026.pdf","published_at":"2026-10-02T00:00:00+00:00","publication_precision":"DAY","sha256_hex":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"available_at":"2026-10-03T00:00:00+00:00"}
+  ]
+}
