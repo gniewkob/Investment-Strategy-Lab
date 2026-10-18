@@ -1,0 +1,41 @@
+name: Full educational research runner — staging canary (manual only)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: isl-full-runner-fixed-staging
+  cancel-in-progress: false
+
+jobs:
+  fixed-date-full-runner:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: research-staging
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install minimal PostgreSQL client
+        run: python -m pip install 'psycopg[binary]>=3.2,<4'
+      - name: Verify staging TLS, limited role, data visibility, and canary marker (read-only)
+        env:
+          NEON_DATABASE_URL: ${{ secrets.NEON_RESEARCH_DATABASE_URL }}
+        run: python -m scripts.staging_preflight
+      - name: Execute full research runner twice at one fixed historical cutoff (HOLD_CASH ONLY)
+        env:
+          NEON_DATABASE_URL: ${{ secrets.NEON_RESEARCH_DATABASE_URL }}
+        run: python -m src.isl_v2.agent_runner --fixed-staging-canary --out-dir artifacts/full-research
+      - name: Upload fixed-date paper-only research artifacts
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: full-educational-research-staging-report
+          path: artifacts/full-research/
+          retention-days: 7
+          if-no-files-found: error
