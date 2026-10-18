@@ -1,0 +1,30 @@
+name: Retrospective Opportunity Radar — offline research tests
+
+on:
+  pull_request:
+    paths:
+      - scripts/opportunity_radar.py
+      - tests/test_opportunity_radar.py
+      - .github/workflows/opportunity-radar-ci.yml
+  push:
+    branches: [main]
+    paths:
+      - scripts/opportunity_radar.py
+      - tests/test_opportunity_radar.py
+      - .github/workflows/opportunity-radar-ci.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  retrospective-lab:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify anomaly scanner, chronology and offline research comparison
+        run: python -m unittest discover -s tests -p 'test_opportunity_radar.py' -v
