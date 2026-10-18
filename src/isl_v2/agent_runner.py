@@ -71,19 +71,26 @@ def load_observations(cur, as_of: datetime) -> list[dict]:
 
 def store_cycle(cur,result: dict) -> bool:
     """Transactional journal. Same key+hash is harmless replay; mismatch raises."""
-    cur.execute("SELECT input_sha256 FROM investment_lab.agent_cycles WHERE run_key=%s FOR UPDATE",
-                (result["run_key"],))
-    existing=cur.fetchone()
-    if existing:
-        if existing[0] != result["input_sha256"]:
-            raise ValueError("Cycle collision: same run_key with changed input; refusing overwrite")
-        return False
+    # Atomic insert-first idempotency. Row locks requiring UPDATE grants
+    # are unnecessary and incompatible with an append-only journal role.
     cur.execute("""INSERT INTO investment_lab.agent_cycles
       (run_key,as_of,input_sha256,code_version,records_seen,summary)
-      VALUES(%s,%s,%s,%s,%s,%s::jsonb)""",
+      VALUES(%s,%s,%s,%s,%s,%s::jsonb)
+      ON CONFLICT (run_key) DO NOTHING
+      RETURNING input_sha256""",
       (result["run_key"],result["as_of"],result["input_sha256"],
        result["code_version"],result["observations_available"],
        canonical_json({"hypotheses":len(result["hypotheses"]),"paper_decisions":len(result["paper_decisions"]),"no_live_execution":True})))
+    inserted=cur.fetchone()
+    if inserted is None:
+        # After a concurrent INSERT wait, this fresh statement sees the
+        # committed competing writer without an UPDATE lock.
+        cur.execute("SELECT input_sha256 FROM investment_lab.agent_cycles WHERE run_key=%s",
+                    (result["run_key"],))
+        existing=cur.fetchone()
+        if existing is None or existing[0] != result["input_sha256"]:
+            raise ValueError("Cycle collision: same run_key with changed input; refusing overwrite")
+        return False
     for d in result["paper_decisions"]:
         cur.execute("""INSERT INTO investment_lab.agent_paper_decisions
             (run_key,model_code,signal_cutoff,decision_type,target_weights,missing_data,explanation,paper_only)
