@@ -1,3 +1,11 @@
+## 19.10.2026 — ponowna pełna kontrola EIA vs Neon po PR #29 (bez oryginalnego HTML SHA)
+
+**WYKONANE tylko odczyt:** po PR #29 powtórzono porównanie całego przedziału 02.01.2024–14.10.2026, obecna oficjalna EIA WTI + Brent edition **Release Date 15.10.2026**, pełna lista dat i dokładne porównanie wartości numerycznych poprzez 2 SQL `SELECT` z `FULL OUTER JOIN` na izolowanym Neon STAGING (`br-wandering-union-ba6ogf6l`). Wynik zgodny z poprzednim audytem: **WTI EIA 695 / Neon 660 zgodnych / 35 braków (26.08–14.10.2026) / 0 mismatches / 0 extra**; **Brent 706 / 706 zgodnych / 0 braków / 0 mismatches**.
+
+**Ważne ograniczenie dowodu:** obecny odczyt strony EIA został przetworzony przez narzędzie do tekstu/markdown, więc **nie ma SHA-256 faktycznych oryginalnych bajtów HTML** z tego odczytu; nie podstawiać hasha poprzedniego workflow. Nie uruchomiono też nowego `scripts/eia_wti_gap_receipt.py` z lokalnym autoryzowanym CSV ani ręcznego GitHub `workflow_dispatch`. To niezależny audyt EIA data+cena vs aktualna STAGING, **nie** wykonanie całego zamrożonego kontraktu z oryginalnym source HTML SHA, ani potwierdzenie per-dzień historycznych publication vintages.
+
+Kompletne wyniki, 35 konkretnych dat i metodologia: [Issue #22 komentarz #6274202100](https://github.com/gniewkob/Investment-Strategy-Lab/issues/22#issuecomment-6274202100). Issue #22 nadal OTWARTE; Issue #2 nadal OTWARTE, gdyż brak autentycznych real PIT observation versions. Brak przyczyny historycznego ucięcia importu; dane do ewentualnego backfillu wymagają osobnej zgody na zapis i zaświadczenia bieżącego pobrania oryginalnego EIA HTML. **W tej sesji: 0 zapisów Neon, 0 produkcji, 0 zmian ACL/sekretów, 0 portfolio/trades/schedules**; `UNVERIFIED_HISTORICAL_PUBLICATION`, M1/M2/M3 `HOLD_NO_CHANGE`.
+
 ## 19.10.2026 — zamrożony kontrakt kontroli 35 braków WTI / PR #29
 
 **Dostarczone na `main`:** [PR #29](https://github.com/gniewkob/Investment-Strategy-Lab/pull/29), squash `437b66f9a4f66b7c4d0d4f35e3549a55f52e62f0`. Przegląd oficjalnej historii EIA WTI względem **lokalnie dostarczonego** publicznego wyciągu cen, tylko odczyt, z wcześniej zamrożonym oknem 02.01.2024–14.10.2026, ostatnią zapisaną datą 25.08.2026, oczekiwanym wydaniem EIA 15.10.2026 i liczbą **35 braków**. Nie utożsamiać z importem/notowaniami point-in-time.
