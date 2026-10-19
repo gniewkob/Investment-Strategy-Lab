@@ -29,6 +29,10 @@ After a second explicit user approval, `isl_legacy_history_reader` has **Postgre
 
 After user's approval and rediscovery of the successful 18 October bootstrap from [Issue #3](https://github.com/gniewkob/Investment-Strategy-Lab/issues/3), server-side SQL generated an undisclosed random initial password for `isl_legacy_history_reader`. Direct Neon PostgreSQL checks now confirm `LOGIN=true`, **password present=true**, SELECT only on the historical-reference table, no writes/private holdings and production unchanged. **Still pending:** reset this unknown bootstrap password to a private final password in Neon Console, then configure the separate GitHub Environment secret `NEON_HISTORICAL_READ_DATABASE_URL`. No historical workflow, schedules or trades have run. Follow the [operator bootstrap/reset guide](docs/HISTORICAL_LOGIN_BOOTSTRAP_PL.md). Previous status paragraphs are retained as chronological snapshots.
 
+## First live historical-reference research bridge — PASS (19 October 2026)
+
+The manual staging-only GitHub [historical-reference run #39241685091](https://github.com/gniewkob/Investment-Strategy-Lab/actions/runs/39241685091) completed successfully with the dedicated historical reader credentials. The aggregated [research report artifact](https://github.com/gniewkob/Investment-Strategy-Lab/actions/runs/39241685091/artifacts/12181127705) was inspected: 3,711 reference observations, 8 analyzable series, 62 retrospective anomaly candidates, 47 nonoverlapping research windows, four **investigation-only** series (Brent, WTI, Henry Hub, ETH). No validated macro events or predictive performance; historical publication vintages unverified. M1/M2/M3 remain `HOLD_NO_CHANGE`; zero orders, database writes or allocation changes and no recurring schedule. No new credentials or resets needed. Data provenance/benchmarks are the next blockers, not the already-working staging secret. Prior status paragraphs are chronological and may describe earlier blockers.
+
 ## Architecture
 
 - **Python:** deterministic historical validation, anomaly detection, evidence grading and hypothesis checks; LLM may assist with *explanations*, not invent source evidence.
