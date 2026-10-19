@@ -7,6 +7,9 @@ on:
       - scripts/opportunity_demo_fixture.py
       - scripts/economic_geopolitical_context.py
       - scripts/nonoverlap_validation.py
+      - scripts/paired_research_evidence.py
+      - tests/test_paired_research_evidence.py
+      - docs/PAIRED_BASELINE_PROTOCOL_PL.md
       - scripts/reference_data_quality.py
       - tests/test_reference_data_quality.py
       - scripts/evidence_decision_ledger.py
@@ -21,6 +24,9 @@ on:
       - scripts/opportunity_demo_fixture.py
       - scripts/economic_geopolitical_context.py
       - scripts/nonoverlap_validation.py
+      - scripts/paired_research_evidence.py
+      - tests/test_paired_research_evidence.py
+      - docs/PAIRED_BASELINE_PROTOCOL_PL.md
       - scripts/reference_data_quality.py
       - tests/test_reference_data_quality.py
       - scripts/evidence_decision_ledger.py
@@ -50,6 +56,11 @@ jobs:
         run: python -m scripts.opportunity_demo_fixture --output /tmp/isl-synthetic-educational-prices.json
       - name: Run anomaly radar, explanation ledger and macro context pipeline
         run: python -m scripts.opportunity_research_pipeline --input /tmp/isl-synthetic-educational-prices.json --out-dir artifacts/educational-evidence
+      - name: Pair descriptive naive outcomes on identical historical dates
+        run: |
+          python -m scripts.paired_research_evidence \
+            --robustness-json artifacts/educational-evidence/nonoverlap_validation.json \
+            > artifacts/educational-evidence/paired_baseline_diagnostic.json
       - name: Verify report statuses without brokerage or database access
         run: |
           python - <<'PY'
@@ -76,6 +87,14 @@ jobs:
           assert robust["real_orders"] == 0
           assert robust["virtual_portfolio_changes"] == 0
           assert robust["causal_predictive_advantage_established"] is False
+          paired=json.loads((folder/"paired_baseline_diagnostic.json").read_text())
+          assert paired["status"] == "PAIRED_BASELINE_DESCRIPTIVE_ONLY"
+          assert paired["source_radar_sha256"] == data["radar_data_sha256"]
+          assert paired["paired_events"] == robust["total_nonoverlapping_events"]
+          assert paired["point_in_time_certified"] is False
+          assert paired["portfolio_change_authorized"] is False
+          assert paired["real_orders"] == paired["database_writes"] == 0
+          assert paired["schedule_enabled"] is False
           print("OFFLINE_EDUCATIONAL_RADAR_LEDGER_MACRO_SUCCESS")
           PY
       - name: Upload synthetic demo only

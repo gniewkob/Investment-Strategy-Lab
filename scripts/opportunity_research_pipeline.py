@@ -106,7 +106,9 @@ def report(result: dict) -> str:
         "## Economic and geopolitical evidence",
         "",
         f"Verified historical causal claims: 0; context events to investigate: {context['context_events']}",
-        "Events have publication/retrieval timestamps, official source URLs and counterarguments.",
+        ("Context events have source/retrieval provenance and counterarguments."
+         if context["context_events"] > 0
+         else "No independently documented macro/geopolitical context events were supplied."),
         "This context informs further questions, not retrospective trade signals.",
         "",
         "## Evidence ledger",
