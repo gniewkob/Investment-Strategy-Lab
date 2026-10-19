@@ -11,11 +11,19 @@ from unittest.mock import patch
 from scripts import staging_data_audit as audit
 
 
-def snapshot(*, future=0, mismatch=0, pit=1, series=None):
+def snapshot(*, future=0, mismatch=0, pit=1, series=None,
+             fixture=None, verified=0, verified_series=None):
+    # Synthetic-only by default; the ordinary PIT view has no market authority.
+    if fixture is None:
+        fixture = int(isinstance(pit, int) and pit > 0)
+    nonfixture = pit - fixture if isinstance(pit, int) else 0
     return {
         "server_time": "2026-10-18T19:00:00+00:00",
-        "documents": 3, "versions": 3,
-        "pit_eligible": pit,
+        "documents": 3, "versions": max(3, pit) if isinstance(pit, int) else 3,
+        "pit_eligible": pit, "pit_fixture_visible": fixture,
+        "pit_nonfixture_visible": nonfixture,
+        "pit_verified_market": verified,
+        "verified_series": [] if verified_series is None else verified_series,
         "future_local_timestamps": future,
         "unmatched_sources": mismatch,
         "series": [] if series is None else series,
@@ -34,6 +42,10 @@ class StagingAuditPolicyTests(unittest.TestCase):
         result = audit.classify_snapshot(data)
         self.assertEqual(result["status"], "MARKET_DATA_NOT_READY")
         self.assertEqual(result["pit_eligible_rows"], 1)
+        self.assertEqual(result["pit_fixture_rows"], 1)
+        self.assertEqual(result["pit_verified_market_rows"], 0)
+        self.assertIn("SYNTHETIC_PIT_FIXTURE_NOT_MARKET_DATA", result["warning_codes"])
+        self.assertIn("NO_VERIFIED_POINT_IN_TIME_MARKET_EVIDENCE", result["warning_codes"])
         self.assertEqual(result["future_local_timestamp_rows"], 1)
         self.assertIn("FUTURE_LOCAL_INGESTION_TIMESTAMP", result["warning_codes"])
         self.assertTrue(all(x >= 4 for x in result["monthly_total_return_gaps"].values()))
@@ -51,7 +63,9 @@ class StagingAuditPolicyTests(unittest.TestCase):
         series = [row(code, 4, concept="TOTAL_RETURN_INDEX")
                   for code in audit.MONTHLY_PAPER_REFERENCES]
         series += [row(code, 13) for code in audit.MONTHLY_RESEARCH_WATCH]
-        result = audit.classify_snapshot(snapshot(future=0, pit=38, series=series))
+        result = audit.classify_snapshot(snapshot(
+            future=0, pit=38, fixture=0, verified=38,
+            series=series, verified_series=series))
         self.assertEqual(result["status"], "COVERAGE_GATE_PASSED_REVIEW_REQUIRED")
         self.assertIsNone(result["data_ready_for_autonomous_experiments"])
         self.assertIs(result["approval_required_for_schedule"], True)
@@ -59,23 +73,63 @@ class StagingAuditPolicyTests(unittest.TestCase):
         self.assertFalse(result["data_ready_for_real_trading"])
 
     def test_price_only_monthly_index_cannot_fake_total_return(self):
-        data = snapshot(series=[row("EQUITY_TR_PLN", 100, concept="OTHER_REFERENCE")])
+        data = snapshot(series=[row("EQUITY_TR_PLN", 100, concept="OTHER_REFERENCE")],
+                        fixture=0, verified=1,
+                        verified_series=[row("EQUITY_TR_PLN", 100, concept="OTHER_REFERENCE")])
         result = audit.classify_snapshot(data)
         self.assertEqual(result["monthly_total_return_gaps"]["EQUITY_TR_PLN"],4)
 
     def test_daily_prices_do_not_count_as_monthly_history(self):
-        data = snapshot(series=[row("BRENT_EIA_USD_BBL", 900, interval="1d")])
+        data = snapshot(series=[row("BRENT_EIA_USD_BBL", 900, interval="1d")],
+                        fixture=0, verified=1,
+                        verified_series=[row("BRENT_EIA_USD_BBL", 900, interval="1d")])
         result = audit.classify_snapshot(data)
         self.assertEqual(result["monthly_research_watch_gaps"]["BRENT_EIA_USD_BBL"],13)
 
     def test_partial_coverage_reports_exact_gaps(self):
-        data = snapshot(series=[row("BRENT_EIA_USD_BBL", 9),
-                                row("COPPER_WB_USD_T", 5),
-                                row("GOLD_TR_PLN", 3, concept="TOTAL_RETURN_INDEX")])
+        verified_series = [row("BRENT_EIA_USD_BBL", 9),
+                           row("COPPER_WB_USD_T", 5),
+                           row("GOLD_TR_PLN", 3, concept="TOTAL_RETURN_INDEX")]
+        data = snapshot(pit=17, fixture=0, verified=17, series=verified_series,
+                        verified_series=verified_series)
         result = audit.classify_snapshot(data)
         self.assertEqual(result["monthly_research_watch_gaps"]["BRENT_EIA_USD_BBL"],4)
         self.assertEqual(result["monthly_research_watch_gaps"]["COPPER_WB_USD_T"],8)
         self.assertEqual(result["monthly_total_return_gaps"]["GOLD_TR_PLN"],1)
+
+    def test_fixture_only_pit_history_never_passes_coverage(self):
+        all_series = [row(code, 20, concept="TOTAL_RETURN_INDEX")
+                      for code in audit.MONTHLY_PAPER_REFERENCES]
+        all_series.extend(row(code, 30) for code in audit.MONTHLY_RESEARCH_WATCH)
+        result = audit.classify_snapshot(snapshot(
+            pit=200, fixture=200, verified=0, series=all_series))
+        self.assertEqual(result["status"], "MARKET_DATA_NOT_READY")
+        self.assertEqual(result["pit_fixture_rows"], 200)
+        self.assertEqual(result["pit_verified_market_rows"], 0)
+        self.assertEqual(result["monthly_total_return_gaps"]["EQUITY_TR_PLN"], 4)
+        self.assertIn("NO_VERIFIED_POINT_IN_TIME_MARKET_EVIDENCE", result["warning_codes"])
+        self.assertFalse(result["data_ready_for_autonomous_experiments"])
+
+    def test_unverified_nonfixture_data_cannot_claim_real_market_readiness(self):
+        all_series = [row(code, 14, concept="TOTAL_RETURN_INDEX")
+                      for code in audit.MONTHLY_PAPER_REFERENCES]
+        result = audit.classify_snapshot(snapshot(
+            pit=45, fixture=0, verified=0, series=all_series))
+        self.assertEqual(result["pit_nonfixture_unverified_rows"], 45)
+        self.assertIn("UNVERIFIED_PIT_SOURCE_RECORDS", result["warning_codes"])
+        self.assertEqual(result["monthly_total_return_gaps"]["EQUITY_TR_PLN"], 4)
+
+    def test_inconsistent_fixture_or_verified_counts_are_rejected(self):
+        data = snapshot(pit=3, fixture=2, verified=2)
+        with self.assertRaisesRegex(ValueError, "Inconsistent"):
+            audit.classify_snapshot(data)
+        data = snapshot(pit=3, fixture=3, verified=1)
+        with self.assertRaisesRegex(ValueError, "Inconsistent"):
+            audit.classify_snapshot(data)
+        data = snapshot(pit=3, fixture=3)
+        data.pop("pit_verified_market")
+        with self.assertRaisesRegex(ValueError, "Incomplete"):
+            audit.classify_snapshot(data)
 
     def test_source_mismatch_blocks_data_gate(self):
         data = snapshot(mismatch=2, series=[])
@@ -99,6 +153,8 @@ class StagingAuditPolicyTests(unittest.TestCase):
         text = audit.make_markdown(result)
         self.assertIn("MARKET_DATA_NOT_READY", text)
         self.assertIn("FUTURE_LOCAL_INGESTION_TIMESTAMP", text)
+        self.assertIn("Synthetic PIT fixtures", text)
+        self.assertIn("Independently vintage-verified real market records", text)
         self.assertIn("No real orders", text)
         self.assertNotIn("postgresql://", text)
 
@@ -114,6 +170,8 @@ class StagingAuditPolicyTests(unittest.TestCase):
             m = (Path(tmp)/"audit.md").read_text()
             self.assertEqual(a["status"], "MARKET_DATA_NOT_READY")
             self.assertEqual(a["database_writes"],0)
+            self.assertEqual(a["pit_fixture_rows"],1)
+            self.assertEqual(a["pit_verified_market_rows"],0)
             self.assertNotIn("sensitive-test-only",m)
             self.assertNotIn("sensitive-test-only",(Path(tmp)/"audit.json").read_text())
 
