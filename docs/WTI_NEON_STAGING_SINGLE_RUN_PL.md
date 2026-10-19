@@ -1,5 +1,7 @@
 # WTI EIA ↔ Neon STAGING — jeden kontrolowany przebieg, tylko odczyt
 
+> **ARCHIWUM — przed uzupełnieniem 35 cen WTI (19.10.2026).** Poniższe liczby `660/695/35` odtwarzają prawidłowo udowodnioną dawną lukę i odpowiadają ukończonemu [run #39305643778](https://github.com/gniewkob/Investment-Strategy-Lab/actions/runs/39305643778). Po imporcie stan STAGING wynosi **695/695**, dlatego tego starego walidatora nie wolno używać jako testu bieżącego stanu. Nowy, manualny tylko do odczytu: [WTI_POSTIMPORT_RECEIPT_PL.md](WTI_POSTIMPORT_RECEIPT_PL.md). Publikacyjne vintages nadal niezweryfikowane.
+
 ## Cel i ograniczenie
 
 Dostarczyć jeden spójny, możliwy do odtworzenia audyt bieżącej oficjalnej
