@@ -52,8 +52,24 @@ def classify_snapshot(snapshot: dict) -> dict:
     if (not isinstance(snapshot["series"], list)
             or not isinstance(snapshot["verified_series"], list)):
         raise ValueError("Expected series lists")
-    # This is *exclusively* independently verified market-data coverage.
-    # It must NOT consume the technical PIT view directly.
+    # Validate technical diagnostics too, even though they cannot count
+    # toward market-data readiness.
+    for group in (snapshot["series"], snapshot["verified_series"]):
+        for row in group:
+            if not isinstance(row, dict):
+                raise ValueError("Invalid series summary")
+            try:
+                code = row["instrument_code"]
+                interval = row["interval_code"]
+                concept = row["value_concept"]
+                periods = row["periods"]
+            except KeyError as exc:
+                raise ValueError("Invalid series summary") from exc
+            if not (isinstance(code, str) and isinstance(interval, str)
+                    and isinstance(concept, str) and type(periods) is int
+                    and periods >= 0):
+                raise ValueError("Invalid series summary")
+    # Only independently attested market-data coverage could pass this gate.
     series = snapshot["verified_series"]
     by_code: dict[str, int] = {}
     for row in series:
