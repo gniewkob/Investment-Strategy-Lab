@@ -5,6 +5,8 @@ on:
     paths:
       - src/isl_v2/eia_versioned_ingest.py
       - tests/test_eia_versioned_ingest.py
+      - tests/integration/test_eia_versioned_pg.py
+      - tests/fixtures/eia_pit_schema_007_disposable.sql
       - docs/EIA_VERSIONED_INGEST_GATE_PL.md
       - .github/workflows/eia-versioned-ingest.yml
   push:
@@ -46,6 +48,37 @@ jobs:
           PY
 
   # No secret or Neon access: operator-triggered PUBLIC HTTPS only.
+
+  disposable-postgres-synthetic-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: investment_lab
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: disposable-ci-fixture-only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d investment_lab"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # FAKE container-only local credential. No user secrets and no Neon network.
+      ISL_TEST_POSTGRES_URL: postgresql://postgres:disposable-ci-fixture-only@127.0.0.1:5432/investment_lab
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install ephemeral CI-only local PostgreSQL adapter
+        run: python -m pip install 'psycopg[binary]>=3.2,<4'
+      - name: Verify real PostgreSQL constraints, revisions and PIT cutoff with synthetic data
+        run: python -m unittest discover -s tests/integration -p 'test_eia_versioned_pg.py' -v
+
   manual-public-eia-only:
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
