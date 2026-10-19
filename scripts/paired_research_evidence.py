@@ -41,6 +41,7 @@ def summarize(source: dict) -> dict:
             or source.get("database_writes") != 0
             or source.get("virtual_portfolio_changes") != 0
             or source.get("scheduled") is not False
+            or source.get("schedule_enabled", False) is not False
             or not isinstance(source.get("source_radar_sha256"), str)
             or not HASH.fullmatch(source["source_radar_sha256"])):
         raise ValueError("Only fingerprinted unverified-vintage research is accepted")
