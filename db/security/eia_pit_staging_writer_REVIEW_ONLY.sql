@@ -48,9 +48,13 @@ BEGIN
      OR has_database_privilege('isl_eia_pit_staging_writer','investment_lab','CREATE')
      OR has_schema_privilege('isl_eia_pit_staging_writer','investment_lab','CREATE')
      OR NOT has_table_privilege('isl_eia_pit_staging_writer',
-                               'investment_lab.source_documents','SELECT,INSERT')
+                               'investment_lab.source_documents','SELECT')
      OR NOT has_table_privilege('isl_eia_pit_staging_writer',
-                               'investment_lab.price_observation_versions','SELECT,INSERT')
+                               'investment_lab.source_documents','INSERT')
+     OR NOT has_table_privilege('isl_eia_pit_staging_writer',
+                               'investment_lab.price_observation_versions','SELECT')
+     OR NOT has_table_privilege('isl_eia_pit_staging_writer',
+                               'investment_lab.price_observation_versions','INSERT')
      OR has_table_privilege('isl_eia_pit_staging_writer',
                            'investment_lab.source_documents','UPDATE,DELETE,TRUNCATE')
      OR has_table_privilege('isl_eia_pit_staging_writer',
