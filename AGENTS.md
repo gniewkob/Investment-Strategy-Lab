@@ -2,6 +2,10 @@
 
 **START HERE:** Read [`docs/SESSION_HANDOFF_PL.md`](docs/SESSION_HANDOFF_PL.md) **in full before proposing or executing any change**. Then read [`docs/HISTORICAL_REFERENCE_BRIDGE_PL.md`](docs/HISTORICAL_REFERENCE_BRIDGE_PL.md), [`docs/OPPORTUNITY_RADAR_PL.md`](docs/OPPORTUNITY_RADAR_PL.md), [Issue #4](https://github.com/gniewkob/Investment-Strategy-Lab/issues/4) and relevant code/tests. This is the durable handoff for new agent sessions, updated 2026-10-19.
 
+## Latest verified live milestone — 2026-10-19
+
+**The historical bridge is no longer blocked by credentials.** First **manual real Neon STAGING** run [#39241685091](https://github.com/gniewkob/Investment-Strategy-Lab/actions/runs/39241685091) passed. Examined the actual aggregate-only [artifact #12181127705](https://github.com/gniewkob/Investment-Strategy-Lab/actions/runs/39241685091/artifacts/12181127705): 3,711 legacy reference rows, 8 analyzed series, 62 retrospective anomalies, 47 nonoverlapping, 15 excluded overlaps, 4 **investigation-only** research questions (Brent, WTI, Henry Hub, ETH). No verified historical publication vintages, no macro context events, no proof of predictive skill, M1/M2/M3 `HOLD_NO_CHANGE`. Manifest confirms `database_writes=0`, `real_orders=0`, `hypothetical_allocation_changes=0`, `schedule_enabled=false`. **Do not re-bootstrap password or reset credentials unnecessarily.** Next work is research evidence/data quality, not ACL. For full verified snapshot see [handoff](docs/SESSION_HANDOFF_PL.md); older blockers in this file are historical.
+
 ## Purpose
 Build an **educational, research-only Opportunity & Decision Intelligence lab**. Discover historical market anomalies, test falsifiable hypotheses, document evidence for/against, compare with naive baselines and no-change alternatives. Classifications prioritize **further research**, never recommend purchases/sales or place any trades. A previous experiment used a hypothetical 100 PLN/month budget with three separate virtual models; it is not an authorization to invest real money.
 
