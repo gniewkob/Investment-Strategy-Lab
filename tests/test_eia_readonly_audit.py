@@ -168,6 +168,20 @@ class ReadOnlyEIAAuditTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "too large"):
                 subject.read_local_reference_with_digest(p, CODE)
 
+    def test_csv_extra_row_field_and_noncanonical_date_fail_closed(self):
+        with TemporaryDirectory() as td:
+            header = "instrument_code,observed_for,close_price\\n".replace("\\n", "\n")
+            invalid_rows = (
+                "WTI_EIA_USD_BBL,2026-10-12,98.73,EXTRA\\n",
+                "WTI_EIA_USD_BBL,20261012,98.73\\n",
+                "WTI_EIA_USD_BBL,2026-10-12\\n",
+            )
+            for invalid in invalid_rows:
+                p = Path(td) / "strict.csv"
+                p.write_text(header + invalid.replace("\\n", "\n"), encoding="utf-8")
+                with self.assertRaises(ValueError):
+                    subject.read_local_reference_with_digest(p, CODE)
+
     def test_allowed_https_source_fetch_and_original_bytes_hash(self):
         data = official_html()
         def fake_open(request, timeout):
