@@ -1,5 +1,7 @@
 # Investment Strategy Lab
 
+> **Current 695-day WTI audit on main (19 October 2026):** [PR #31](https://github.com/gniewkob/Investment-Strategy-Lab/pull/31) merged after **195/195 offline tests**. The manual-only [post-import WTI EIA ↔ Neon STAGING receipt](docs/WTI_POSTIMPORT_RECEIPT_PL.md) checks 695 exact source/stored date+price matches, immutable original 660-row fingerprint and real 2026-10-19 backfill timestamps. **The live post-import job has not yet been dispatched**; PR CI is not evidence of actual source agreement. No verified historical individual publication vintages or PIT import, `MARKET_DATA_NOT_READY`, M1/M2/M3 `HOLD_NO_CHANGE`.
+
 > **19 October 2026 — STAGING legacy WTI coverage FIXED (not PIT).** With explicit user authorization, 35 missing EIA WTI current-archive reference rows were inserted into the isolated STAGING legacy `investment_lab.price_observations` table. Independent SQL postflight: **695/695 WTI days**, all 35 new prices match the official EIA table, 0 mismatches, original 660-row digest unchanged; Brent 706 unchanged, `price_observation_versions` and `source_documents` remain only the three old synthetic fixtures. **Historical publication vintages still unverified**; `MARKET_DATA_NOT_READY` and M1/M2/M3 `HOLD_NO_CHANGE`. The earlier frozen receipt (expected 660/35 gap) is now ARCHIVAL; do not rerun as a current-state test. [Full handoff](docs/SESSION_HANDOFF_PL.md) / [Issue #22](https://github.com/gniewkob/Investment-Strategy-Lab/issues/22#issuecomment-6274907188).
 
 
