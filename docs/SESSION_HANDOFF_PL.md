@@ -4,6 +4,16 @@
 > **Pierwsza lektura nowego agenta:** [`../AGENTS.md`](../AGENTS.md), potem niniejszy plik, [`HISTORICAL_REFERENCE_BRIDGE_PL.md`](HISTORICAL_REFERENCE_BRIDGE_PL.md) oraz [`OPPORTUNITY_RADAR_PL.md`](OPPORTUNITY_RADAR_PL.md).  
 > **Status:** system badawczy / edukacyjne symulacje. **Nie ma zleceń, handlu, realnych inwestycji ani rekomendacji zakupowych.**
 
+## Aktualizacja 19.10.2026 — syntetyczne źródła PIT, nie błąd przyszłej daty
+
+**Nowy zweryfikowany stan (Neon STAGING, tylko odczyt):** sprawdzono oryginalną implementację `investment_lab.prices_asof(cutoff)`, trzy wpisy `price_observation_versions` oraz trzy powiązane `source_documents`. Wszystkie 3 dokumenty mają w `metadata` jawny znacznik `synthetic` albo `fixture_only`. Wszystkie trzy ceny `GOLD_NBP_PLN_G` są **syntetycznymi przykładami testującymi**; notatki na rekordach to między innymi „Synthetic late ingest PIT fixture; NOT a real market price” oraz „Synthetic data, test branch only…”. Wynik SQL: `total_documents=3`, `fixture_documents=3`, `total_versioned_rows=3`, `fixture_versioned_rows=3`, **`non_fixture_versioned_rows=0`**.
+
+**Korekta wcześniejszej interpretacji:** `retrieved_at=2026-10-20T10:00Z` oraz `recorded_at=2026-10-20T10:00Z` są **celowo przyszłe**, aby testować odrzucanie spóźnionych/przyszłych informacji. To **nie jest wykryty błąd datowania realnych danych** i NIE należy go poprawiać. `prices_asof` stosuje konserwatywne `GREATEST(available_at, published_at+opóźnienie dla DAY, recorded_at, retrieved_at) <= cutoff`. Wyniki `prices_asof` na 28.08 i 30.09 = **0**; na 17.10 i `now()` = **1**, ale to **jedna technicznie widoczna próbka testowa, nie zweryfikowane notowanie**.
+
+**Nowy priorytet jakości:** `scripts/staging_data_audit.py` liczy `pit_eligible_rows=1` bez odróżnienia syntetycznych fixture od realnego pochodzenia. Wymagamy osobnych metryk realnych i technicznie dopuszczonych danych; [Issue #23](https://github.com/gniewkob/Investment-Strategy-Lab/issues/23). Zadanie [#22](https://github.com/gniewkob/Investment-Strategy-Lab/issues/22#issuecomment-6269776862) skorygowano o fakt celowej syntetyczności. Dotychczasowy problem importu WTI i [#21](https://github.com/gniewkob/Investment-Strategy-Lab/issues/21) (ucina 10 zdarzeń w module jakości) pozostają otwarte. Przed jakimkolwiek twierdzeniem o point-in-time dla **prawdziwych** danych konieczne jest rekordowe pochodzenie, data publikacji i retrieval — **0 realnych wersjonowanych obserwacji aktualnie spełnia tę bazę**. Legacy `price_observations=3711` nadal `UNVERIFIED_HISTORICAL_PUBLICATION`.
+
+Nie zmieniano danych, ról, ACL, sekretów, produkcji, harmonogramów, kodu analitycznego, transakcji ani żadnych alokacji. Badania wyłącznie edukacyjne, M1/M2/M3 `HOLD_NO_CHANGE`.
+
 ## Kontynuacja P1 — 19.10.2026: diagnostyka read-only bez backfill
 
 Po ponownym sprawdzeniu `main` (przed dopisaniem tej sekcji HEAD `b085d665`) issue [#21](https://github.com/gniewkob/Investment-Strategy-Lab/issues/21) i [#22](https://github.com/gniewkob/Investment-Strategy-Lab/issues/22) nadal `OPEN`, brak PR wdrażającego usunięcie błędu i brak zmian w `reference_data_quality.py`. Nie próbować obchodzić poprzedniego zablokowanego zapisu kodu.
