@@ -68,7 +68,7 @@ def _series_check(code: str, interval: str, rows: list[dict]) -> dict:
             "observed_for": rows[idx]["observed_for"],
             "shock_direction": "UP" if z > 0 else "DOWN",
             "shock_magnitude_z": round(abs(z), 4),
-            "next_horizon_direction_consistent": _direction_same(impulse, forward),
+            "next_horizon_direction_consistent": _direction_same(z, forward),
             "naive_last_bar_direction_consistent": _direction_same(impulse, forward),
             "horizon_bars": horizon,
         })
@@ -77,10 +77,10 @@ def _series_check(code: str, interval: str, rows: list[dict]) -> dict:
     signal_n = len(nonoverlap)
     hits = sum(row["next_horizon_direction_consistent"] for row in nonoverlap)
     naive_hits = sum(row["naive_last_bar_direction_consistent"] for row in nonoverlap)
-    # A shock's sign and the last return's sign are NOT guaranteed identical
-    # if the historical mean is strongly positive/negative. Thus separately
-    # compute same-day benchmark sign agreement in a further revision.
-    # No predictive or profit claim is ever made from these descriptive rates.
+    # The standardized shock can have a different sign from the raw last-bar
+    # return. Report both on identical dates: this prevents confusing a
+    # z-score event's direction with a trivial one-bar sign continuation.
+    # No predictive or profit claim follows from these descriptive rates.
     enough = (signal_n >= MIN_INDEPENDENT_EVENTS
               and len(grid_hit) >= MIN_GRID_WINDOWS)
     return {
