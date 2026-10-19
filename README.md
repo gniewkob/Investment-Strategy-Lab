@@ -21,6 +21,10 @@ The repository already contains **Opportunity Radar**, non-overlapping research 
 
 Original virtual models M1/M2/M3 depend on verified PLN total-return equity/bond reference history; legacy `PRICE_ONLY` spot/reference observations cannot substitute for those indices. Retrospective research remains labelled `UNVERIFIED_HISTORICAL_PUBLICATION`.
 
+## New access status (later 19 October 2026)
+
+After a second explicit user approval, `isl_legacy_history_reader` has **PostgreSQL LOGIN enabled on staging**, but **no password** (`rolpassword IS NOT NULL=false`) and **no GitHub environment secret**. The Neon connector password-reset attempt failed and was independently checked; the role still has historical-reference SELECT-only rights. The manual workflow remains **blocked**. See [safe operator credential bootstrap](docs/HISTORICAL_LOGIN_BOOTSTRAP_PL.md) — never paste secrets into this repository or a chat.
+
 ## Architecture
 
 - **Python:** deterministic historical validation, anomaly detection, evidence grading and hypothesis checks; LLM may assist with *explanations*, not invent source evidence.
