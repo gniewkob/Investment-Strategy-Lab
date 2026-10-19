@@ -17,7 +17,7 @@ Supporting documentation:
 
 The repository already contains **Opportunity Radar**, non-overlapping research evaluation, an evidence decision ledger, macro/geopolitical context validation, an aggregate-only historical research bridge, Neon staging preflight, data audit and manual educational research canaries. Real Neon staging read-only/PIT and full research cycle smoke tests have succeeded, but **market-data readiness remains blocked**.
 
-The **next gate** is to obtain explicit approval for a separate least-privilege read-only **staging** historical-data role. Its [SQL review proposal](db/security/legacy_history_reader_STAGING_REVIEW.sql) and CI exist, but the role had **not been created on Neon** at the last verified snapshot. No credentials or role changes are implied by merging this repository.
+**Updated 19 October 2026:** After explicit user approval, the separate least-privilege historical reader `isl_legacy_history_reader` **was created on the isolated Neon staging branch as NOLOGIN**, using the [reviewed SQL](db/security/legacy_history_reader_STAGING_REVIEW.sql). Independent checks confirm SELECT only on `investment_lab.price_observations`, no writes, unchanged operational-agent ACL, and no corresponding production role. **LOGIN/password/GitHub secret/manual historical workflow have NOT been enabled** and require separate explicit authorization. This documentation change does not authorize those actions.
 
 Original virtual models M1/M2/M3 depend on verified PLN total-return equity/bond reference history; legacy `PRICE_ONLY` spot/reference observations cannot substitute for those indices. Retrospective research remains labelled `UNVERIFIED_HISTORICAL_PUBLICATION`.
 
