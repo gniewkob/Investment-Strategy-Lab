@@ -24,6 +24,12 @@ After a **second explicit user approval**, executed a fail-closed `ALTER ROLE is
 ## Current blocker and first action (updated 2026-10-19)
 The separate staging read-only historical-reference role **now exists as NOLOGIN**, after explicit approval and execution of the reviewed SQL. Independent postflight: SELECT only on `investment_lab.price_observations`, no mutations, no schema CREATE, no access to holdings, production role absent, existing journal agent unchanged. The **new blocker is separate approval to enable LOGIN and configure independent secure credentials**; neither has occurred. **Ask the user for fresh, separate explicit authorization** before any login/password/secret operation, then independently recheck ACL and only afterwards consider the existing [manual historical bridge workflow](.github/workflows/legacy-history-research.yml). Do not re-run role-creation SQL, modify production, or enable trading.
 
+## Current credential milestone — updated 2026-10-19 (supersedes old blockers)
+
+Previous passwordless-role problem **already had a working solution**, documented on 2026-10-18 in [Issue #3](https://github.com/gniewkob/Investment-Strategy-Lab/issues/3) and [original security guide](docs/NEON_LEAST_PRIVILEGE_PL.md) (the latter is on the Draft PR branch). After user's second permission to enable LOGIN/credentials, the same **server-side SQL `DO` bootstrap** was executed once on isolated Neon staging for `isl_legacy_history_reader`: 3 × `gen_random_uuid()`, dynamically setting an initial secret with `ALTER ROLE` without disclosing it to the client. Independent SQL postflight confirms `rolcanlogin=true`, `rolpassword IS NOT NULL=true`; SELECT only `investment_lab.price_observations`, zero writes/CREATE/private holdings, and no role on production. **Do NOT bootstrap again or create another role.**
+
+**Remaining operator action:** Use Neon Console → existing role → **Reset password**, which is now unblocked by the first-password bootstrap. Save final generated password privately; then populate GitHub Environment `research-staging` secret `NEON_HISTORICAL_READ_DATABASE_URL` without sending it to chat. Connected GitHub tool cannot write environment secrets. This UI reset and the secret remain **not yet verified**. No historical workflow run, trades or scheduling. See [operator instructions](docs/HISTORICAL_LOGIN_BOOTSTRAP_PL.md). Historical explanations below describe earlier states.
+
 ## Safe offline verification
 ```bash
 python -m unittest discover -s tests -v
