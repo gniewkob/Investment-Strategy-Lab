@@ -53,14 +53,15 @@ def _root_fd(root: Path | str) -> int:
         raise
 
 
-def _subdir(parent: int, name: str) -> int:
+def _subdir(parent: int, name: str, *, create: bool = True) -> int:
     if not re.fullmatch(r"[a-z0-9_]+", name):
         raise SourceFormatError("Invalid archive directory")
-    try:
-        os.mkdir(name, mode=0o700, dir_fd=parent)
-        os.fsync(parent)
-    except FileExistsError:
-        pass
+    if create:
+        try:
+            os.mkdir(name, mode=0o700, dir_fd=parent)
+            os.fsync(parent)
+        except FileExistsError:
+            pass
     fd = os.open(name, DIR_FLAGS, dir_fd=parent)
     try:
         st = os.fstat(fd)
@@ -235,11 +236,11 @@ def verify_snapshot(root: Path | str, plan: IngestionPlan) -> dict:
                            allow_nan=False) + "\n").encode("utf-8")
     rootfd = _root_fd(root)
     try:
-        objects = _subdir(rootfd, "objects")
+        objects = _subdir(rootfd, "objects", create=False)
         try:
-            receipts = _subdir(rootfd, "receipts")
+            receipts = _subdir(rootfd, "receipts", create=False)
             try:
-                folder = _subdir(receipts, source)
+                folder = _subdir(receipts, source, create=False)
                 try:
                     stored = _read_exact(objects, object_name, MAX_SOURCE_BYTES)
                     saved_manifest = _read_exact(folder, receipt_name, 16_384)
