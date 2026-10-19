@@ -6,6 +6,10 @@ Użytkownik osobno zatwierdził aktywację LOGIN i sekretu staging. Zrealizowano
 
 **AKTUALIZACJA: w Neon użycie `psql \\password` może zostać odrzucone — wymagany plaintext. Nie traktować go jako gwarantowanego rozwiązania. Najpierw uzyskać od Neon Support bezpieczną procedurę inicjalizacji pierwszego hasła; wariant SQL z hasłem jawnym niesie ryzyko logowania i wymaga osobnej oceny ryzyka.** Po poprawnym utworzeniu/rotacji hasła, z poziomu GitHub Settings → Environments → `research-staging` ustawić sekret. Szczegóły: [HISTORICAL_LOGIN_BOOTSTRAP_PL.md](HISTORICAL_LOGIN_BOOTSTRAP_PL.md). Nie wysyłać hasła ani DSN do czatu. Wszystkie późniejsze sekcje opisujące `NOLOGIN` są historyczne, wcześniejsze niż ta aktualizacja.
 
+## Najnowszy stan — 19.10.2026: rozwiązano problem pierwszego hasła
+
+Odnaleziono historyczne rozwiązanie z [Issue #3](https://github.com/gniewkob/Investment-Strategy-Lab/issues/3), które zadziałało 18.10 dla `isl_agent_staging_limited`. Po obowiązującym zatwierdzeniu użytkownika wykonano analogiczny jednorazowy blok SQL `DO` na `br-wandering-union-ba6ogf6l`: losowe hasło początkowe z trzech `gen_random_uuid()` wygenerowano i ustawiono **wewnątrz PostgreSQL**, nie przekazując sekretu do czatu ani plików repo. **Odczyt kontrolny: `rolcanlogin=true` i `rolpassword IS NOT NULL=true`**. Uprawnienia nadal: SELECT wyłącznie na `investment_lab.price_observations`, zero praw zapisu/CREATE/holdings; rola nie istnieje na produkcji. Nie przeprowadzono jeszcze finalnego resetu w Neon Console, nie ustawiono `NEON_HISTORICAL_READ_DATABASE_URL`, workflow nie uruchomiono. **Poprzednia wzmianka o potrzebie Neon Support i braku hasła poniżej to archiwalny stan sprzed bootstrapu.** Aktualna instrukcja: [HISTORICAL_LOGIN_BOOTSTRAP_PL.md](HISTORICAL_LOGIN_BOOTSTRAP_PL.md).
+
 ## Cel
 
 Oddzielić retrospektywne badanie dawnych cen od działającego, ograniczonego agenta `isl_agent_staging_limited`. **Nie zwiększać uprawnień tego agenta.** Nowy most służy jedynie do testów statystycznych, wykrywania nietypowych zmian i generowania pytań badawczych — bez transakcji.
