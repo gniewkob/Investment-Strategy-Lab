@@ -3,6 +3,8 @@ name: EIA versioned source planning and safety — offline default
 on:
   pull_request:
     paths:
+      - scripts/eia_readonly_audit.py
+      - tests/test_eia_readonly_audit.py
       - src/isl_v2/eia_versioned_ingest.py
       - src/isl_v2/eia_semantic_evidence.py
       - tests/test_eia_versioned_ingest.py
@@ -15,6 +17,8 @@ on:
   push:
     branches: [main]
     paths:
+      - scripts/eia_readonly_audit.py
+      - tests/test_eia_readonly_audit.py
       - src/isl_v2/eia_versioned_ingest.py
       - src/isl_v2/eia_semantic_evidence.py
       - tests/test_eia_versioned_ingest.py

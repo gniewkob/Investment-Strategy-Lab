@@ -3,6 +3,8 @@ name: Post-import WTI EIA and Neon STAGING 695-day receipt — MANUAL READ ONLY
 on:
   pull_request:
     paths:
+      - scripts/eia_readonly_audit.py
+      - tests/test_eia_readonly_audit.py
       - scripts/eia_wti_staging_receipt.py
       - scripts/eia_wti_postimport_receipt.py
       - tests/test_eia_wti_staging_receipt.py

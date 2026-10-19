@@ -10,7 +10,7 @@ import argparse
 import csv
 import hashlib
 import io
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 import json
 from pathlib import Path
@@ -27,12 +27,20 @@ MAX_LOCAL_CSV_ROWS = 15_000
 
 
 def fetch_official(source: str, at: datetime, *, max_age_days: int = 420,
-                   opener=urlopen) -> Snapshot:
-    """HTTPS-only official EIA fetch; exact final URL and media-type checks."""
+                   opener=urlopen, completion_clock=None) -> Snapshot:
+    """HTTPS-only EIA fetch; time proof belongs to END of response retrieval.
+
+    'at' is the caller's real UTC-aware pre-request clock. A deterministic
+    completion clock is injectable in offline tests only.
+    """
     if source not in SOURCES:
         raise SourceFormatError("Source is not allowlisted")
+    if (not isinstance(at, datetime) or at.tzinfo is None
+            or at.utcoffset() is None):
+        raise SourceFormatError("UTC-aware fetch start time required")
     if not 1 <= max_age_days <= 1500:
         raise ValueError("Invalid allowed date-window size")
+    started_at = at.astimezone(timezone.utc)
     url = SOURCES[source][2]
     request = Request(url, headers={
         "Accept": "text/html",
@@ -44,7 +52,16 @@ def fetch_official(source: str, at: datetime, *, max_age_days: int = 420,
         if "text/html" not in response.headers.get("Content-Type", "").lower():
             raise SourceFormatError("Official EIA response is not HTML")
         data = response.read(MAX_RESPONSE_BYTES + 1)
-    return parse_snapshot(source, data, at, max_age_days=max_age_days)
+    acquired_at = (completion_clock() if completion_clock is not None
+                   else datetime.now(timezone.utc))
+    if (not isinstance(acquired_at, datetime) or acquired_at.tzinfo is None
+            or acquired_at.utcoffset() is None):
+        raise SourceFormatError("Completion clock must be timezone-aware")
+    acquired_at = acquired_at.astimezone(timezone.utc)
+    if (acquired_at < started_at
+            or acquired_at - started_at > timedelta(seconds=120)):
+        raise SourceFormatError("EIA read-only retrieval clock inconsistent")
+    return parse_snapshot(source, data, acquired_at, max_age_days=max_age_days)
 
 
 def read_local_reference_with_digest(

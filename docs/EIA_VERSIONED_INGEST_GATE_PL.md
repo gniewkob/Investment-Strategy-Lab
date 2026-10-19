@@ -127,3 +127,19 @@ Guard dedykowanej roli odrzuca teraz również **UPDATE, DELETE i TRUNCATE** zar
 
 **Aktualizacja faktycznego stanu STAGING:** 3 istniejące rekordy `source_documents` należą do `nbp_gold`. Jeden ma jawny `metadata.synthetic=true`, a pozostałe dwa nie mają jawnej wartości tego pola, co **nie pozwala** bez niezależnych dowodów klasyfikować ich jako rzeczywiste dane PIT. Nadal brak autentycznych historycznie wersjonowanych źródeł EIA.
 
+
+
+## Dokładny moment pobrania — poprawka zegara HTTPS
+
+`fetch_plan(source, fetched_at)` traktuje `fetched_at` jako rzeczywisty
+czas rozpoczęcia żądania, **nie** czas pozyskania dokumentu. Pole
+`snapshot.downloaded_at`, `retrieved_at` przyszłego `source_documents`
+i `available_at` obserwacji otrzymują dopiero rzeczywisty moment
+**po odczytaniu i zamknięciu całej odpowiedzi HTTPS**. Odrzucamy cofnięcie
+zegara, znacznik bez strefy czasowej oraz żądania, których czas od startu
+do pełnego pobrania przekracza 120 sekund. Specjalny zegar testowy jest
+wstrzykiwany wyłącznie w testach syntetycznych; CLI używa rzeczywistego
+zegara po zakończeniu odbioru. SHA nadal obejmuje te same dokładne bajty.
+
+Chronologia wyznacza granicę widoczności danych dla **aktualnej** wersji
+strony EIA. Nadal nie jest dowodem pierwszej historycznej publikacji ceny.

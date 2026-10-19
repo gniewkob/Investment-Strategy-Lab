@@ -70,10 +70,21 @@ def prepare(source: str, original_html: bytes, fetched_at: datetime, *,
 
 
 def fetch_plan(source: str, fetched_at: datetime, *,
-               max_age_days: int = 420, opener=urlopen) -> IngestionPlan:
-    """Allowlisted HTTPS, no redirect, validated Content-Type/bytes."""
+               max_age_days: int = 420, opener=urlopen,
+               completion_clock=None) -> IngestionPlan:
+    """Allowlisted HTTPS; timestamp is at COMPLETE byte receipt, not request start.
+
+    fetched_at is the caller's real clock time before opening HTTPS. The
+    completion_clock injection exists only for deterministic offline tests.
+    Never fabricate a retrieval timestamp from the request start, EIA release
+    day, or the older individual observed_for dates.
+    """
     if source not in SOURCES:
         raise SourceFormatError("EIA source not on allowlist")
+    if (not isinstance(fetched_at, datetime) or fetched_at.tzinfo is None
+            or fetched_at.utcoffset() is None):
+        raise SourceFormatError("Pre-request UTC-aware time is required")
+    started_at = fetched_at.astimezone(timezone.utc)
     url = SOURCES[source][2]
     req = Request(url, headers={
         "Accept": "text/html",
@@ -85,7 +96,18 @@ def fetch_plan(source: str, fetched_at: datetime, *,
         if "text/html" not in resp.headers.get("Content-Type", "").lower():
             raise SourceFormatError("Unexpected EIA media type")
         original_html = resp.read(MAX_SOURCE_BYTES + 1)
-    return prepare(source, original_html, fetched_at, max_age_days=max_age_days)
+    # Only AFTER the response is read and closed may it be marked as locally
+    # acquired. Bound the elapsed interval and fail closed on clock rollback.
+    completed_at = (completion_clock() if completion_clock is not None
+                    else datetime.now(timezone.utc))
+    if (not isinstance(completed_at, datetime) or completed_at.tzinfo is None
+            or completed_at.utcoffset() is None):
+        raise SourceFormatError("Response completion clock is not timezone-aware")
+    completed_at = completed_at.astimezone(timezone.utc)
+    if (completed_at < started_at
+            or completed_at - started_at > timedelta(seconds=120)):
+        raise SourceFormatError("Source clock regression or excessive retrieval duration")
+    return prepare(source, original_html, completed_at, max_age_days=max_age_days)
 
 
 def dry_run_summary(plan: IngestionPlan) -> dict:

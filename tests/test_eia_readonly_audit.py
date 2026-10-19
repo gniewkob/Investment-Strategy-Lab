@@ -1,7 +1,7 @@
 """Entirely synthetic tests for the read-only EIA source/coverage audit."""
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from io import StringIO
 from contextlib import redirect_stderr, redirect_stdout
@@ -188,11 +188,45 @@ class ReadOnlyEIAAuditTests(unittest.TestCase):
             self.assertEqual(request.full_url, URL)
             self.assertEqual(timeout, 30)
             return FakeResponse(data)
-        got = subject.fetch_official("wti", NOW, opener=fake_open)
+        got = subject.fetch_official("wti", NOW, opener=fake_open,
+                                     completion_clock=lambda: NOW + timedelta(seconds=2))
         self.assertEqual(got.sha256_hex, hashlib.sha256(data).hexdigest())
         self.assertEqual(len(got.observations), 18)
         self.assertEqual(got.release_day, date(2026, 10, 15))
+        self.assertEqual(got.downloaded_at, NOW + timedelta(seconds=2))
         self.assertTrue(subject.source_summary(got)["db_writes"] == 0)
+
+    def test_audit_acquisition_clock_is_post_response_and_cannot_backdate(self):
+        steps = []
+        class MonitoredResponse(FakeResponse):
+            def read(self, size):
+                steps.append("read")
+                return super().read(size)
+            def __exit__(self,*args):
+                steps.append("closed")
+                return False
+        def end_clock():
+            steps.append("completed")
+            return NOW + timedelta(seconds=3)
+        got = subject.fetch_official(
+            "wti", NOW, opener=lambda *a,**k: MonitoredResponse(),
+            completion_clock=end_clock)
+        self.assertEqual(steps,["read","closed","completed"])
+        self.assertEqual(got.downloaded_at, NOW + timedelta(seconds=3))
+
+        for invalid in (
+            NOW - timedelta(seconds=1),
+            NOW + timedelta(minutes=3),
+            NOW.replace(tzinfo=None),
+        ):
+            with self.assertRaisesRegex(SourceFormatError,"clock"):
+                subject.fetch_official(
+                    "wti", NOW, opener=lambda *a,**k: FakeResponse(),
+                    completion_clock=lambda: invalid)
+        with self.assertRaisesRegex(SourceFormatError,"start"):
+            subject.fetch_official(
+                "wti",NOW.replace(tzinfo=None),
+                opener=lambda *a,**k: FakeResponse())
 
     def test_http_redirect_or_bad_media_type_fails_closed(self):
         for response in (
