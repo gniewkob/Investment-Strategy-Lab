@@ -206,8 +206,12 @@ def run_and_report(snapshot: dict, manifest: dict, out_dir: Path) -> dict:
         json.dumps({**manifest, "pipeline": result["manifest"]},
                    ensure_ascii=False,sort_keys=True,indent=2)+"\n", encoding="utf-8")
     # Outputs contain only aggregate evidence and classifications, not raw rows.
-    for key in ("radar", "robustness", "ledger", "context"):
-        (out_dir/(key+".json")).write_text(
+    for output_name, key in (("radar", "radar"),
+                             ("robustness", "robustness"),
+                             ("ledger", "ledger"),
+                             ("context", "context"),
+                             ("reference_data_quality", "quality")):
+        (out_dir/(output_name+".json")).write_text(
             json.dumps(result[key],ensure_ascii=False,sort_keys=True,
                        allow_nan=False)+"\n",encoding="utf-8")
     return result["manifest"]
