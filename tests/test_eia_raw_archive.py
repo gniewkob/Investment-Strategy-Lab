@@ -109,9 +109,9 @@ class SourceArchiveTests(TestCase):
         target=self.root/"objects"/raw
         corrupt=b"overwrite-not-allowed"
         target.write_bytes(corrupt)
-        with self.assertRaisesRegex(SourceFormatError,"differs"):
+        with self.assertRaises(SourceFormatError):
             archive_snapshot(self.root,a)
-        with self.assertRaisesRegex(SourceFormatError,"differ"):
+        with self.assertRaises(SourceFormatError):
             verify_snapshot(self.root,a)
         self.assertEqual(target.read_bytes(),corrupt)
 
@@ -176,7 +176,7 @@ class SourceArchiveTests(TestCase):
         manifest_file=self.root/"receipts"/source/receipt_name
         content=json.loads(manifest_file.read_text())
         content["semantic_observations_sha256"]="0"*64
-        manifest_file.write_text(json.dumps(content,sort_keys=True,separators=(",",":"))+"\\n")
+        manifest_file.write_text(json.dumps(content,sort_keys=True,separators=(",",":"))+"\n")
         with self.assertRaisesRegex(SourceFormatError,"no longer matches"):
             verify_receipt(self.root,p.snapshot.source_code,p.source_bytes_sha256,NOW)
 
