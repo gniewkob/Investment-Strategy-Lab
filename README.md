@@ -1,5 +1,8 @@
 # Investment Strategy Lab
 
+> **EIA source integrity hardening (19 October 2026):** [PR #33](https://github.com/gniewkob/Investment-Strategy-Lab/pull/33) merged: original HTML SHA and separate canonical date/price SHA, 14-day source freshness rejection, strict NO UPDATE/DELETE/TRUNCATE writer ACL. **210 offline + 3 disposable PostgreSQL tests passed**, main CI green. Actual Neon STAGING READ-ONLY check still 695 WTI, 706 Brent, 3 pre-existing documents and 3 pre-existing version rows; dedicated EIA writer role absent. No new live EIA↔Neon manual 695/695 source receipt, no live versioned ingestion, and no verified historical first-publication vintages. Research-only HOLD_NO_CHANGE. [Handoff](docs/SESSION_HANDOFF_PL.md).
+
+
 > **Versioned EIA source ingestion core — main, 19 October 2026.** [PR #32](https://github.com/gniewkob/Investment-Strategy-Lab/pull/32) merged: 204/204 synthetic offline and 2/2 isolated PostgreSQL 16 integration tests PASS. The official-source CLI is public HTTPS **dry-run only**; the source/version SQL writer requires a new dedicated least-privilege STAGING role which **does not yet exist** in Neon. No source/version rows were written: WTI 695 legacy, Brent 706, versioned 3 source docs + 3 synthetic price fixtures unchanged. No verified original historical PIT vintages, `MARKET_DATA_NOT_READY`, M1/M2/M3 `HOLD_NO_CHANGE`. [Operator/security review](docs/EIA_VERSIONED_INGEST_GATE_PL.md).
 
 
