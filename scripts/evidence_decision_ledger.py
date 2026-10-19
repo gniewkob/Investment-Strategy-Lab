@@ -41,8 +41,40 @@ def _validated_radar(radar: dict) -> list[dict]:
     return series
 
 
-def make_ledger(radar: dict) -> dict:
+def _verified_robustness(radar: dict, robustness: dict | None) -> dict:
+    """Require same input fingerprint; never let unaudited diagnostics promote."""
+    if robustness is None:
+        return {}
+    if (not isinstance(robustness, dict)
+            or robustness.get("status") != "NONOVERLAPPING_RESEARCH_DIAGNOSTIC_ONLY"
+            or robustness.get("source_vintage") != REQUIRED_VINTAGE
+            or robustness.get("source_radar_sha256") != radar["data_sha256"]
+            or robustness.get("real_orders") != 0
+            or robustness.get("virtual_portfolio_changes") != 0
+            or robustness.get("causal_predictive_advantage_established") is not False):
+        raise ValueError("Invalid independent-window evidence contract")
+    series = robustness.get("series")
+    if not isinstance(series, list):
+        raise ValueError("Missing independent-window series")
+    by_key = {}
+    for entry in series:
+        if not isinstance(entry, dict):
+            raise ValueError("Bad independent-window evidence record")
+        key=(entry.get("instrument_code"),entry.get("interval_code"))
+        samples=entry.get("nonoverlapping_shock_events")
+        baseline=entry.get("baseline_grid_independent_windows")
+        if (key in by_key or key[0] not in SUPPORTED
+                or key[1] not in ("1d","1mo")
+                or type(samples) is not int or samples < 0
+                or type(baseline) is not int or baseline < 0):
+            raise ValueError("Invalid independent-window series")
+        by_key[key]=entry
+    return by_key
+
+
+def make_ledger(radar: dict, robustness: dict | None = None) -> dict:
     series = _validated_radar(radar)
+    checked = _verified_robustness(radar, robustness)
     questions = []
     for entry in series:
         if not isinstance(entry, dict):
@@ -56,7 +88,18 @@ def make_ledger(radar: dict) -> dict:
         if (type(count) is not int or count < 0
                 or type(samples) is not int or samples < 0 or count > samples):
             raise ValueError("Invalid evidence size")
+        independent = checked.get((name, interval))
+        robust_samples = (independent["nonoverlapping_shock_events"]
+                          if independent else None)
+        grid = (independent["baseline_grid_independent_windows"]
+                if independent else None)
+        if robustness is not None and independent is not None:
+            if robust_samples > count:
+                raise ValueError("Independent events exceed detected anomaly candidates")
         adequate = count >= MIN_FLAGS and samples >= MIN_HOLDOUT
+        if robustness is not None:
+            adequate = (adequate and independent is not None
+                        and robust_samples >= MIN_FLAGS and grid >= 12)
         decision = "INVESTIGATE_RESEARCH_ONLY" if adequate else "INSUFFICIENT_EVIDENCE"
         reasons_for = [
             f"{count} historical outlier events observed in {samples} evaluation windows",
@@ -68,6 +111,10 @@ def make_ledger(radar: dict) -> dict:
             "Conditional price-change differences do not demonstrate predictive skill",
             "Source price quotes are not executable return-inclusive instruments",
         ]
+        if robustness is not None and not adequate:
+            reasons_against.append(
+                "Non-overlapping event count or pre-registered baseline grid below exploratory gate"
+            )
         if not adequate:
             reasons_against.append("Insufficient independent anomalies or comparison windows")
         questions.append({
@@ -77,6 +124,9 @@ def make_ledger(radar: dict) -> dict:
             "educational_decision":decision,
             "observed_outliers":count,
             "evaluation_windows":samples,
+            "nonoverlapping_events":robust_samples,
+            "nonoverlap_baseline_windows":grid,
+            "overlap_screened":robustness is not None,
             "evidence_for":reasons_for,
             "evidence_against":reasons_against,
             "unconditional_mean_5bar_price_pct":entry.get("baseline_average_five_bar_change_pct"),
@@ -99,6 +149,7 @@ def make_ledger(radar: dict) -> dict:
         "source_radar_sha256":radar["data_sha256"],
         "vintage_status":REQUIRED_VINTAGE,
         "tracked_questions":len(questions),
+        "nonoverlap_evidence_considered":robustness is not None,
         "questions_for_independent_review":research_interest,
         "questions":questions,
         "paper_portfolio_decisions":[

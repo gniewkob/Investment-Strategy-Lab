@@ -6,6 +6,10 @@ on:
       - scripts/opportunity_research_pipeline.py
       - scripts/opportunity_demo_fixture.py
       - scripts/economic_geopolitical_context.py
+      - scripts/nonoverlap_validation.py
+      - scripts/evidence_decision_ledger.py
+      - tests/test_nonoverlap_validation.py
+      - tests/test_evidence_decision_ledger.py
       - tests/test_opportunity_research_pipeline.py
       - .github/workflows/opportunity-evidence-pipeline-ci.yml
   push:
@@ -14,6 +18,10 @@ on:
       - scripts/opportunity_research_pipeline.py
       - scripts/opportunity_demo_fixture.py
       - scripts/economic_geopolitical_context.py
+      - scripts/nonoverlap_validation.py
+      - scripts/evidence_decision_ledger.py
+      - tests/test_nonoverlap_validation.py
+      - tests/test_evidence_decision_ledger.py
       - tests/test_opportunity_research_pipeline.py
       - .github/workflows/opportunity-evidence-pipeline-ci.yml
   workflow_dispatch:
@@ -52,6 +60,12 @@ jobs:
           assert data["source_vintage"] == "UNVERIFIED_HISTORICAL_PUBLICATION"
           assert data["schedule_enabled"] is False
           assert (folder/"economic_geopolitical_context.json").exists()
+          robust=json.loads((folder/"nonoverlap_validation.json").read_text())
+          assert robust["status"] == "NONOVERLAPPING_RESEARCH_DIAGNOSTIC_ONLY"
+          assert robust["source_radar_sha256"] == data["radar_data_sha256"]
+          assert robust["real_orders"] == 0
+          assert robust["virtual_portfolio_changes"] == 0
+          assert robust["causal_predictive_advantage_established"] is False
           print("OFFLINE_EDUCATIONAL_RADAR_LEDGER_MACRO_SUCCESS")
           PY
       - name: Upload synthetic demo only
