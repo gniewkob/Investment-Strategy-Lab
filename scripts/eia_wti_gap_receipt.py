@@ -11,14 +11,13 @@ import argparse
 from dataclasses import replace
 from datetime import date, datetime, timezone
 from decimal import Decimal
-import hashlib
 import json
 from pathlib import Path
 import re
 import sys
 
 from scripts.eia_readonly_audit import (
-    compare_dates_prices, fetch_official, read_local_reference,
+    compare_dates_prices, fetch_official, read_local_reference_with_digest,
 )
 from src.isl_v2.eia_sources import SOURCES, Snapshot
 
@@ -141,9 +140,9 @@ def main(argv: list[str] | None = None) -> int:
         if not 1 <= args.max_age_days <= 1500:
             raise ValueError("Invalid official observation window limit")
         # All local checks occur BEFORE the external public HTTPS request.
-        reference = read_local_reference(args.reference_csv, SOURCES["wti"][0])
-        # read_local_reference has a strict 1MB cap and approved CSV schema.
-        local_hash = hashlib.sha256(args.reference_csv.read_bytes()).hexdigest()
+        reference, local_hash = read_local_reference_with_digest(
+            args.reference_csv, SOURCES["wti"][0])
+        # This SHA-256 belongs to the exact SAME bytes parsed above.
         snapshot = fetch_official(
             "wti", datetime.now(timezone.utc), max_age_days=args.max_age_days
         )
