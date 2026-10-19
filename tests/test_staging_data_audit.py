@@ -17,7 +17,7 @@ def snapshot(*, future=0, mismatch=0, pit=1, fixture=0, series=None):
         "documents": 3, "versions": 3,
         "pit_eligible": pit,
         "pit_fixture": fixture,
-        "pit_nonfixture": pit - fixture,
+        "pit_nonfixture": pit - fixture if type(pit) is int and type(fixture) is int else 0,
         "future_local_timestamps": future,
         "unmatched_sources": mismatch,
         "series": [] if series is None else series,
