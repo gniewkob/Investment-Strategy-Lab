@@ -1,12 +1,15 @@
-name: Frozen WTI EIA and Neon STAGING receipt — MANUAL READ ONLY
+name: Post-import WTI EIA and Neon STAGING 695-day receipt — MANUAL READ ONLY
 
 on:
   pull_request:
     paths:
       - scripts/eia_wti_staging_receipt.py
+      - scripts/eia_wti_postimport_receipt.py
       - tests/test_eia_wti_staging_receipt.py
+      - tests/test_eia_wti_postimport_receipt.py
       - .github/workflows/eia-wti-staging-receipt.yml
       - docs/WTI_NEON_STAGING_SINGLE_RUN_PL.md
+      - docs/WTI_POSTIMPORT_RECEIPT_PL.md
   workflow_dispatch:
 
 permissions:
@@ -43,17 +46,17 @@ jobs:
           python-version: '3.12'
       - name: Install read-only PostgreSQL client
         run: python -m pip install 'psycopg[binary]>=3.2,<4'
-      - name: Join public official EIA WTI with dedicated STAGING reader (read only)
+      - name: Compare current official EIA WTI with 695 stored STAGING rows (read only)
         env:
           NEON_HISTORICAL_READ_DATABASE_URL: ${{ secrets.NEON_HISTORICAL_READ_DATABASE_URL }}
         run: |
-          python -m scripts.eia_wti_staging_receipt > "$RUNNER_TEMP/wti-eia-receipt.json"
-          cat "$RUNNER_TEMP/wti-eia-receipt.json"
+          python -m scripts.eia_wti_postimport_receipt > "$RUNNER_TEMP/wti-eia-postimport-receipt.json"
+          cat "$RUNNER_TEMP/wti-eia-postimport-receipt.json"
       - name: Upload aggregate JSON ONLY (no raw price CSV or HTML)
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: wti-eia-staging-readonly-receipt
-          path: ${{ runner.temp }}/wti-eia-receipt.json
+          name: wti-eia-postimport-staging-readonly-receipt
+          path: ${{ runner.temp }}/wti-eia-postimport-receipt.json
           if-no-files-found: error
           retention-days: 7
