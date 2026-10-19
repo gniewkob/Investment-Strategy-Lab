@@ -40,6 +40,11 @@ def _root_fd(root: Path | str) -> int:
     path = Path(root)
     if not path.is_absolute() or path.is_symlink():
         raise SourceFormatError("Archive root must exist at an absolute non-symlink path")
+    # Do not allow raw third-party HTML to leak into a Git checkout.
+    # The operator must provide a path outside every Git worktree.
+    resolved = path.resolve(strict=True)
+    if any((ancestor / ".git").exists() for ancestor in (resolved, *resolved.parents)):
+        raise SourceFormatError("Raw EIA archive must not live inside Git checkout")
     fd = os.open(path, DIR_FLAGS)
     try:
         info = os.fstat(fd)
