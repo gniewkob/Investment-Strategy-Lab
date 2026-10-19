@@ -4,6 +4,18 @@
 > **Pierwsza lektura nowego agenta:** [`../AGENTS.md`](../AGENTS.md), potem niniejszy plik, [`HISTORICAL_REFERENCE_BRIDGE_PL.md`](HISTORICAL_REFERENCE_BRIDGE_PL.md) oraz [`OPPORTUNITY_RADAR_PL.md`](OPPORTUNITY_RADAR_PL.md).  
 > **Status:** system badawczy / edukacyjne symulacje. **Nie ma zleceń, handlu, realnych inwestycji ani rekomendacji zakupowych.**
 
+## 0. AKTUALIZACJA po snapshot — 19.10.2026: staging reader utworzony
+
+**To jest nowszy, obowiązujący stan niż poniższy historyczny snapshot z ok. 07:11 UTC.** Użytkownik udzielił jawnej zgody wyłącznie na stworzenie odizolowanej roli `isl_legacy_history_reader` `NOLOGIN` na Neon STAGING (`br-wandering-union-ba6ogf6l`; projekt `red-lake-53043722`; baza `investment_lab`). Zastosowano istniejący przejrzany `db/security/legacy_history_reader_STAGING_REVIEW.sql` jako pojedynczą transakcję PostgreSQL; wszystkie pięć instrukcji zakończyło się bez błędów.
+
+- **Zweryfikowane po wykonaniu:** rola istnieje z `NOLOGIN`, `NOSUPERUSER`, `NOCREATEDB`, `NOCREATEROLE`, `NOREPLICATION`, `NOBYPASSRLS`. W schemacie `investment_lab` efektywny SELECT dotyczy dokładnie **jednej tabeli**: `price_observations`. Zero uprawnień modyfikacji tabel/widoków, brak `CREATE` na schemacie i bazie. Połączenie do bazy i USAGE schematu są przyznane zgodnie z projektem.
+- Istniejący `isl_agent_staging_limited` nadal NIE MA SELECT na `price_observations` ani `holding_snapshots`; **na produkcyjnej gałęzi `br-shy-voice-badzlf0x` nowa rola nie istnieje**.
+- Systemowa relacja `pg_auth_members`: `investment_lab_owner` jest administracyjnym członkiem nowej roli (grantor `cloud_admin`, `admin_option=true`, `inherit_option=false`, `set_option=false`). Nowa rola nie jest członkiem innych ról. Nie ustanowiono jej osobnego loginu.
+- **NIE USTAWIONO** hasła, `LOGIN`, sekretu GitHub `NEON_HISTORICAL_READ_DATABASE_URL`, workflow historycznego, harmonogramu, zleceń, zapisów danych rynkowych ani wirtualnych zmian alokacji.
+- Dziennik wykonania: [Issue #4, komentarz 6264735926](https://github.com/gniewkob/Investment-Strategy-Lab/issues/4#issuecomment-6264735926).
+
+**Nowy najbliższy krok:** Uzyskać **świeżą, odrębną zgodę użytkownika** na ewentualne uruchomienie loginu i bezpieczne skonfigurowanie oddzielnych danych uwierzytelniających do staging (nigdy owner DSN). Dopiero później — po ponownej weryfikacji praw/host/CA i sekrecie w chronionym GitHub Environment — możliwy jest **manualny** odczyt raportu z `legacy_history_bridge.py`. Nie wykonywać ponownie `CREATE ROLE`. Pozostałe części niniejszego dokumentu opisują **starszy snapshot**, więc wzmianki o „braku roli” nie są aktualne. Vintage `UNVERIFIED_HISTORICAL_PUBLICATION` pozostaje obowiązujące.
+
 ## 1. Co użytkownik faktycznie chce
 
 Docelowy cel to **Opportunity & Decision Intelligence**, nie zwykły automat od równoważenia portfela.
