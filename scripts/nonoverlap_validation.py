@@ -98,6 +98,13 @@ def _series_check(code: str, interval: str, rows: list[dict]) -> dict:
             round(100 * hits / signal_n, 2) if signal_n else None
         ),
         "same_dates_naive_last_bar_hits": naive_hits,
+        "same_dates_naive_last_bar_consistency_pct": (
+            round(100 * naive_hits / signal_n, 2) if signal_n else None
+        ),
+        "event_vs_same_date_naive_consistency_pp": (
+            round(100 * (hits - naive_hits) / signal_n, 2) if signal_n else None
+        ),
+        "matched_benchmark_evaluation": "SAME_DATES_DESCRIPTIVE_NO_CAUSAL_EDGE",
         "baseline_grid_last_bar_direction_consistency_pct": (
             round(100 * sum(grid_hit) / len(grid_hit), 2) if grid_hit else None
         ),
