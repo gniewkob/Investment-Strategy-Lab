@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import timedelta
+from dataclasses import replace
 from decimal import Decimal
 from io import StringIO
 from contextlib import redirect_stderr, redirect_stdout
@@ -126,6 +127,24 @@ class IngestionPlanTests(TestCase):
             ingest.prepare("wti",b"not-html",NOW)
         with self.assertRaises(SourceFormatError):
             ingest.prepare("wti",fixture(),NOW.replace(tzinfo=None))
+
+    def test_writer_rejects_forged_sha_prices_and_raw_bytes_before_database(self):
+        base = self.plan()
+        forged = (
+            replace(base, source_bytes_sha256="f"*64),
+            replace(base, original_html=base.original_html+b"<!--changed-->"),
+            replace(base, snapshot=replace(base.snapshot,
+                observations=tuple(replace(o, price=Decimal("999.99"))
+                                   if i==0 else o
+                                   for i,o in enumerate(base.snapshot.observations)))),
+            replace(base, max_age_days=1),
+        )
+        for altered in forged:
+            cur = TransactionalCursorStub()
+            with self.assertRaises(SourceFormatError):
+                ingest.apply_plan(cur, altered)
+            self.assertEqual(cur.calls, [])
+            self.assertEqual(cur.docs, {})
 
     def test_first_insert_replay_and_one_correction(self):
         cur = TransactionalCursorStub()
