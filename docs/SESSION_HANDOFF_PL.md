@@ -4,6 +4,18 @@
 > **Pierwsza lektura nowego agenta:** [`../AGENTS.md`](../AGENTS.md), potem niniejszy plik, [`HISTORICAL_REFERENCE_BRIDGE_PL.md`](HISTORICAL_REFERENCE_BRIDGE_PL.md) oraz [`OPPORTUNITY_RADAR_PL.md`](OPPORTUNITY_RADAR_PL.md).  
 > **Status:** system badawczy / edukacyjne symulacje. **Nie ma zleceń, handlu, realnych inwestycji ani rekomendacji zakupowych.**
 
+## v0.2 — PIERWSZY REALNY STAGING RUN ZALICZONY (19.10.2026)
+
+Po wdrożeniu PR #19 i #20 użytkownik ręcznie uruchomił [GitHub Actions run #39245012461](https://github.com/gniewkob/Investment-Strategy-Lab/actions/runs/39245012461) (commit `fc9c5a2`). Run **SUCCESS**; `LEGACY_HISTORY_RESEARCH_OK observations 3711 series 8 hypotheses_for_review 2 orders 0 database_writes 0`. Pobraną i niezależnie otwartą paczkę [artifact #12182926287](https://github.com/gniewkob/Investment-Strategy-Lab/actions/runs/39245012461/artifacts/12182926287) (ZIP SHA256 `5b02af2eac25e49ac181f6d81934acf53914a06fcc54ee9a8ed750d21f139d19`, 7 plików, expiry 26.10) sprawdzono pod kątem manifestu, quality, ledger i robustness.
+
+- **Dane identyczne z v0.1:** fingerprint `5f2b7f788c9723be729ba6ab612751b0ce11b0901b73a78a0473f4129a6e7798`, 3711 obserwacji, 8 serii analizowanych, 62 anomalie, 47 niepokrywających się zdarzeń, 15 odrzuconych nałożeń. Hipotezy do dalszego badania spadły z **4 do 2** wyłącznie z powodu jakości.
+- **Do badania:** Brent (12 niezależnych zdarzeń) i Henry Hub (6), wyłącznie `INVESTIGATE_RESEARCH_ONLY`. To NIE jest potwierdzona przewaga ani zakup.
+- **`DATA_QUALITY_BLOCKED`:** WTI (STALE_DATA 55.479 dnia oraz PEER_COVERAGE_GAP: 56 brakujących dat względem Brent, z czego 35 po 25.08.2026), ETH i BTC (SOURCE_REVALIDATION_REQUIRED: rozbieżność 19.08.2026 z |z|=16.2658 i MAD robust |z|=18.32).
+- **Niewystarczające dowody:** złoto NBP, EUR/PLN, USD/PLN; BTC miało za mało niezależnych zdarzeń również w poprzednim przebiegu.
+- **Kluczowy wynik benchmarku:** naive last-bar sign na *identycznych datach* trafia dokładnie tyle samo co znak z-score dla **każdej z 8 serii**; `event_vs_same_date_naive_consistency_pp=0.0` we wszystkich. Brent 50/50%, Henry Hub 50/50%, ETH 66.67/66.67%, WTI 54.55/54.55%, BTC 75/75%. Na tym materiale **brak dowodu dodatkowej skuteczności kierunkowej ponad banalny znak poprzedniego ruchu**, brak istotności i efektu przyczynowego.
+- **Bezpieczeństwo:** `UNVERIFIED_HISTORICAL_PUBLICATION`, 0 macro verified events, 0 writes, 0 orders, 0 virtual allocation changes, brak dostępu do prywatnych portfeli, brak surowych cen w artefakcie, brak scheduler; wszystkie M1/M2/M3 `HOLD_NO_CHANGE`. Test tylko odczytowy; bez zmian konfiguracji i produkcji.
+- **Dalsze prace:** zweryfikować WTI z [EIA](https://www.eia.gov/dnav/pet/hist/RWTCD.htm), źródła BTC/ETH i autentyczne daty historycznej publikacji, dopiero potem holdout/cross-validation, bez dopasowywania do wyników in-sample. Nie deklarować przewagi, nie uruchamiać automatycznej alokacji. Szczegóły [Issue #4, zapis weryfikacji](https://github.com/gniewkob/Investment-Strategy-Lab/issues/4#issuecomment-6266207530).
+
 ## Wdrożenie v0.2 — 19.10.2026
 
 ## 19.10.2026 — Opportunity Radar v0.2 Data Quality & Evidence Gate WDROŻONE (CI-only; live staging nieuruchomiony)
