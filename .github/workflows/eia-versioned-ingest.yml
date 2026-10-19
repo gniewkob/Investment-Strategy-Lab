@@ -5,6 +5,11 @@ on:
     paths:
       - scripts/eia_readonly_audit.py
       - tests/test_eia_readonly_audit.py
+      - src/isl_v2/eia_raw_archive.py
+      - scripts/eia_archive_local.py
+      - tests/test_eia_raw_archive.py
+      - tests/test_eia_archive_cli.py
+      - docs/EIA_ORIGINAL_HTML_ARCHIVE_PL.md
       - src/isl_v2/eia_versioned_ingest.py
       - src/isl_v2/eia_semantic_evidence.py
       - tests/test_eia_versioned_ingest.py
@@ -22,6 +27,11 @@ on:
     paths:
       - scripts/eia_readonly_audit.py
       - tests/test_eia_readonly_audit.py
+      - src/isl_v2/eia_raw_archive.py
+      - scripts/eia_archive_local.py
+      - tests/test_eia_raw_archive.py
+      - tests/test_eia_archive_cli.py
+      - docs/EIA_ORIGINAL_HTML_ARCHIVE_PL.md
       - src/isl_v2/eia_versioned_ingest.py
       - src/isl_v2/eia_semantic_evidence.py
       - tests/test_eia_versioned_ingest.py
