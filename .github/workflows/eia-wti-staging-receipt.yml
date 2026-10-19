@@ -1,0 +1,59 @@
+name: Frozen WTI EIA and Neon STAGING receipt — MANUAL READ ONLY
+
+on:
+  pull_request:
+    paths:
+      - scripts/eia_wti_staging_receipt.py
+      - tests/test_eia_wti_staging_receipt.py
+      - .github/workflows/eia-wti-staging-receipt.yml
+      - docs/WTI_NEON_STAGING_SINGLE_RUN_PL.md
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: isl-eia-staging-wti-receipt
+  cancel-in-progress: false
+
+jobs:
+  offline-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Dependencies for offline compatibility tests only
+        run: python -m pip install 'psycopg[binary]>=3.2,<4'
+      - name: Run full offline synthetic suite (no secrets and no Neon)
+        run: python -m unittest discover -s tests -v
+
+  # Real public EIA + dedicated reader are used ONLY on operator dispatch from main.
+  manual-staging-read-only:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: research-staging
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install read-only PostgreSQL client
+        run: python -m pip install 'psycopg[binary]>=3.2,<4'
+      - name: Join public official EIA WTI with dedicated STAGING reader (read only)
+        env:
+          NEON_HISTORICAL_READ_DATABASE_URL: ${{ secrets.NEON_HISTORICAL_READ_DATABASE_URL }}
+        run: |
+          python -m scripts.eia_wti_staging_receipt > "$RUNNER_TEMP/wti-eia-receipt.json"
+          cat "$RUNNER_TEMP/wti-eia-receipt.json"
+      - name: Upload aggregate JSON ONLY (no raw price CSV or HTML)
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wti-eia-staging-readonly-receipt
+          path: "$RUNNER_TEMP/wti-eia-receipt.json"
+          if-no-files-found: error
+          retention-days: 7
