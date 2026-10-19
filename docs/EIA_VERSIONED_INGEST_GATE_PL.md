@@ -68,7 +68,7 @@ ale job wyzwalany automatycznie przez PR uruchamia tylko testy syntetyczne.
 ## Bramka przed realnym zapisem w Neon STAGING
 
 Dziś **nie istnieje** zatwierdzona rola
-`isl_eia_pit_staging_writer`. Istniejące `investment_lab_owner` jest
+`isl_eia_pit_staging_writer`. Przygotowano wyłącznie [projekt SQL NOLOGIN do przeglądu](../db/security/eia_pit_staging_writer_REVIEW_ONLY.sql): przed CREATE/GRANT wymaga dokładnego znanego znacznika izolowanej gałęzi STAGING, odmawia, jeśli rola istnieje, i wykonuje test uprawnień. **Nie uruchomiono tego SQL w Neon**. Istniejące `investment_lab_owner` jest
 zbyt szerokie, `isl_agent_staging_limited` nie ma prawa dodawania
 źródeł, a `isl_legacy_history_reader` tylko czyta historyczną tabelę.
 Żadnego nie zastępuj kontem uprzywilejowanym.
@@ -86,8 +86,7 @@ Kolejna osobna decyzja operatora powinna dopuścić jedynie:
   repozytorium. Nie powielaj hasła istniejących ról i nie drukuj DSN.
 - Testy uprawnień + idempotencji + rewizji i PIT `prices_asof` na
   **jednorazowym PostgreSQL/gałęzi disposable**, przed właściwym
-  pierwszym importem. Istniejący kod testów kursorowych symuluje SQL,
-  **nie zastępuje integracyjnego testu rzeczywistej bazy**.
+  pierwszym importem. **W CI zaimplementowano rzeczywisty disposable PostgreSQL 16**, odtwarzający istniejącą migrację 007 z PR #1 w izolowanej sztucznej bazie, wykonujący review-only skrypt roli i testujący zapis, idempotencję, korektę, `prices_asof` oraz odmowę po nadaniu nadmiernego odczytu. To **nie jest test połączenia z Neon STAGING**. Testy kursorowe są osobną bramką offline.
 - Oddzielną, wyraźną zgodę na pierwszy rzeczywisty INSERT wyłącznie
   STAGING, z limitami wielkości i porównaniem przed/po.
 - Dodatkowy przegląd sposobu zachowania oryginalnych bajtów źródła:
@@ -101,7 +100,7 @@ wcześniejsze syntetyczne fixture, **nie zweryfikowana historia rynku PIT**.
 
 ## Kryteria odbioru
 
-1. Wszystkie testy offline zaliczone bez Neon i sekretów.
+1. Pełne testy offline oraz osobny rzeczywisty **lokalny PostgreSQL 16** przechodzą w CI bez Neon i sekretów. Test PostgreSQL działa wyłącznie na hostcie `127.0.0.1` i bazie `investment_lab` w jednorazowym kontenerze; testowany zestaw ACL pochodzi z projektu review-only.
 2. Rzeczywisty, manualny dry-run publicznego EIA pokazuje autentyczne
    oryginalne SHA i czasy pobrania, zero DB writes.
 3. Dopiero po oddzielnym zatwierdzeniu nowej roli: niezależny test SQL na
