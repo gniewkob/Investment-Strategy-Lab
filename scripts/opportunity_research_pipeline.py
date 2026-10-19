@@ -31,9 +31,9 @@ def run_pipeline(snapshot: dict) -> dict:
             ("SYNTHETIC_OFFLINE_FIXTURE", "LEGACY_REFERENCE_SNAPSHOT_UNVERIFIED")):
         raise ValueError("Explicit, research-only dataset identity is required")
     radar = opportunity_radar.analyze(snapshot)
-    ledger = evidence_decision_ledger.make_ledger(radar)
-    context = economic_geopolitical_context.analyze_context(snapshot, radar)
     robustness = nonoverlap_validation.analyze_validation(snapshot, radar)
+    ledger = evidence_decision_ledger.make_ledger(radar, robustness=robustness)
+    context = economic_geopolitical_context.analyze_context(snapshot, radar)
     if (ledger["source_radar_sha256"] != radar["data_sha256"]
             or radar["source_vintage"] != "UNVERIFIED_HISTORICAL_PUBLICATION"
             or radar["pit_backtest_certified"] is not False
