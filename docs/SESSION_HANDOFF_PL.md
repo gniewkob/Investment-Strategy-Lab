@@ -1,3 +1,12 @@
+## 19.10.2026 — wskaźniki PIT syntetyczne vs zweryfikowane (PR #26)
+
+**WDROŻONE na `main`:** [PR #26](https://github.com/gniewkob/Investment-Strategy-Lab/pull/26), squash `238b3316581cca992da33ff0d89a08008b7a9a74`. Zmieniono tylko `scripts/staging_data_audit.py` i `tests/test_staging_data_audit.py` w badawczym audycie jakości danych. CI [#39287318533](https://github.com/gniewkob/Investment-Strategy-Lab/actions/runs/39287318533) **SUCCESS**, pełny zestaw **152/152 testów PASS** (w tym nowe testy wykluczania syntetycznych fixture).
+
+- `pit_eligible_rows` jest nadal **techniczną widocznością**, nie liczbą źródłowo uwierzytelnionych obserwacji. Dodano `pit_fixture_rows`, `pit_nonfixture_unverified_rows`, `pit_verified_market_rows` i ostrzeżenia `SYNTHETIC_PIT_FIXTURE_NOT_MARKET_DATA` / `NO_VERIFIED_POINT_IN_TIME_MARKET_EVIDENCE`.
+- Odczytowe SQL identyfikuje `metadata.synthetic=true` lub `metadata.fixture_only=true`; źródła bez potwierdzenia nie mogą wypełnić zweryfikowanego minimum. Brak obecnie niezależnego per-row certyfikatu oryginalnej publikacji, dlatego `read_snapshot` zachowawczo przypisuje 0 prawdziwych zweryfikowanych źródeł i pustą serię jakościowo certyfikowaną, bez sztucznego podnoszenia gotowości.
+- Niezależny READ-ONLY SQL na odizolowanym Neon STAGING potwierdził `prices_asof(now())=1` technicznie dostępny, dokładnie **1 syntetyczny**, **0 niesyntetycznych**, **0 zweryfikowanych źródłowo**. Historyczna tabela 3711 legacy obserwacji nadal `UNVERIFIED_HISTORICAL_PUBLICATION`. Wcześniejszy przyszły znacznik w jednym z trzech fixture jest zamierzonym testem, **nie usuwać go**.
+- `MARKET_DATA_NOT_READY`, 0 zleceń, 0 zapisu bazy, brak harmonogramu, wszystkie M1/M2/M3 `HOLD_NO_CHANGE`. [Issue #23 status weryfikacji](https://github.com/gniewkob/Investment-Strategy-Lab/issues/23#issuecomment-6272267236). **Ręczny realny workflow staging-data-audit po tym commicie nie był jeszcze uruchamiany**, CI jest offline. Po nowym manualnym audycie sprawdzić `audit.json` i `audit.md` oraz liczniki. Issue #2 nadal dotyczy źródłowo uwierzytelnionych realnych PIT.
+
 # Investment Strategy Lab — pełne przekazanie kontekstu nowej sesji agenta
 
 > **Snapshot: 19 października 2026, około 07:11 UTC.** Ta strona opisuje stan **zweryfikowany w GitHub oraz Neon**, odróżnia go od planów. Stan może się później zmienić — przed zapisem albo wykonaniem operacji odczytaj aktualny `main`, Issues, PR-y, uprawnienia i historię workflow.  
