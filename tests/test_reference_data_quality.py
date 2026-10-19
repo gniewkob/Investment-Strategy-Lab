@@ -4,6 +4,8 @@ from __future__ import annotations
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 import unittest
+import math
+from statistics import mean, pstdev
 
 from scripts import (
     opportunity_demo_fixture,
@@ -39,6 +41,47 @@ def sample_data():
     }
 
 
+def synthetic_aged_crypto_divergence():
+    """Artificial relative-return series: 1 early extreme, 11 later mild alerts.
+
+    Prices have no relationship to actual market data. The later 11 ordinary
+    alerts displace the early one from radar's last-ten presentation list.
+    """
+    gap_returns = [
+        .001 * math.sin(i * .31) + .0012 * math.cos(i * .7)
+        for i in range(230)
+    ]
+    gap_returns[45] = .15
+    for j in range(11):
+        idx = 75 + 13 * j
+        reference = gap_returns[idx - 20:idx]
+        gap_returns[idx] = mean(reference) + 3.2 * pstdev(reference)
+    start = datetime(2026, 3, 1, tzinfo=timezone.utc)
+    records = []
+    btc, eth = 100.0, 100.0
+    for idx in range(len(gap_returns) + 1):
+        if idx:
+            btc *= 1.002
+            eth *= 1.002 - gap_returns[idx - 1]
+        day = (start + timedelta(days=idx)).isoformat()
+        for code, price in (("BTC-USD", btc), ("ETH-USD", eth)):
+            records.append({
+                "instrument_code": code,
+                "interval_code": "1d",
+                "return_basis": "PRICE_ONLY",
+                "observed_for": day,
+                "ingested_at": "2026-10-18T00:00:00+00:00",
+                "close_price": f"{price:.10f}",
+            })
+    return {
+        "mode": "RETROSPECTIVE_RESEARCH_ONLY",
+        "dataset_kind": "SYNTHETIC_OFFLINE_FIXTURE",
+        "source_vintage": "UNVERIFIED_HISTORICAL_PUBLICATION",
+        "as_of": "2026-10-19T00:00:00+00:00",
+        "records": records,
+    }, (start + timedelta(days=46)).isoformat()
+
+
 class ReferenceDataQualityTests(unittest.TestCase):
     def test_stale_wti_and_peer_calendar_gap_block_research_promotion(self):
         snapshot = sample_data()
@@ -66,33 +109,69 @@ class ReferenceDataQualityTests(unittest.TestCase):
         self.assertEqual(brent["freshness_threshold_days"], 10)
         self.assertEqual(brent["quality_gate"], "REVIEW_ONLY")
 
-    def test_relative_crypto_extreme_requires_independent_price_verification(self):
-        snapshot = opportunity_demo_fixture.generate()
-        r = opportunity_radar.analyze(snapshot)
-        stamp = snapshot["records"][121]["observed_for"]
-        r["cross_market_btc_eth"]["recent_divergence_events"] = [
-            {"observed_for": stamp, "absolute_zscore": 16.266,
-             "signal": "USD_CRYPTO_RELATIVE_MOVE_DIVERGENCE",
-             "hypothesis_status": "INVESTIGATE_ONLY"}
-        ]
-        q = quality.analyze_quality(snapshot, r)
-        self.assertEqual(len(q["extreme_relative_moves"]), 1)
-        self.assertEqual(q["extreme_relative_moves"][0]["status"],
-                         "SOURCE_REVALIDATION_REQUIRED")
+    def test_aged_extreme_not_lost_after_ten_later_display_alerts(self):
+        snapshot, extreme_day = synthetic_aged_crypto_divergence()
+        radar_result = opportunity_radar.analyze(snapshot)
+        shown = radar_result["cross_market_btc_eth"]["recent_divergence_events"]
+        self.assertEqual(len(shown), 10)
+        self.assertNotIn(extreme_day, [event["observed_for"] for event in shown])
+        # The DISPLAY may lose its old event; quality must not.
+        q = quality.analyze_quality(snapshot, radar_result)
+        extremes = q["extreme_relative_moves"]
+        self.assertEqual(len(extremes), 1)
+        self.assertEqual(extremes[0]["observed_for"], extreme_day)
+        self.assertGreater(extremes[0]["absolute_zscore"], 8)
+        self.assertEqual(extremes[0]["reference_bars"], 20)
+        self.assertEqual(extremes[0]["status"], "SOURCE_REVALIDATION_REQUIRED")
         for item in q["series"]:
-            self.assertIn("SOURCE_REVALIDATION_REQUIRED", item["warning_codes"])
             self.assertEqual(item["quality_gate"], "BLOCK_RESEARCH_PROMOTION")
-        ledger = evidence_decision_ledger.make_ledger(
-            r, quality=q)
+            self.assertIn("SOURCE_REVALIDATION_REQUIRED", item["warning_codes"])
+        ledger = evidence_decision_ledger.make_ledger(radar_result, quality=q)
         self.assertTrue(all(x["educational_decision"] == "DATA_QUALITY_BLOCKED"
                             for x in ledger["questions"]))
 
+    def test_presentation_list_cannot_clear_or_forge_extreme(self):
+        snapshot, _ = synthetic_aged_crypto_divergence()
+        radar_result = opportunity_radar.analyze(snapshot)
+        q = quality.analyze_quality(snapshot, radar_result)
+        modified = deepcopy(radar_result)
+        modified["cross_market_btc_eth"]["recent_divergence_events"] = []
+        self.assertEqual(q, quality.analyze_quality(snapshot, modified))
+        modified["cross_market_btc_eth"]["recent_divergence_events"] = [{
+            "observed_for": "2026-03-28T00:00:00+00:00",
+            "absolute_zscore": 100000,
+        }]
+        self.assertEqual(q, quality.analyze_quality(snapshot, modified))
+
+    def test_future_bars_cannot_change_an_older_divergence_quality_score(self):
+        snapshot, extreme_day = synthetic_aged_crypto_divergence()
+        complete = quality.analyze_quality(snapshot, opportunity_radar.analyze(snapshot))
+        before = deepcopy(snapshot)
+        before["records"] = [r for r in before["records"]
+                             if r["observed_for"] <= "2026-05-19T00:00:00+00:00"]
+        reduced = quality.analyze_quality(before, opportunity_radar.analyze(before))
+        old_full = next(x for x in complete["extreme_relative_moves"]
+                        if x["observed_for"] == extreme_day)
+        old_reduced = next(x for x in reduced["extreme_relative_moves"]
+                           if x["observed_for"] == extreme_day)
+        self.assertEqual(old_full, old_reduced)
+
     def test_non_extreme_divergence_does_not_trigger_cross_market_block(self):
         snapshot = opportunity_demo_fixture.generate()
+        btc_prices = {r["observed_for"]: r["close_price"] for r in snapshot["records"]
+                      if r["instrument_code"] == "BTC-USD"}
+        for row in snapshot["records"]:
+            if row["instrument_code"] == "ETH-USD":
+                row["close_price"] = btc_prices[row["observed_for"]]
         r = opportunity_radar.analyze(snapshot)
-        r["cross_market_btc_eth"]["recent_divergence_events"] = []
+        r["cross_market_btc_eth"]["recent_divergence_events"] = [{
+            "observed_for": snapshot["records"][121]["observed_for"],
+            "absolute_zscore": 999.0,
+        }]
         q = quality.analyze_quality(snapshot, r)
         self.assertEqual(q["extreme_relative_moves"], [])
+        self.assertTrue(all("SOURCE_REVALIDATION_REQUIRED" not in x["warning_codes"]
+                            for x in q["series"]))
         self.assertEqual(q["source_vintage"], "UNVERIFIED_HISTORICAL_PUBLICATION")
         self.assertFalse(q["historical_release_dates_verified"])
 

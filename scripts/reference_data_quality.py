@@ -9,7 +9,7 @@ from __future__ import annotations
 from collections import defaultdict
 from datetime import datetime
 from decimal import Decimal
-from statistics import median
+from statistics import mean, median, pstdev
 import hashlib
 import math
 
@@ -32,8 +32,14 @@ def _max_age(code: str, interval: str) -> int:
     return DAILY_MAX_AGE_DAYS
 
 
-def _extreme_relative_moves(by_series: dict, radar_report: dict) -> list[dict]:
-    """Only alerts on known radar divergence dates; robust MAD is diagnostic."""
+def _extreme_relative_moves(by_series: dict) -> list[dict]:
+    """Check ALL matched-date crypto returns, independent of radar display.
+
+    The 20-bar mean/std estimate uses only returns strictly before the
+    candidate date, exactly as the descriptive radar. Recent display results
+    and any manually edited radar presentation cannot clear a quality flag.
+    Robust MAD is a diagnostic, not a forecast or trading signal.
+    """
     values = []
     for code in ("BTC-USD", "ETH-USD"):
         values.append({
@@ -49,29 +55,30 @@ def _extreme_relative_moves(by_series: dict, radar_report: dict) -> list[dict]:
         for i in range(1, len(matching))
     ]
     findings = []
-    radar_dates = {
-        x["observed_for"]: x
-        for x in radar_report["cross_market_btc_eth"]["recent_divergence_events"]
-    }
     for i in range(MIN_CRYPTO_REFERENCE_BARS + 1, len(matching)):
-        stamp = matching[i]
-        radar_event = radar_dates.get(stamp)
-        if not radar_event or radar_event["absolute_zscore"] < EXTREME_CROSS_MARKET_Z:
-            continue
+        # changes[j] is the return ending on matching[j+1].
+        # Exclude the candidate return and use the PRECEDING 20.
         historical = gaps[i - MIN_CRYPTO_REFERENCE_BARS - 1:i - 1]
+        if len(historical) != MIN_CRYPTO_REFERENCE_BARS:
+            raise ValueError("Invalid historical divergence reference window")
+        sigma = pstdev(historical)
+        if sigma < 1e-10:
+            continue
+        score = (gaps[i - 1] - mean(historical)) / sigma
+        if not math.isfinite(score) or abs(score) < EXTREME_CROSS_MARKET_Z:
+            continue
         med = median(historical)
-        mad = median([abs(x - med) for x in historical])
-        robust = ((gaps[i - 1] - med) / (1.4826 * mad)) if mad > 1e-12 else None
+        mad = median(abs(x - med) for x in historical)
+        robust = (gaps[i - 1] - med) / (1.4826 * mad) if mad > 1e-12 else None
         findings.append({
-            "observed_for": stamp,
-            "absolute_zscore": radar_event["absolute_zscore"],
+            "observed_for": matching[i],
+            "absolute_zscore": round(abs(score), 4),
             "absolute_robust_zscore": round(abs(robust), 2)
             if robust is not None and math.isfinite(robust) else None,
             "reference_bars": len(historical),
             "status": "SOURCE_REVALIDATION_REQUIRED",
         })
     return findings
-
 
 def analyze_quality(snapshot: dict, radar_report: dict) -> dict:
     records = radar.validate_snapshot(snapshot)
@@ -86,7 +93,7 @@ def analyze_quality(snapshot: dict, radar_report: dict) -> dict:
     grouped = defaultdict(list)
     for row in records:
         grouped[(row["instrument_code"], row["interval_code"])].append(row)
-    cross = _extreme_relative_moves(grouped, radar_report)
+    cross = _extreme_relative_moves(grouped)
     cross_blocked = {"BTC-USD", "ETH-USD"} if cross else set()
     checked = []
     for (code, interval), group in sorted(grouped.items()):
