@@ -64,11 +64,18 @@ class VersionedEiaPgIntegrationTests(unittest.TestCase):
                 CREATE TABLE IF NOT EXISTS investment_lab.price_observations
                   (instrument_code text PRIMARY KEY)
             """)
-            for table in ("holding_snapshots","valuations","paper_events",
-                          "agent_cycles"):
+            for table in ("holding_snapshots","valuations","paper_events"):
                 # Only dummy ACL sentinels exist, never real private data.
                 cur.execute("CREATE TABLE IF NOT EXISTS investment_lab."
                             + table + " (dummy_id integer)")
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS investment_lab.agent_cycles
+                (run_key text PRIMARY KEY)
+            """)
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS investment_lab.agent_paper_decisions
+                (run_key text, decision_type text)
+            """)
             migration = (
                 ROOT / "tests/fixtures/eia_pit_schema_007_disposable.sql"
             ).read_text(encoding="utf-8")
@@ -78,21 +85,18 @@ class VersionedEiaPgIntegrationTests(unittest.TestCase):
                 BEGIN
                   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='neon_superuser')
                   THEN CREATE ROLE neon_superuser NOLOGIN; END IF;
-                  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='isl_eia_pit_staging_writer')
-                  THEN CREATE ROLE isl_eia_pit_staging_writer NOLOGIN
-                    NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS; END IF;
                 END $$;
             """)
-            cur.execute("GRANT USAGE ON SCHEMA investment_lab TO isl_eia_pit_staging_writer")
             cur.execute("""
-                GRANT SELECT ON investment_lab.data_sources,
-                         investment_lab.instruments
-                TO isl_eia_pit_staging_writer
+                INSERT INTO investment_lab.agent_cycles(run_key)
+                VALUES ('staging-security-canary-2026-10-18')
             """)
             cur.execute("""
-                GRANT SELECT,INSERT ON investment_lab.source_documents,
-                         investment_lab.price_observation_versions
-                TO isl_eia_pit_staging_writer
+                INSERT INTO investment_lab.agent_paper_decisions
+                  (run_key,decision_type)
+                VALUES ('staging-security-canary-2026-10-18','HOLD_CASH'),
+                       ('staging-security-canary-2026-10-18','HOLD_CASH'),
+                       ('staging-security-canary-2026-10-18','HOLD_CASH')
             """)
             cur.execute("""
                 INSERT INTO investment_lab.data_sources(source_code)
@@ -103,6 +107,15 @@ class VersionedEiaPgIntegrationTests(unittest.TestCase):
                 VALUES ('WTI_EIA_USD_BBL') ON CONFLICT DO NOTHING
             """)
         cls.conn.commit()
+        # The REVIEW ONLY role SQL is executed ONLY against this throwaway
+        # localhost PostgreSQL; production/staging Neon is never addressed.
+        cls.conn.autocommit = True
+        with cls.conn.cursor() as cur:
+            cur.execute(
+                (ROOT / "db/security/eia_pit_staging_writer_REVIEW_ONLY.sql").read_text(),
+                prepare=False,
+            )
+        cls.conn.autocommit = False
 
     @classmethod
     def tearDownClass(cls):
