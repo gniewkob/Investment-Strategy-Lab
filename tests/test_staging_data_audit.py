@@ -11,11 +11,13 @@ from unittest.mock import patch
 from scripts import staging_data_audit as audit
 
 
-def snapshot(*, future=0, mismatch=0, pit=1, series=None):
+def snapshot(*, future=0, mismatch=0, pit=1, fixture=0, series=None):
     return {
         "server_time": "2026-10-18T19:00:00+00:00",
         "documents": 3, "versions": 3,
         "pit_eligible": pit,
+        "pit_fixture": fixture,
+        "pit_nonfixture": pit - fixture,
         "future_local_timestamps": future,
         "unmatched_sources": mismatch,
         "series": [] if series is None else series,
@@ -29,11 +31,16 @@ def row(code, periods, *, concept="MONTHLY_AVERAGE", interval="1mo"):
 
 class StagingAuditPolicyTests(unittest.TestCase):
     def test_staging_data_not_ready_with_single_nbp_reference(self):
-        data = snapshot(future=1, series=[
+        data = snapshot(future=1, pit=1, fixture=1, series=[
             row("GOLD_NBP_PLN_G", 1, concept="OTHER_REFERENCE", interval="spot")])
         result = audit.classify_snapshot(data)
         self.assertEqual(result["status"], "MARKET_DATA_NOT_READY")
         self.assertEqual(result["pit_eligible_rows"], 1)
+        self.assertEqual(result["pit_fixture_rows"], 1)
+        self.assertEqual(result["pit_nonfixture_rows_unreviewed"], 0)
+        self.assertFalse(result["publication_vintage_certified"])
+        self.assertIn("NO_NONFIXTURE_PIT_EVIDENCE", result["warning_codes"])
+        self.assertIn("SYNTHETIC_PIT_FIXTURES_NOT_MARKET_EVIDENCE", result["warning_codes"])
         self.assertEqual(result["future_local_timestamp_rows"], 1)
         self.assertIn("FUTURE_LOCAL_INGESTION_TIMESTAMP", result["warning_codes"])
         self.assertTrue(all(x >= 4 for x in result["monthly_total_return_gaps"].values()))
@@ -57,6 +64,33 @@ class StagingAuditPolicyTests(unittest.TestCase):
         self.assertIs(result["approval_required_for_schedule"], True)
         self.assertEqual(result["warning_codes"], [])
         self.assertFalse(result["data_ready_for_real_trading"])
+
+    def test_fixture_only_full_coverage_does_not_approve_research_readiness(self):
+        series = [row(code, 4, concept="TOTAL_RETURN_INDEX")
+                  for code in audit.MONTHLY_PAPER_REFERENCES]
+        series += [row(code, 13) for code in audit.MONTHLY_RESEARCH_WATCH]
+        # Coverage from an upstream read_snapshot is filtered to EXCLUDE
+        # all fixture documents. Even a forged full coverage summary cannot
+        # override absence of non-fixture PIT evidence.
+        result = audit.classify_snapshot(snapshot(
+            pit=38, fixture=38, series=series))
+        self.assertEqual(result["pit_nonfixture_rows_unreviewed"], 0)
+        self.assertIn("NO_NONFIXTURE_PIT_EVIDENCE", result["warning_codes"])
+        self.assertEqual(result["status"], "MARKET_DATA_NOT_READY")
+        self.assertFalse(result["data_ready_for_autonomous_experiments"])
+        self.assertFalse(result["data_ready_for_real_trading"])
+
+    def test_fixture_count_must_match_total_pit_coverage(self):
+        bad = snapshot(pit=1, fixture=1)
+        bad["pit_nonfixture"] = 1
+        with self.assertRaisesRegex(ValueError, "must sum"):
+            audit.classify_snapshot(bad)
+        bad = snapshot(pit=1, fixture=1)
+        bad.pop("pit_fixture")
+        with self.assertRaisesRegex(ValueError, "Incomplete"):
+            audit.classify_snapshot(bad)
+        with self.assertRaises(ValueError):
+            audit.classify_snapshot(snapshot(pit=1, fixture=2))
 
     def test_price_only_monthly_index_cannot_fake_total_return(self):
         data = snapshot(series=[row("EQUITY_TR_PLN", 100, concept="OTHER_REFERENCE")])
