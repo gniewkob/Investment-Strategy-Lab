@@ -214,7 +214,7 @@ def make_markdown(summary: dict) -> str:
         "", "No real orders, paper fills, data writes or financial recommendations.",
         "Fixture records are excluded from coverage; other visible records still need",
         "independent release-vintage source evidence before any readiness claim.",
-        "This coverage screen does not certify publication-vintage source quality.",
+        "This coverage screen does not certify publication-vintage source quality,",
         "reliable source ETL, alert delivery, benchmark performance or investment readiness.",
         "An unattended schedule remains disabled.", "",
     ]
