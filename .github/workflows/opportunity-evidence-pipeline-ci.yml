@@ -7,6 +7,8 @@ on:
       - scripts/opportunity_demo_fixture.py
       - scripts/economic_geopolitical_context.py
       - scripts/nonoverlap_validation.py
+      - scripts/reference_data_quality.py
+      - tests/test_reference_data_quality.py
       - scripts/evidence_decision_ledger.py
       - tests/test_nonoverlap_validation.py
       - tests/test_evidence_decision_ledger.py
@@ -19,6 +21,8 @@ on:
       - scripts/opportunity_demo_fixture.py
       - scripts/economic_geopolitical_context.py
       - scripts/nonoverlap_validation.py
+      - scripts/reference_data_quality.py
+      - tests/test_reference_data_quality.py
       - scripts/evidence_decision_ledger.py
       - tests/test_nonoverlap_validation.py
       - tests/test_evidence_decision_ledger.py
@@ -60,6 +64,12 @@ jobs:
           assert data["source_vintage"] == "UNVERIFIED_HISTORICAL_PUBLICATION"
           assert data["schedule_enabled"] is False
           assert (folder/"economic_geopolitical_context.json").exists()
+          dq=json.loads((folder/"reference_data_quality.json").read_text())
+          assert dq["status"] == "REFERENCE_DATA_QUALITY_RESEARCH_ONLY"
+          assert dq["historical_release_dates_verified"] is False
+          assert dq["real_orders"] == 0
+          assert dq["database_writes"] == 0
+          assert dq["source_radar_sha256"] == data["radar_data_sha256"]
           robust=json.loads((folder/"nonoverlap_validation.json").read_text())
           assert robust["status"] == "NONOVERLAPPING_RESEARCH_DIAGNOSTIC_ONLY"
           assert robust["source_radar_sha256"] == data["radar_data_sha256"]
