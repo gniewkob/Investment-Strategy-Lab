@@ -8,6 +8,7 @@ from scripts import (
     opportunity_demo_fixture,
     opportunity_radar,
     opportunity_research_pipeline,
+    evidence_decision_ledger,
 )
 
 
@@ -123,6 +124,43 @@ class NonOverlapResearchTests(unittest.TestCase):
         self.assertEqual(result["series_checked"], 0)
         self.assertEqual(result["total_nonoverlapping_events"], 0)
         self.assertEqual(result["real_orders"], 0)
+
+    def test_ledger_downgrades_overlapping_raw_signals(self):
+        p = self.sample()
+        radar = opportunity_radar.analyze(p)
+        robust = nv.analyze_validation(p, radar)
+        radar["series"][0]["shock_samples"] = 8
+        radar["series"][0]["five_bar_baseline_samples"] = 100
+        robust["series"][0]["nonoverlapping_shock_events"] = 2
+        robust["series"][0]["baseline_grid_independent_windows"] = 20
+        ledger = evidence_decision_ledger.make_ledger(radar, robustness=robust)
+        self.assertEqual(ledger["questions"][0]["educational_decision"],
+                         "INSUFFICIENT_EVIDENCE")
+        self.assertTrue(ledger["questions"][0]["overlap_screened"])
+        self.assertEqual(ledger["questions"][0]["nonoverlapping_events"], 2)
+        self.assertFalse(ledger["questions"][0]["change_virtual_allocation"])
+
+    def test_ledger_allows_only_research_investigation_when_sample_sufficient(self):
+        p = self.sample()
+        radar = opportunity_radar.analyze(p)
+        robust = nv.analyze_validation(p, radar)
+        radar["series"][0]["shock_samples"] = 8
+        radar["series"][0]["five_bar_baseline_samples"] = 100
+        robust["series"][0]["nonoverlapping_shock_events"] = 5
+        robust["series"][0]["baseline_grid_independent_windows"] = 16
+        ledger = evidence_decision_ledger.make_ledger(radar, robustness=robust)
+        self.assertEqual(ledger["questions"][0]["educational_decision"],
+                         "INVESTIGATE_RESEARCH_ONLY")
+        self.assertEqual(ledger["portfolio_reallocations"], 0)
+        self.assertEqual(ledger["real_orders"], 0)
+
+    def test_ledger_rejects_unmatched_independence_evidence(self):
+        p = self.sample()
+        radar = opportunity_radar.analyze(p)
+        robust = nv.analyze_validation(p, radar)
+        robust["source_radar_sha256"] = "0" * 64
+        with self.assertRaisesRegex(ValueError, "contract"):
+            evidence_decision_ledger.make_ledger(radar, robustness=robust)
 
     def test_unchanged_baseline_is_not_investment_perf_estimate(self):
         out = opportunity_research_pipeline.run_pipeline(self.sample())
