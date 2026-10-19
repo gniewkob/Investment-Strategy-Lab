@@ -111,7 +111,13 @@ class IngestionPlanTests(TestCase):
             self.assertEqual(timeout,30)
             self.assertEqual(req.full_url,SOURCES["wti"][2])
             return Response(fixture())
-        p = ingest.fetch_plan("wti", NOW, opener=opener)
+        completed = NOW + timedelta(seconds=2)
+        p = ingest.fetch_plan("wti", NOW, opener=opener,
+                              completion_clock=lambda: completed)
+        self.assertEqual(p.snapshot.downloaded_at, completed)
+        self.assertEqual(p.available_at, completed)
+        self.assertEqual(ingest.dry_run_summary(p)["retrieved_at_actual"],
+                         completed.isoformat())
         self.assertEqual(p.source_bytes_sha256,hashlib.sha256(fixture()).hexdigest())
         for bad in (
             Response(fixture(),url="https://redirect.invalid/"),
@@ -119,7 +125,39 @@ class IngestionPlanTests(TestCase):
             Response(b"",media="text/html"),
         ):
             with self.assertRaises(SourceFormatError):
-                ingest.fetch_plan("wti",NOW,opener=lambda *_, r=bad,**__:r)
+                ingest.fetch_plan("wti", NOW,
+                                  opener=lambda *_, r=bad, **__: r,
+                                  completion_clock=lambda: completed)
+
+    def test_completed_fetch_time_cannot_be_backdated_or_faked(self):
+        response = lambda *args, **kwargs: Response(fixture())
+        start = NOW
+        for bad_finish in (
+            NOW - timedelta(microseconds=1),
+            NOW + timedelta(seconds=121),
+            NOW.replace(tzinfo=None),
+        ):
+            with self.assertRaisesRegex(SourceFormatError, "clock"):
+                ingest.fetch_plan("wti", start, opener=response,
+                                  completion_clock=lambda: bad_finish)
+        with self.assertRaisesRegex(SourceFormatError, "Pre-request"):
+            ingest.fetch_plan("wti", NOW.replace(tzinfo=None), opener=response)
+        # A full source read must precede the completion-clock callback.
+        steps = []
+        class ReadOrderResponse(Response):
+            def read(self, cap):
+                steps.append("read")
+                return super().read(cap)
+            def __exit__(self,*unused):
+                steps.append("closed")
+                return False
+        def mark_finish():
+            steps.append("timestamped")
+            return NOW + timedelta(seconds=3)
+        p = ingest.fetch_plan("wti", NOW, opener=lambda *_,**__: ReadOrderResponse(fixture()),
+                              completion_clock=mark_finish)
+        self.assertEqual(steps,["read","closed","timestamped"])
+        self.assertEqual(p.snapshot.downloaded_at,NOW + timedelta(seconds=3))
 
     def test_prevent_fabricated_or_future_release(self):
         with self.assertRaises(SourceFormatError):
