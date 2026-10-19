@@ -35,10 +35,11 @@ class TransactionalCursorStub:
         self.roles = list((
             ingest.EXPECTED_WRITER, ingest.EXPECTED_DATABASE, "off",
             False,False,False,False,False,False,False,
-            True,True,True,True,
+            True,True,False,False,False,
+            True,True,False,False,False,
             False,False,False,False,False,False,
         ))
-        assert len(self.roles) == 20
+        assert len(self.roles) == 26
         self.source = "eia_wti_daily"
         self.instrument = "WTI_EIA_USD_BBL"
         self.docs = {}
@@ -99,6 +100,8 @@ class IngestionPlanTests(TestCase):
         self.assertEqual(s["database_writes"], 0)
         self.assertEqual(s["database_connections"], 0)
         self.assertEqual(s["daily_spot_observations"], 18)
+        self.assertEqual(len(s["semantic_observations_sha256"]),64)
+        self.assertEqual(s["semantic_observation_count"],18)
         summary = json.dumps(s)
         for secret in ("101.10", "104.30", "postgresql://"):
             self.assertNotIn(secret,summary)
@@ -155,6 +158,8 @@ class IngestionPlanTests(TestCase):
         self.assertEqual(first["revised_observation_versions"],0)
         self.assertEqual(len(cur.versions),18)
         self.assertEqual(len(cur.docs),1)
+        self.assertEqual(next(iter(cur.docs.values()))[4]["semantic_observation_count"],18)
+        self.assertEqual(len(next(iter(cur.docs.values()))[4]["semantic_observations_sha256"]),64)
 
         again = ingest.apply_plan(cur,base)
         self.assertFalse(again["document_added"])
@@ -198,8 +203,10 @@ class IngestionPlanTests(TestCase):
         for index,wrong in ((0,"investment_lab_owner"),
                             (0,"isl_legacy_history_reader"),
                             (2,"on"),(3,True),(7,True),
-                            (14,True),(15,True),(16,True),
-                            (19,True),(11,False)):
+                            (12,True),(13,True),(14,True),
+                            (17,True),(18,True),(19,True),
+                            (20,True),(21,True),(22,True),
+                            (25,True),(11,False)):
             cur = TransactionalCursorStub()
             cur.roles[index] = wrong
             with self.assertRaisesRegex(SourceFormatError,"writer"):
@@ -217,6 +224,14 @@ class IngestionPlanTests(TestCase):
                            {"synthetic":True,"source_type":"EIA_DAILY_SPOT"})
         with self.assertRaisesRegex(SourceFormatError,"provenance"):
             ingest.apply_plan(cur,plan)
+
+    def test_stale_source_refuses_current_provenance_classification(self):
+        with self.assertRaisesRegex(SourceFormatError, "stale"):
+            ingest.prepare("wti", fixture(), NOW + timedelta(days=30),
+                           max_age_days=420)
+        with self.assertRaisesRegex(SourceFormatError, "stale"):
+            ingest.prepare("wti", fixture(release="09/01/2026"),
+                           NOW, max_age_days=420)
 
     def test_no_cli_writer_or_connection_even_with_flags(self):
         out,err = StringIO(), StringIO()
