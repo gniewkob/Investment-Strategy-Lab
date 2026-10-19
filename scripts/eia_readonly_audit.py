@@ -74,6 +74,8 @@ def read_local_reference_with_digest(
         for count, row in enumerate(reader, 1):
             if count > MAX_LOCAL_CSV_ROWS:
                 raise ValueError("Reference CSV exceeds allowed rows")
+            if None in row or any(value is None for value in row.values()):
+                raise ValueError("Malformed CSV row column count")
             if row.get("instrument_code") != instrument:
                 raise ValueError("Reference instrument differs from EIA source")
             try:
@@ -81,6 +83,8 @@ def read_local_reference_with_digest(
                 price = Decimal(row["close_price"])
             except (TypeError, ValueError, InvalidOperation, KeyError):
                 raise ValueError("Malformed reference date or price") from None
+            if day.isoformat() != row["observed_for"]:
+                raise ValueError("Reference date must be canonical ISO")
             if day in observed or not price.is_finite() or price <= 0:
                 raise ValueError("Duplicate, nonfinite or nonpositive reference")
             observed[day] = price
