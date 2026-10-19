@@ -109,3 +109,13 @@ Plan P0 #2, na podstawie istniejących już tabel:
 M1/M2/M3 pozostają `HOLD_NO_CHANGE`, brak transakcji i automatycznych
 alokacji. [Issue #2](https://github.com/gniewkob/Investment-Strategy-Lab/issues/2)
 pozostaje otwarte.
+
+
+## Kontrola dokładnego czasu odczytu HTTP
+
+Odczytowe narzędzie `fetch_official`, używane przez ręczny audyt WTI
+695/695, jest również objęte regułą **timestamp po pełnym odczytaniu i
+zamknięciu response**, a nie czasem wysłania requestu. Błąd zegara,
+timestamp bez strefy albo opóźnienie ponad 120 sekund kończy audyt
+bez wyniku PASS i bez jakiejkolwiek operacji zapisu. Ma to znaczenie,
+gdy archiwizujemy SHA i czas pobrania jako wspólny dowód jakości źródła.
