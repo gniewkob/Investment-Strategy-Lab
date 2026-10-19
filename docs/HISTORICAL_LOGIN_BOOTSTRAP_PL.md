@@ -16,15 +16,14 @@
 
 ## Operator-only — co trzeba wykonać w prywatnej sesji
 
-1. **Ustaw hasło do istniejącej roli bez jawnej treści SQL.** W [Neon Console](https://console.neon.tech/) wybierz projekt i **dokładnie staging**. Jeśli `Roles → isl_legacy_history_reader → Reset password` działa, możesz użyć oferowanego formularza. API reset w poprzedniej próbie zgłosiło błąd, więc nie zakładaj, że UI zadziała.
+1. **WAŻNE — pierwsze hasło nie jest „resetem”.** W tym projekcie rola została utworzona bez hasła przez SQL. `rolpassword IS NOT NULL=false`; Neon `reset_postgres_role_password` odrzucił operację. Także natywne `psql \\password` **nie jest pewnym obejściem dla Neon**, bo wysyła przygotowany przez klienta hash, a Neon deklaruje, że akceptuje hasła podane w plaintext SQL. Powtarzanie resetu nie jest planem działania.
 
-   Jeśli opcja UI nie działa, połącz się prywatnym `psql` z tym staging jako `investment_lab_owner`. Nie przekazuj owner DSN do czatu ani pliku. Wybierz weryfikację pełnego TLS `sslmode=verify-full` i zaufany bundle CA odpowiedni dla swojego systemu. Następnie wewnątrz sesji `psql` uruchom:
+   **Bezpieczniejsza ścieżka:** Zgłosić do Neon Support prośbę o wspieraną metodę inicjalizacji **pierwszego** hasła dla istniejącej roli SQL-created, z zachowaniem SELECT-only, bez `neon_superuser`, oraz z gwarancją ograniczenia śladów poświadczenia w logach. Do czasu uzyskania potwierdzenia role ACL i sekretów nie modyfikować.
 
-   ```text
-   \password isl_legacy_history_reader
-   ```
+   **Alternatywa operator-only na STAGING, wyłącznie po odrębnej ocenie ryzyka:** Neon [dokumentuje](https://neon.com/docs/manage/roles) użycie polecenia `ALTER ROLE ... WITH PASSWORD` z hasłem w treści SQL. **Hasło byłoby jawne w prywatnie wykonywanym poleceniu i może utrwalić się w historii zapytań lub logach providera.** Nie wpisywać go do ChatGPT, konektora, repo, Issues ani wspólnych skryptów; nie uznawać tego rozwiązania za bezpieczne bez dodatkowej zgody. Używać silnego, losowego hasła tymczasowego i — **tylko jeśli reset zadziała po inicjalizacji** — przeprowadzić bezzwłoczną rotację na końcowe poświadczenie, które dopiero wtedy trafi do GitHub Environment. Jeśli reset nadal zawiedzie, przerwać i zwrócić się do Neon Support; nie zwiększać uprawnień.
 
-   Program zapyta interaktywnie o nowe hasło i powtórzenie (np. z menedżera haseł). Nie wpisuj hasła jako tekstowego `ALTER ROLE ... PASSWORD '...'` w historii SQL/terminala. Zapisz je w menedżerze haseł. Zakończ `psql` poleceniem `\q`. **Nie korzystaj z właścicielskiego hasła jako hasła czytnika.**
+   **Nie tworzyć zastępczej roli przez Neon API/Console** jako szybkiego obejścia: role tworzone tą drogą otrzymują domyślnie członkostwo `neon_superuser`, co łamie założenia historycznego czytnika. Źródła: [Neon Manage roles](https://neon.com/docs/manage/roles), [PostgreSQL ALTER ROLE](https://www.postgresql.org/docs/current/sql-alterrole.html).
+
 
 2. **Przygotuj jedynie lokalnie DSN** z rolą `isl_legacy_history_reader` i hasłem, poprawnie zakodowanym w URL (procentowe kodowanie znaków specjalnych w password). Neon **Connect** może pokazać gotowy URL dla wskazanej roli; sprawdź uważnie branch, nazwę użytkownika, bazę i brak `-pooler`. Format bez hasła:
 
