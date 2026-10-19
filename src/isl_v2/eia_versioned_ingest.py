@@ -35,6 +35,7 @@ class IngestionPlan:
     available_at: datetime
     source_bytes_sha256: str
     original_html: bytes = field(repr=False, compare=False)
+    max_age_days: int = 420
 
 
 def prepare(source: str, original_html: bytes, fetched_at: datetime, *,
@@ -60,7 +61,7 @@ def prepare(source: str, original_html: bytes, fetched_at: datetime, *,
     available_at = max(actual_fetch, release_day_end)
     if available_at > actual_fetch:
         raise SourceFormatError("Day-precision current release is not yet eligible")
-    return IngestionPlan(parsed, available_at, digest, original_html)
+    return IngestionPlan(parsed, available_at, digest, original_html, max_age_days)
 
 
 def fetch_plan(source: str, fetched_at: datetime, *,
@@ -164,7 +165,8 @@ def apply_plan(cur, plan: IngestionPlan) -> dict:
     # A plan supplied to the writer must STILL carry the identical original
     # source bytes from which its SHA, parsed dates and values were derived.
     # It is never acceptable to trust only a caller-controlled SHA field.
-    if (type(plan.original_html) is not bytes
+    if (type(plan.max_age_days) is not int or not 1 <= plan.max_age_days <= 1500
+            or type(plan.original_html) is not bytes
             or len(plan.original_html) > MAX_SOURCE_BYTES
             or hashlib.sha256(plan.original_html).hexdigest() != plan.source_bytes_sha256):
         raise SourceFormatError("Original document bytes do not match source SHA")
@@ -174,7 +176,7 @@ def apply_plan(cur, plan: IngestionPlan) -> dict:
     if matching_source is None:
         raise SourceFormatError("Ingestion plan has unknown EIA identity")
     reparsed = parse_snapshot(matching_source, plan.original_html,
-                              s.downloaded_at, max_age_days=420)
+                              s.downloaded_at, max_age_days=plan.max_age_days)
     if reparsed != s:
         raise SourceFormatError("Parsed quote values or chronology differ from source bytes")
     if (s.url not in (x[2] for x in SOURCES.values())
