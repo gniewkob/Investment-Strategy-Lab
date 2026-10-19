@@ -86,7 +86,7 @@ def audit(dsn: str) -> dict:
     recurring automation. Never emits prices, credentials or source HTML.
     """
     snapshot, manifest = fetch_staging_history(dsn)
-    csv_bytes = staging_reference_csv(snapshot)
+    csv_bytes = staging_reference_csv(snapshot, expected_rows=EXPECTED_STORED_ROWS)
     if (manifest["series_counts"].get(INSTRUMENT) != EXPECTED_STORED_ROWS
             or manifest["database_writes"] != 0
             or manifest["source_vintage"] != "UNVERIFIED_HISTORICAL_PUBLICATION"):
