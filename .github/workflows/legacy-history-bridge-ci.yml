@@ -4,12 +4,16 @@ on:
   pull_request:
     paths:
       - scripts/legacy_history_bridge.py
+      - scripts/reference_data_quality.py
+      - tests/test_reference_data_quality.py
       - tests/test_legacy_history_bridge.py
       - .github/workflows/legacy-history-bridge*.yml
   push:
     branches: [main]
     paths:
       - scripts/legacy_history_bridge.py
+      - scripts/reference_data_quality.py
+      - tests/test_reference_data_quality.py
       - tests/test_legacy_history_bridge.py
       - .github/workflows/legacy-history-bridge*.yml
 

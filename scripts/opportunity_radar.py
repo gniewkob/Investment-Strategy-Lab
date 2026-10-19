@@ -230,7 +230,7 @@ def markdown_report(result: dict) -> str:
     lines = [
         "# Opportunity Radar — retrospective educational research",
         "", "**Status:** retrospective / historical publication vintages unverified",
-        f"**Input fingerprint:** \`{result['data_sha256']}\`",
+        f"**Input fingerprint:** `{result['data_sha256']}`",
         f"**Records:** {result['price_records']}; **analyzed series:** {result['series_analyzed']}",
         "",
         "| Series | Bars | 5-bar holdout windows | Shock events | Evidence |",
