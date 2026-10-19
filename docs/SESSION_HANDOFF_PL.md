@@ -4,6 +4,17 @@
 > **Pierwsza lektura nowego agenta:** [`../AGENTS.md`](../AGENTS.md), potem niniejszy plik, [`HISTORICAL_REFERENCE_BRIDGE_PL.md`](HISTORICAL_REFERENCE_BRIDGE_PL.md) oraz [`OPPORTUNITY_RADAR_PL.md`](OPPORTUNITY_RADAR_PL.md).  
 > **Status:** system badawczy / edukacyjne symulacje. **Nie ma zleceń, handlu, realnych inwestycji ani rekomendacji zakupowych.**
 
+## 19.10.2026 — pełna kontrola dzień/cena EIA vs Neon WTI i Brent
+
+**WYKONANE, tylko odczyt:** pobrano opublikowane tabele dzienne EIA WTI Cushing i Brent (obie z nagłówkiem `Release Date: 10/15/2026`), rozpisano faktyczne wiersze tygodniowe na daty dzienne (bez domyślania brakujących komórek), wykonano `FULL OUTER JOIN` po `observed_for::date` i porównano dokładne wartości numeryczne `close_price` z oficjalnymi cenami przy tolerancji 1e-7 w Neon STAGING `br-wandering-union-ba6ogf6l`. Zakres 02.01.2024–14.10.2026:
+- **WTI:** 695 dni w obecnej tabeli EIA, 660 dni Neon **zgodnych datą i ceną**, **35 dat EIA tylko** (26.08.2026–14.10.2026), 0 dni Neon tylko, **0 rozbieżnych cen**.
+- **Brent:** 706 dni EIA, **706 zgodnych** dat i cen w Neon, **0** braków i rozbieżności.
+- Łącznie: **1401** EIA, **1366** zgodnych obecnych w Neon, **35** braków WTI, **0** rozbieżnych cen.
+- Bieżąca publiczna strona EIA nie potwierdza źródłowej daty pierwotnej publikacji **każdego** historycznego kursu; nie posiada tu utrwalonego hasha **oryginalnej reprezentacji HTML pobranej w tym audycie**. Nie wolno przypisywać mu historycznej dostepności point-in-time ani SHA-256 wcześniejszego GitHub Actions. Powyższe dowody to audyt **obecnego** oficjalnego archiwum vs **obecna** baza.
+- Repo posiada już parser źródeł EIA w niepołączonym Draft PR #1 (testy HTTPS CI, bez DB). Wykorzystać parser w osobnym *reviewed* source-provenance dry-run; **nie** uruchamiać `--write`, nie tworzyć równoległego ETL ani automatycznego backfillu bez osobnej zgody.
+- Dokładny wynik i metodologia: [Issue #22 — 2026-10-19 full-date matching](https://github.com/gniewkob/Investment-Strategy-Lab/issues/22#issuecomment-6270375923). Audyt nie rozstrzyga **przyczyny** ucięcia dawnego wsadu z 17.10; brak dowodu, że WTI było publikowane w obecnej postaci w każdej historycznej dacie obserwacji.
+- Dotychczasowe blokady v0.2 `STALE_DATA`, `PEER_COVERAGE_GAP` oraz `UNVERIFIED_HISTORICAL_PUBLICATION` pozostają. **Nie zmieniano** bazy (0 insert/update), uprawnień, produkcji, kodu radaru, sekretów, harmonogramów ani strategii. Wszystkie M1/M2/M3 `HOLD_NO_CHANGE`. Problem prezentacyjnej listy 10 anomalii w Issue #21 nadal nierozwiązany.
+
 ## Aktualizacja 19.10.2026 — istniejący parser EIA i potwierdzony deficyt 35 WTI
 
 **Odkrycie:** w [Draft PR #1](https://github.com/gniewkob/Investment-Strategy-Lab/pull/1), poza aktualnym `main`, znajduje się gotowy, przetestowany parser oficjalnego EIA `src/isl_v2/eia_sources.py`, odczytowy CLI `src/isl_v2/eia_ingest.py`, testy i workflow `official-eia-source-validation.yml`. Parser domyślnie analizuje 420 dni, waliduje stronę, datę `Release Date`, kalendarz, wartości i hash SHA256. Odrębna ścieżka `--write` **nie jest zatwierdzona ani uruchomiona na Neon**; nie przenosić jej automatycznie, nie zakładać że wykonała poprzedni import 3711 rekordów.
