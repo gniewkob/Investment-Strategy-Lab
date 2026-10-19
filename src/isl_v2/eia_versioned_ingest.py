@@ -19,6 +19,7 @@ import sys
 from urllib.request import Request, urlopen
 
 from src.isl_v2.eia_sources import SOURCES, Snapshot, SourceFormatError, parse_snapshot
+from src.isl_v2.eia_semantic_evidence import semantic_evidence
 
 READER_ONLY_CLI = True
 EXPECTED_WRITER = "isl_eia_pit_staging_writer"  # Not provisioned as of 2026-10-19
@@ -51,6 +52,10 @@ def prepare(source: str, original_html: bytes, fetched_at: datetime, *,
         raise SourceFormatError("Official source HTML is empty or too large")
     parsed = parse_snapshot(source, original_html, actual_fetch,
                             max_age_days=max_age_days)
+    if ((actual_fetch.date() - parsed.observations[-1].observed_on).days > 14
+            or (actual_fetch.date() - parsed.release_day).days > 14):
+        raise SourceFormatError("Official EIA source is too stale for a current snapshot")
+    semantic_evidence(parsed)
     digest = hashlib.sha256(original_html).hexdigest()
     if parsed.sha256_hex != digest or parsed.url != SOURCES[source][2]:
         raise SourceFormatError("Original source bytes and parser provenance differ")
@@ -88,6 +93,7 @@ def dry_run_summary(plan: IngestionPlan) -> dict:
     s = plan.snapshot
     return {
         "status": "EIA_VERSIONED_INGEST_DRY_RUN_NO_DATABASE",
+        **semantic_evidence(s),
         "source_code": s.source_code,
         "instrument_code": s.instrument_code,
         "current_snapshot_url": s.url,
@@ -119,8 +125,14 @@ def _assert_writer_identity(cur) -> datetime:
                has_schema_privilege(current_user,'investment_lab','CREATE'),
                has_table_privilege(current_user,'investment_lab.source_documents','SELECT'),
                has_table_privilege(current_user,'investment_lab.source_documents','INSERT'),
+               has_table_privilege(current_user,'investment_lab.source_documents','UPDATE'),
+               has_table_privilege(current_user,'investment_lab.source_documents','DELETE'),
+               has_table_privilege(current_user,'investment_lab.source_documents','TRUNCATE'),
                has_table_privilege(current_user,'investment_lab.price_observation_versions','SELECT'),
                has_table_privilege(current_user,'investment_lab.price_observation_versions','INSERT'),
+               has_table_privilege(current_user,'investment_lab.price_observation_versions','UPDATE'),
+               has_table_privilege(current_user,'investment_lab.price_observation_versions','DELETE'),
+               has_table_privilege(current_user,'investment_lab.price_observation_versions','TRUNCATE'),
                has_table_privilege(current_user,'investment_lab.price_observations','SELECT'),
                has_table_privilege(current_user,'investment_lab.price_observations','INSERT'),
                has_table_privilege(current_user,'investment_lab.holding_snapshots','SELECT'),
@@ -130,17 +142,21 @@ def _assert_writer_identity(cur) -> datetime:
         FROM pg_roles r WHERE r.rolname=current_user
     """)
     row = cur.fetchone()
-    if row is None or len(row) != 20:
+    if row is None or len(row) != 26:
         raise SourceFormatError("Dedicated writer identity proof unavailable")
     (role, database, read_only, superuser, createdb, createrole, bypass,
      neon_admin, db_create, schema_create, doc_read, doc_write,
-     versions_read, versions_write, legacy_read, legacy_write,
+     doc_update, doc_delete, doc_truncate,
+     versions_read, versions_write, version_update, version_delete, version_truncate,
+     legacy_read, legacy_write,
      holdings_read, valuations_read, paper_read, journal_write) = row
     if (role != EXPECTED_WRITER or database != EXPECTED_DATABASE
             or read_only != "off"
             or not all((doc_read, doc_write, versions_read, versions_write))
             or any((superuser, createdb, createrole, bypass, neon_admin,
-                    db_create, schema_create, legacy_read, legacy_write,
+                    db_create, schema_create, doc_update, doc_delete, doc_truncate,
+                    version_update, version_delete, version_truncate,
+                    legacy_read, legacy_write,
                     holdings_read, valuations_read, paper_read, journal_write))):
         raise SourceFormatError("Dedicated least-privilege staging writer denied")
     cur.execute("SELECT now()")
@@ -212,6 +228,7 @@ def apply_plan(cur, plan: IngestionPlan) -> dict:
         "synthetic": False,
         "original_historical_publication_verified": False,
         "source_bytes_retained": False,
+        **semantic_evidence(s),
     }
     cur.execute("""
         INSERT INTO investment_lab.source_documents
