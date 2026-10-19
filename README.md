@@ -25,6 +25,10 @@ Original virtual models M1/M2/M3 depend on verified PLN total-return equity/bond
 
 After a second explicit user approval, `isl_legacy_history_reader` has **PostgreSQL LOGIN enabled on staging**, but **no password** (`rolpassword IS NOT NULL=false`) and **no GitHub environment secret**. The Neon connector password-reset attempt failed and was independently checked; the role still has historical-reference SELECT-only rights. The manual workflow remains **blocked**. See [safe operator credential bootstrap](docs/HISTORICAL_LOGIN_BOOTSTRAP_PL.md) — never paste secrets into this repository or a chat.
 
+## 19 October — Historical credentials initialized on staging
+
+After user's approval and rediscovery of the successful 18 October bootstrap from [Issue #3](https://github.com/gniewkob/Investment-Strategy-Lab/issues/3), server-side SQL generated an undisclosed random initial password for `isl_legacy_history_reader`. Direct Neon PostgreSQL checks now confirm `LOGIN=true`, **password present=true**, SELECT only on the historical-reference table, no writes/private holdings and production unchanged. **Still pending:** reset this unknown bootstrap password to a private final password in Neon Console, then configure the separate GitHub Environment secret `NEON_HISTORICAL_READ_DATABASE_URL`. No historical workflow, schedules or trades have run. Follow the [operator bootstrap/reset guide](docs/HISTORICAL_LOGIN_BOOTSTRAP_PL.md). Previous status paragraphs are retained as chronological snapshots.
+
 ## Architecture
 
 - **Python:** deterministic historical validation, anomaly detection, evidence grading and hypothesis checks; LLM may assist with *explanations*, not invent source evidence.
