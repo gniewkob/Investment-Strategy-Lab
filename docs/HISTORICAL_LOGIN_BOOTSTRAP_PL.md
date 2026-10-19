@@ -1,6 +1,10 @@
 # Bezpieczna konfiguracja hasła i GitHub Environment Secret — historyczny czytnik STAGING
 
-**Stan zweryfikowany 19.10.2026 po drugiej autoryzacji użytkownika.** W Neon PostgreSQL na izolowanej gałęzi STAGING rola `isl_legacy_history_reader` ma `LOGIN=true`, jednak `rolpassword IS NOT NULL=false` — brak hasła; nie może autoryzować standardowego połączenia hasłem. Uprawnienia bez zmian: `SELECT` tylko na `investment_lab.price_observations`, bez dostępu do prywatnych pozycji i zapisu. Nowego sekretu GitHub jeszcze nie ma. Próba resetu hasła przez połączony Neon API zakończyła się błędem, a SQL readback potwierdził brak hasła. Neon API `get_postgres_role` nadal wykazywał `authentication_method=no_login`; najważniejszy jest niezależny rzeczywisty odczyt `pg_authid`.
+**Historyczny snapshot przed rozwiązaniem:** W Neon PostgreSQL na izolowanej gałęzi STAGING rola `isl_legacy_history_reader` ma `LOGIN=true`, jednak `rolpassword IS NOT NULL=false` — brak hasła; nie może autoryzować standardowego połączenia hasłem. Uprawnienia bez zmian: `SELECT` tylko na `investment_lab.price_observations`, bez dostępu do prywatnych pozycji i zapisu. Nowego sekretu GitHub jeszcze nie ma. Próba resetu hasła przez połączony Neon API zakończyła się błędem, a SQL readback potwierdził brak hasła. Neon API `get_postgres_role` nadal wykazywał `authentication_method=no_login`; najważniejszy jest niezależny rzeczywisty odczyt `pg_authid`.
+
+## Aktualny stan — 19.10.2026, po poprawnym bootstrapie
+
+Wcześniejsza blokada `PASSWORD NULL` została **usunięta**. `rolcanlogin=true`, `rolpassword IS NOT NULL=true` (potwierdzone bezpośrednio w PostgreSQL). SELECT wyłącznie na `investment_lab.price_observations`, zero praw zapisu/CREATE, brak dostępu do `holding_snapshots`, produkcja bez zmian. **Końcowego hasła z Neon Console i sekretu GitHub jeszcze nie skonfigurowano.** Dalsze kroki to reset hasła w prywatnym UI, konfiguracja sekretu i odrębnie ręczny test.
 
 ## Zakres i bezpieczeństwo
 
@@ -16,16 +20,13 @@
 
 ## Operator-only — co trzeba wykonać w prywatnej sesji
 
-1. **WAŻNE — pierwsze hasło nie jest „resetem”.** W tym projekcie rola została utworzona bez hasła przez SQL. `rolpassword IS NOT NULL=false`; Neon `reset_postgres_role_password` odrzucił operację. Także natywne `psql \\password` **nie jest pewnym obejściem dla Neon**, bo wysyła przygotowany przez klienta hash, a Neon deklaruje, że akceptuje hasła podane w plaintext SQL. Powtarzanie resetu nie jest planem działania.
+1. **WAŻNE — pierwsze has1. **ZRESETUJ hasło istniejącej roli w Neon Console — inicjalizacja zakończona.** Dnia 19.10.2026 przy wykorzystaniu wcześniejszej metody udokumentowanej w [Issue #3](https://github.com/gniewkob/Investment-Strategy-Lab/issues/3), zrealizowano na staging jednorazowy blok `DO`, który utworzył trzy losowe `gen_random_uuid()` po stronie bazy i ustawił nieujawnione hasło początkowe przez `ALTER ROLE`. Kontrola SQL potwierdziła `rolcanlogin=true` i `rolpassword IS NOT NULL=true`. Uprawnienia historycznego czytnika **nie uległy zmianie**. **Nie wykonuj bootstrap ponownie.**
 
-   **Bezpieczniejsza ścieżka:** Zgłosić do Neon Support prośbę o wspieraną metodę inicjalizacji **pierwszego** hasła dla istniejącej roli SQL-created, z zachowaniem SELECT-only, bez `neon_superuser`, oraz z gwarancją ograniczenia śladów poświadczenia w logach. Do czasu uzyskania potwierdzenia role ACL i sekretów nie modyfikować.
+   Otwórz [Neon Console](https://console.neon.tech/), wybierz projekt `red-lake-53043722`, gałąź `br-wandering-union-ba6ogf6l` i rolę `isl_legacy_history_reader`. Użyj **Reset password** istniejącej roli, tak jak poprzednio dla `isl_agent_staging_limited`. Zapisz nowo wygenerowane końcowe hasło bezpośrednio w menedżerze haseł. Nie ujawniaj hasła ani DSN w rozmowie, narzędziach czy repo. Nie używaj przycisku **Add role**. Reset z poziomu Neon Console nie został jeszcze w tej sesji potwierdzony; jeśli UI nadal zwraca błąd, zatrzymaj się i zgłoś tekst błędu (bez sekretów).
 
-   **Alternatywa operator-only na STAGING, wyłącznie po odrębnej ocenie ryzyka:** Neon [dokumentuje](https://neon.com/docs/manage/roles) użycie polecenia `ALTER ROLE ... WITH PASSWORD` z hasłem w treści SQL. **Hasło byłoby jawne w prywatnie wykonywanym poleceniu i może utrwalić się w historii zapytań lub logach providera.** Nie wpisywać go do ChatGPT, konektora, repo, Issues ani wspólnych skryptów; nie uznawać tego rozwiązania za bezpieczne bez dodatkowej zgody. Używać silnego, losowego hasła tymczasowego i — **tylko jeśli reset zadziała po inicjalizacji** — przeprowadzić bezzwłoczną rotację na końcowe poświadczenie, które dopiero wtedy trafi do GitHub Environment. Jeśli reset nadal zawiedzie, przerwać i zwrócić się do Neon Support; nie zwiększać uprawnień.
+   Technicznie początkowe hasło jest nieznane użytkownikowi i agentowi — to zamierzone. Jego jedyną rolą jest umożliwienie zainicjowania kontrolowanego resetu. Dynamiczny `ALTER ROLE` został wykonany w serwerowym bloku, bez przesyłania hasła do narzędzi ani publicznego kodu. Nie jest to gwarancja braku wpisów w wewnętrznych logach serwera; końcowa rotacja jest wymagana przed użyciem poświadczenia.
 
-   **Nie tworzyć zastępczej roli przez Neon API/Console** jako szybkiego obejścia: role tworzone tą drogą otrzymują domyślnie członkostwo `neon_superuser`, co łamie założenia historycznego czytnika. Źródła: [Neon Manage roles](https://neon.com/docs/manage/roles), [PostgreSQL ALTER ROLE](https://www.postgresql.org/docs/current/sql-alterrole.html).
-
-
-2. **Przygotuj jedynie lokalnie DSN** z rolą `isl_legacy_history_reader` i hasłem, poprawnie zakodowanym w URL (procentowe kodowanie znaków specjalnych w password). Neon **Connect** może pokazać gotowy URL dla wskazanej roli; sprawdź uważnie branch, nazwę użytkownika, bazę i brak `-pooler`. Format bez hasła:
+okalnie DSN** z rolą `isl_legacy_history_reader` i hasłem, poprawnie zakodowanym w URL (procentowe kodowanie znaków specjalnych w password). Neon **Connect** może pokazać gotowy URL dla wskazanej roli; sprawdź uważnie branch, nazwę użytkownika, bazę i brak `-pooler`. Format bez hasła:
 
    ```text
    postgresql://isl_legacy_history_reader:<URL_ENCODED_PASSWORD>@ep-summer-star-ba5trfu5.c-8.eu-central-1.aws.neon.tech/investment_lab?sslmode=verify-full
