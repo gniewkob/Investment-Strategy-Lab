@@ -221,7 +221,7 @@ def markdown_report(outcome:dict) -> str:
         "# Decision Evidence Ledger — educational, retrospective",
         "",
         "Historical signals are questions for investigation, **not trade recommendations**.",
-        f"Radar fingerprint: \`{outcome['source_radar_sha256']}\`",
+        f"Radar fingerprint: `{outcome['source_radar_sha256']}`",
         f"Questions: {outcome['tracked_questions']} ; independent-review candidates: {outcome['questions_for_independent_review']}",
         "",
         "| Reference series | Historical anomalies | Research decision |",
