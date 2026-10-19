@@ -39,3 +39,14 @@ Nie ma harmonogramu, zapisu do Neon, integracji brokerskich ani aktualizacji wir
 ## Testy CI
 
 `python -m unittest discover -s tests -v` uruchamia wyłącznie testy offline z fikcyjnymi cenami i hasłami; nie kontaktuje się z Neon. Walidowane są: prawidłowa rola, brak dostępu do portfeli, rygorystyczne TLS, integralność źródeł i chronologii, limity danych, odtwarzalny raport i brak wycieku hasła.
+
+
+## Oddzielna bramka aktywacji roli — tylko po zatwierdzeniu
+
+W repozytorium znajduje się **wyłącznie propozycja do przeglądu**: `db/security/legacy_history_reader_STAGING_REVIEW.sql`. Jej test w GitHub Actions odbywa się na **jednorazowym PostgreSQL 16** z całkowicie fikcyjnym hasłem. Plik ten nie jest wykonywany w Neon ani przez publiczne CI; po scaleniu nie tworzy sam konta w staging.
+
+Przed jakąkolwiek aktywacją wymagane jest osobne potwierdzenie użytkownika, że chce utworzyć konto odczytowe na konkretnej gałęzi **staging**. Po autoryzacji uprawniony administrator stosuje zweryfikowany SQL na staging, nie produkcji. Skrypt tworzy konto `NOLOGIN` i daje jedynie `SELECT` na `investment_lab.price_observations` oraz wymagany dostęp do schematu i bazy. Test odmowy obejmuje także `holding_snapshots`, `valuations`, `paper_events`, `agent_cycles`, `INSERT` i DDL.
+
+Następnie administrator **interaktywnie** przez `psql` ustawia silne hasło poleceniem `\\password isl_legacy_history_reader` (wyświetli prywatne monity), a osobno zmienia `NOLOGIN` na `LOGIN`. Nie umieszczać hasła w pliku SQL, CLI, terminalowym history ani czacie. Sekret `NEON_HISTORICAL_READ_DATABASE_URL` trafia tylko do GitHub Environment `research-staging`, nie do publicznych PR. Po aktywacji trzeba jeszcze raz sprawdzić rzeczywisty stan roli i historię za pomocą ręcznie uruchomionego, ograniczonego workflow.
+
+Istotne: tabela obejmuje historyczne **referencyjne** ceny. Raport jest retrospektywną analizą, a nie certyfikowanym PIT backtestem; nie wolno na tej podstawie sugerować faktycznych transakcji lub włączać automatycznej alokacji.
