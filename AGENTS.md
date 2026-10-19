@@ -1,3 +1,7 @@
+## Latest verified 2026-10-19 — WTI 35-row legacy STAGING backfill DONE, PIT still blocked
+
+Explicit authorization led to a one-time guarded SQL transaction inserting ONLY 35 official EIA WTI spot-reference prices into isolated `investment_lab.price_observations` STAGING. Postflight 695/695 unique WTI days, 35/35 new date/price matches, old 660-row source fingerprint unchanged, 0 backdated ingestion. No `source_documents` or `price_observation_versions` changes, credentials, ACL, production, auto scheduling or trades. **Existing statements below claiming 35 WTI rows remain missing refer to the older pre-import timeline.** The frozen `eia_wti_staging_receipt.py` contract was intentionally designed for 660/35 and MUST NOT be run as a current full-coverage check. `UNVERIFIED_HISTORICAL_PUBLICATION` / `MARKET_DATA_NOT_READY`; do not claim certified PIT or predictive returns, M1/M2/M3 `HOLD_NO_CHANGE`. See [full handoff](docs/SESSION_HANDOFF_PL.md) and [Issue #22](https://github.com/gniewkob/Investment-Strategy-Lab/issues/22#issuecomment-6274907188).
+
 # Agent instructions — Investment Strategy Lab
 
 **START HERE:** Read [`docs/SESSION_HANDOFF_PL.md`](docs/SESSION_HANDOFF_PL.md) **in full before proposing or executing any change**. Then read [`docs/HISTORICAL_REFERENCE_BRIDGE_PL.md`](docs/HISTORICAL_REFERENCE_BRIDGE_PL.md), [`docs/OPPORTUNITY_RADAR_PL.md`](docs/OPPORTUNITY_RADAR_PL.md), [Issue #4](https://github.com/gniewkob/Investment-Strategy-Lab/issues/4) and relevant code/tests. This is the durable handoff for new agent sessions, updated 2026-10-19.
