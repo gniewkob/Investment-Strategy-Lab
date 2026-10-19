@@ -9,7 +9,7 @@ A 2026 fetched snapshot does NOT establish original availability of 2024 bars.
 from __future__ import annotations
 
 import argparse
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, time, timedelta, timezone
 from decimal import Decimal
 import hashlib
@@ -34,6 +34,7 @@ class IngestionPlan:
     snapshot: Snapshot
     available_at: datetime
     source_bytes_sha256: str
+    original_html: bytes = field(repr=False, compare=False)
 
 
 def prepare(source: str, original_html: bytes, fetched_at: datetime, *,
@@ -59,7 +60,7 @@ def prepare(source: str, original_html: bytes, fetched_at: datetime, *,
     available_at = max(actual_fetch, release_day_end)
     if available_at > actual_fetch:
         raise SourceFormatError("Day-precision current release is not yet eligible")
-    return IngestionPlan(parsed, available_at, digest)
+    return IngestionPlan(parsed, available_at, digest, original_html)
 
 
 def fetch_plan(source: str, fetched_at: datetime, *,
@@ -160,6 +161,22 @@ def apply_plan(cur, plan: IngestionPlan) -> dict:
             plan.source_bytes_sha256):
         raise SourceFormatError("Missing original document fingerprint")
     s = plan.snapshot
+    # A plan supplied to the writer must STILL carry the identical original
+    # source bytes from which its SHA, parsed dates and values were derived.
+    # It is never acceptable to trust only a caller-controlled SHA field.
+    if (type(plan.original_html) is not bytes
+            or len(plan.original_html) > MAX_SOURCE_BYTES
+            or hashlib.sha256(plan.original_html).hexdigest() != plan.source_bytes_sha256):
+        raise SourceFormatError("Original document bytes do not match source SHA")
+    matching_source = next(
+        (key for key, identity in SOURCES.items()
+         if identity == (s.instrument_code, s.source_code, s.url)), None)
+    if matching_source is None:
+        raise SourceFormatError("Ingestion plan has unknown EIA identity")
+    reparsed = parse_snapshot(matching_source, plan.original_html,
+                              s.downloaded_at, max_age_days=420)
+    if reparsed != s:
+        raise SourceFormatError("Parsed quote values or chronology differ from source bytes")
     if (s.url not in (x[2] for x in SOURCES.values())
             or (s.instrument_code, s.source_code, s.url) not in SOURCES.values()
             or s.sha256_hex != plan.source_bytes_sha256
