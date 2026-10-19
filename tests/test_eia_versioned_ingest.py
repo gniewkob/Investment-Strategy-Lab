@@ -229,7 +229,9 @@ class IngestionPlanTests(TestCase):
         with self.assertRaisesRegex(SourceFormatError, "stale"):
             ingest.prepare("wti", fixture(), NOW + timedelta(days=30),
                            max_age_days=420)
-        with self.assertRaisesRegex(SourceFormatError, "stale"):
+        # A page whose Release Date precedes its quoted dates is invalid
+        # before reaching the separate freshness check.
+        with self.assertRaisesRegex(SourceFormatError, "future observation"):
             ingest.prepare("wti", fixture(release="09/01/2026"),
                            NOW, max_age_days=420)
 
