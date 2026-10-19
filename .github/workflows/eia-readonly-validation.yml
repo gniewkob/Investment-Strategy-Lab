@@ -1,0 +1,67 @@
+name: Official EIA source and coverage validation — READ ONLY
+
+on:
+  pull_request:
+    paths:
+      - src/isl_v2/eia_sources.py
+      - scripts/eia_readonly_audit.py
+      - tests/test_eia_sources.py
+      - tests/test_eia_readonly_audit.py
+      - docs/EIA_READ_ONLY_AUDIT_PL.md
+      - .github/workflows/eia-readonly-validation.yml
+  push:
+    branches: [main]
+    paths:
+      - src/isl_v2/eia_sources.py
+      - scripts/eia_readonly_audit.py
+      - tests/test_eia_sources.py
+      - tests/test_eia_readonly_audit.py
+      - docs/EIA_READ_ONLY_AUDIT_PL.md
+      - .github/workflows/eia-readonly-validation.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-synthetic-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install database adapter required only by other offline existing tests
+        run: python -m pip install 'psycopg[binary]>=3.2,<4'
+      - name: Test full offline suite, including read-only EIA parser and comparator
+        run: python -m unittest discover -s tests -v
+      - name: Confirm EIA validator does not contain a database connection path
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          sources = (Path("src/isl_v2/eia_sources.py").read_text(),
+                     Path("scripts/eia_readonly_audit.py").read_text())
+          assert not any(token in src for src in sources for token in (
+              "import psycopg", "psycopg.connect", "sqlalchemy", "NEON_DATABASE_URL",
+              "INSERT INTO", "UPDATE investment_lab.", "DELETE FROM"))
+          print("EIA_VALIDATION_HAS_NO_DATABASE_WRITE_PATH")
+          PY
+
+  # External sources are checked only on an explicit operator action.
+  # There are no DB secrets, outputs, schedules or imported price artifacts.
+  live-eia-https-read-only:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Live official WTI public HTTPS source
+        run: python -m scripts.eia_readonly_audit --source wti
+      - name: Live official Brent public HTTPS source
+        run: python -m scripts.eia_readonly_audit --source brent
+      - name: Live official Henry Hub public HTTPS source
+        run: python -m scripts.eia_readonly_audit --source henry_hub
