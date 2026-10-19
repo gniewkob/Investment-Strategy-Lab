@@ -1,0 +1,97 @@
+name: EIA versioned source planning and safety — offline default
+
+on:
+  pull_request:
+    paths:
+      - src/isl_v2/eia_versioned_ingest.py
+      - tests/test_eia_versioned_ingest.py
+      - tests/integration/test_eia_versioned_pg.py
+      - tests/fixtures/eia_pit_schema_007_disposable.sql
+      - db/security/eia_pit_staging_writer_REVIEW_ONLY.sql
+      - docs/EIA_VERSIONED_INGEST_GATE_PL.md
+      - .github/workflows/eia-versioned-ingest.yml
+  push:
+    branches: [main]
+    paths:
+      - src/isl_v2/eia_versioned_ingest.py
+      - tests/test_eia_versioned_ingest.py
+      - docs/EIA_VERSIONED_INGEST_GATE_PL.md
+      - .github/workflows/eia-versioned-ingest.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-regression-and-no-writer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install offline suite dependencies (NO database connection)
+        run: python -m pip install 'psycopg[binary]>=3.2,<4'
+      - name: Full synthetic regression suite
+        run: python -m unittest discover -s tests -v
+      - name: Enforce CLI is public EIA fetch ONLY, no SQL or credentials
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          src = Path("src/isl_v2/eia_versioned_ingest.py").read_text()
+          main = src[src.index("def main("):]
+          for forbidden in ("psycopg.connect", "NEON_DATABASE_URL",
+                            "os.environ", "os.getenv",
+                            "apply_plan(", "--write", "conn.commit("):
+              assert forbidden not in main, forbidden
+          print("EIA_PLAN_CLI_NO_DATABASE_OR_WRITER_OK")
+          PY
+
+  # No secret or Neon access: operator-triggered PUBLIC HTTPS only.
+
+  disposable-postgres-synthetic-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: investment_lab
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: disposable-ci-fixture-only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d investment_lab"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # FAKE container-only local credential. No user secrets and no Neon network.
+      ISL_TEST_POSTGRES_URL: postgresql://postgres:disposable-ci-fixture-only@127.0.0.1:5432/investment_lab
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install ephemeral CI-only local PostgreSQL adapter
+        run: python -m pip install 'psycopg[binary]>=3.2,<4'
+      - name: Verify real PostgreSQL constraints, revisions and PIT cutoff with synthetic data
+        run: python -m unittest discover -s tests/integration -p 'test_eia_versioned_pg.py' -v
+
+  manual-public-eia-only:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Real official public WTI HTML original-byte dry-run
+        run: python -m src.isl_v2.eia_versioned_ingest --source wti
+      - name: Real official public Brent HTML original-byte dry-run
+        run: python -m src.isl_v2.eia_versioned_ingest --source brent
+      - name: Real official public Henry Hub HTML original-byte dry-run
+        run: python -m src.isl_v2.eia_versioned_ingest --source henry_hub
