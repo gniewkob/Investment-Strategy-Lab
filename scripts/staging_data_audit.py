@@ -143,11 +143,11 @@ def read_snapshot(dsn: str) -> dict:
             cur.execute("""
                 SELECT
                  COUNT(*) FILTER (WHERE
-                     s.metadata->>'synthetic' = 'true' OR
-                     s.metadata->>'fixture_only' = 'true'),
+                     COALESCE(s.metadata->>'synthetic' = 'true', false) OR
+                     COALESCE(s.metadata->>'fixture_only' = 'true', false)),
                  COUNT(*) FILTER (WHERE NOT (
-                     s.metadata->>'synthetic' = 'true' OR
-                     s.metadata->>'fixture_only' = 'true'))
+                     COALESCE(s.metadata->>'synthetic' = 'true', false) OR
+                     COALESCE(s.metadata->>'fixture_only' = 'true', false)))
                 FROM investment_lab.prices_asof(%s) p
                 JOIN investment_lab.source_documents s USING (document_id)
             """, (server_time,))
@@ -162,8 +162,8 @@ def read_snapshot(dsn: str) -> dict:
                 FROM investment_lab.prices_asof(%s) p
                 JOIN investment_lab.source_documents s USING (document_id)
                 WHERE NOT (
-                    s.metadata->>'synthetic' = 'true' OR
-                    s.metadata->>'fixture_only' = 'true')
+                    COALESCE(s.metadata->>'synthetic' = 'true', false) OR
+                    COALESCE(s.metadata->>'fixture_only' = 'true', false))
                 GROUP BY instrument_code,interval_code,value_concept
                 ORDER BY instrument_code,interval_code,value_concept
             """, (server_time,))
