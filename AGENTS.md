@@ -15,6 +15,12 @@ Build an **educational, research-only Opportunity & Decision Intelligence lab**.
 7. **No auto schedule** without a separate evidence and alerting review. `workflow_dispatch` manually on `main` is the existing pattern. Offline CI does not prove live Neon access.
 8. **Do not reinvent** modules already on `main`: radar, non-overlapping validation, evidence ledger, macro/geopolitical context, opportunity pipeline and read-only legacy bridge. Draft PR #1 remains unmerged; check latest HEAD.
 
+## Credential activation update — 2026-10-19 (latest)
+
+After a **second explicit user approval**, executed a fail-closed `ALTER ROLE isl_legacy_history_reader LOGIN` against isolated Neon staging. Direct PostgreSQL verification: `rolcanlogin=true`, `rolpassword IS NOT NULL=false`, SELECT on `price_observations`, no private holdings access, and no administrative flags. The Neon password-reset connector returned an error; separate DB verification confirms **no password was configured**. Neon role metadata may still show `authentication_method=no_login`; treat actual PostgreSQL state and control-plane metadata as not yet reconciled.
+
+**Still blocked:** A trusted interactive operator must set a password without printing it to chat/SQL/query history, and configure the independent `NEON_HISTORICAL_READ_DATABASE_URL` in GitHub Actions Environment `research-staging`. The connected GitHub tool exposes no secret-writing operation. Do **not** invent secret creation, run the bridge, attempt another password reset blindly, or grant any new rights. Follow [credential bootstrap instructions](docs/HISTORICAL_LOGIN_BOOTSTRAP_PL.md) before any manual historical workflow. No production changes.
+
 ## Current blocker and first action (updated 2026-10-19)
 The separate staging read-only historical-reference role **now exists as NOLOGIN**, after explicit approval and execution of the reviewed SQL. Independent postflight: SELECT only on `investment_lab.price_observations`, no mutations, no schema CREATE, no access to holdings, production role absent, existing journal agent unchanged. The **new blocker is separate approval to enable LOGIN and configure independent secure credentials**; neither has occurred. **Ask the user for fresh, separate explicit authorization** before any login/password/secret operation, then independently recheck ACL and only afterwards consider the existing [manual historical bridge workflow](.github/workflows/legacy-history-research.yml). Do not re-run role-creation SQL, modify production, or enable trading.
 
