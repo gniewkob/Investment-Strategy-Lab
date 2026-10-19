@@ -16,7 +16,7 @@ from unittest import TestCase
 
 from src.isl_v2.eia_versioned_ingest import prepare
 from src.isl_v2.eia_raw_archive import (
-    archive_snapshot, verify_snapshot, SCHEMA, _paths,
+    archive_snapshot, verify_snapshot, verify_receipt, SCHEMA, _paths,
 )
 from src.isl_v2.eia_sources import SourceFormatError
 from test_eia_sources import NOW, fixture
@@ -50,6 +50,12 @@ class SourceArchiveTests(TestCase):
         self.assertEqual(summary["database_connections"],0)
         self.assertEqual(summary["database_writes"],0)
         self.assertEqual(verified["status"],"EIA_RAW_HTML_ARCHIVE_LOCAL_READBACK_VALID")
+        restored = verify_receipt(self.root,p.snapshot.source_code,
+                                  p.source_bytes_sha256,p.snapshot.downloaded_at)
+        self.assertEqual(restored["status"],
+                         "EIA_RAW_HTML_ARCHIVE_INDEPENDENT_OFFLINE_VERIFIED")
+        self.assertEqual(restored["semantic_observations_sha256"],
+                         metadata["semantic_observations_sha256"])
         self.assertTrue(summary["object_created"])
         self.assertTrue(summary["receipt_created"])
         # Files and directories must remain unavailable to other system users.
@@ -154,6 +160,25 @@ class SourceArchiveTests(TestCase):
                     a.snapshot.observations[0],price=Decimal("999.99")),
                     *a.snapshot.observations[1:]))))
         self.assertFalse((self.root/"objects").exists())
+
+    def test_independent_offline_replay_rejects_forged_clock_and_manifest(self):
+        p=self.plan()
+        archive_snapshot(self.root,p)
+        with self.assertRaises(FileNotFoundError):
+            verify_receipt(self.root,p.snapshot.source_code,p.source_bytes_sha256,
+                           NOW+timedelta(seconds=1))
+        with self.assertRaisesRegex(SourceFormatError,"identity"):
+            verify_receipt(self.root,"unknown_source",p.source_bytes_sha256,NOW)
+        with self.assertRaisesRegex(SourceFormatError,"retrieval"):
+            verify_receipt(self.root,p.snapshot.source_code,p.source_bytes_sha256,
+                           NOW.replace(tzinfo=None))
+        source,_,receipt_name=_paths(p)
+        manifest_file=self.root/"receipts"/source/receipt_name
+        content=json.loads(manifest_file.read_text())
+        content["semantic_observations_sha256"]="0"*64
+        manifest_file.write_text(json.dumps(content,sort_keys=True,separators=(",",":"))+"\\n")
+        with self.assertRaisesRegex(SourceFormatError,"no longer matches"):
+            verify_receipt(self.root,p.snapshot.source_code,p.source_bytes_sha256,NOW)
 
     def test_readback_has_no_side_effect_if_directory_missing(self):
         p=self.plan()
