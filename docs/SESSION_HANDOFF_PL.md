@@ -4,6 +4,18 @@
 > **Pierwsza lektura nowego agenta:** [`../AGENTS.md`](../AGENTS.md), potem niniejszy plik, [`HISTORICAL_REFERENCE_BRIDGE_PL.md`](HISTORICAL_REFERENCE_BRIDGE_PL.md) oraz [`OPPORTUNITY_RADAR_PL.md`](OPPORTUNITY_RADAR_PL.md).  
 > **Status:** system badawczy / edukacyjne symulacje. **Nie ma zleceń, handlu, realnych inwestycji ani rekomendacji zakupowych.**
 
+## Kontynuacja P1 — 19.10.2026: diagnostyka read-only bez backfill
+
+Po ponownym sprawdzeniu `main` (przed dopisaniem tej sekcji HEAD `b085d665`) issue [#21](https://github.com/gniewkob/Investment-Strategy-Lab/issues/21) i [#22](https://github.com/gniewkob/Investment-Strategy-Lab/issues/22) nadal `OPEN`, brak PR wdrażającego usunięcie błędu i brak zmian w `reference_data_quality.py`. Nie próbować obchodzić poprzedniego zablokowanego zapisu kodu.
+
+**Nowe twarde dowody:**
+- Niezależny read-only SQL policzył **15** różnic BTC/ETH z |z| ≥ 2.5 (20 wcześniejszych okresów); radar pokazuje tylko ostatnie **10**; **5** nie jest wyświetlanych. **Jeden** skrajny |z| ≥ 8 (19.08.2026, 16.2658) nadal znajduje się na miejscu **2** najnowszych alarmów; **0** skrajnych zostało dotąd faktycznie pominiętych. Błąd listy 10 jest **potencjalnym przyszłym false negative**, nie udowodnioną aktualną awarią. Pełny dowód w [Issue #21 komentarz](https://github.com/gniewkob/Investment-Strategy-Lab/issues/21#issuecomment-6269596457).
+- Oficjalny [EIA Cushing WTI daily](https://www.eia.gov/dnav/pet/hist/RWTCD.htm) vs SELECT LEFT JOIN na Neon STAGING: 24.08 = 86.34 i 25.08 = 83.90 **zgadzają się**; 26.08 = 83.46, 27.08 = 84.81, 28.08 = 84.57, 31.08 = 87.03, 01.09 = 91.48, 02.09 = 92.15, 03.09 = 92.55, 04.09 = 92.69 **brakuje** w Neon. Na 10 porównanych dat: 2 dopasowania, 8 braków; **ZERO insert/update**. Dowód w [Issue #22 komentarz](https://github.com/gniewkob/Investment-Strategy-Lab/issues/22#issuecomment-6269597149).
+- Sprawdzono drzewo `main` (61 pozycji) i GitHub code search: **nie ma w obecnym repo skryptu źródłowego importu/ETL WTI**. Znalezione odniesienia WTI są jedynie w module jakości, radarze, bridge oraz teście. Dlatego **nie ustalono jeszcze przyczyny** ucięcia ETL i nie ma bezpiecznej podstawy do samoczynnego backfillu. Wymagane odnalezienie oryginalnego procesu importu/źródła spoza obecnego kodu, nie tworzenie nowego zapisu w ciemno.
+- Wersjonowane provenance dalej: 3 `source_documents`, 3 `price_observation_versions` (wszystkie `nbp_gold`), `prices_asof(now())` = 1, jedna próbka ze znacznikiem `retrieved_at` w przyszłości względem aktualnego czasu serwera, legacy 3711 rekordów bez potwierdzenia PIT. `UNVERIFIED_HISTORICAL_PUBLICATION` bez zmian.
+
+**Granica:** żadnych zapisów bazy, sekretów, schematów, produkcji, uzupełnienia cen, wdrażania strategii, harmonogramów ani handlu. M1/M2/M3 `HOLD_NO_CHANGE`. Priorytet naprawy to rozdzielenie pełnej populacji anomaliów od listy prezentacyjnej i odtworzenie ETL z niezależnym provenance. Nie wolno deklarować CI PASS dla niewdrożonej poprawki.
+
 ## Aktualizacja — 19.10.2026, audyt źródeł i blokery P1 (tylko odczyt)
 
 Po pierwszym udanym v0.2 przebiegu ponownie przeprowadzono **wyłącznie odczyt** na izolowanym Neon STAGING `br-wandering-union-ba6ogf6l`; bez zmian produkcji, danych, uprawnień, tokenów, alokacji, harmonogramów i zleceń.
