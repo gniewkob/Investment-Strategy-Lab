@@ -111,3 +111,19 @@ wcześniejsze syntetyczne fixture, **nie zweryfikowana historia rynku PIT**.
    **nie tworzy retrospektywnej historii PIT dla lat 2024–2026**.
 
 M1/M2/M3: `HOLD_NO_CHANGE`. Issue #2 pozostaje otwarte.
+
+## Dodatkowe zabezpieczenia źródłowe (19.10.2026 — kolejny PR)
+
+Po sprawdzeniu pierwszej wersji uzupełniono model o **dwa niezależne hashe**:
+
+- `original_html_sha256` — hash dokładnie pobranych oryginalnych bajtów HTML EIA; zmienia się również przy czysto graficznym przekształceniu strony.
+- `semantic_observations_sha256` — deterministyczny SHA-256 kanonicznej listy unikalnych `(observed_for, Decimal.price)`, z identyfikatorami serii/źródła i jednostką. Wartość `101.10` oraz `101.1000` jest semantycznie identyczna; modyfikacja samego znacznika HTML nie stanowi rewizji ceny. **To hash treści bieżących notowań, nie historyczny certyfikat dat pierwszych publikacji.**
+
+Fingerprint semantyczny wraz z liczbą rekordów i datami granicznymi trafia do metadanych przyszłego dokumentu; jest też zwracany w suchym raporcie (bez samych cen). **Brakujący trwały, niezmienny magazyn surowych HTML nadal jest osobnym ograniczeniem architektury** — aktualnie przechowujemy jedynie SHA i metadane, nie bajty.
+
+Dodatkowo `prepare()` odrzuca bieżący snapshot EIA, jeżeli od daty pobrania do najnowszej obserwacji albo `Release Date` minęło ponad **14 dni**. Nie pozwala to potraktować bardzo starego katalogu cen jako świeżego źródła prospektywnego. Okres pierwszego wydania pojedynczych historycznych rekordów nadal pozostaje nieznany.
+
+Guard dedykowanej roli odrzuca teraz również **UPDATE, DELETE i TRUNCATE** zarówno `source_documents`, jak i `price_observation_versions`. Rola potrzebuje wyłącznie `SELECT/INSERT` do tych dwóch tabel oraz katalogów; szczegóły w `db/security/eia_pit_staging_writer_REVIEW_ONLY.sql`. Zmiany roli NIE były stosowane w Neon.
+
+**Aktualizacja faktycznego stanu STAGING:** 3 istniejące rekordy `source_documents` należą do `nbp_gold`. Jeden ma jawny `metadata.synthetic=true`, a pozostałe dwa nie mają jawnej wartości tego pola, co **nie pozwala** bez niezależnych dowodów klasyfikować ich jako rzeczywiste dane PIT. Nadal brak autentycznych historycznie wersjonowanych źródeł EIA.
+

@@ -170,6 +170,17 @@ class VersionedEiaPgIntegrationTests(unittest.TestCase):
             cur.execute("SELECT COUNT(*) FROM investment_lab.source_documents")
             self.assertEqual(cur.fetchone()[0],2)
             cur.execute("""
+                SELECT metadata->>'semantic_observations_sha256',
+                       metadata->>'semantic_observation_count',
+                       metadata->>'historical_publication_vintages_verified'
+                FROM investment_lab.source_documents ORDER BY retrieved_at
+            """)
+            semantic = cur.fetchall()
+            self.assertEqual(len(semantic),2)
+            self.assertTrue(all(len(x[0])==64 and x[1]=='18' and x[2]=='false'
+                                for x in semantic))
+            self.assertNotEqual(semantic[0][0],semantic[1][0])
+            cur.execute("""
                 SELECT COUNT(*), COUNT(*) FILTER (WHERE revision_no=2),
                        COUNT(*) FILTER (WHERE note LIKE '%NOT_ORIGINAL%')
                 FROM investment_lab.price_observation_versions
@@ -185,6 +196,18 @@ class VersionedEiaPgIntegrationTests(unittest.TestCase):
                 WHERE observed_for='2026-09-21 00:00:00+00'
             """)
             self.assertEqual(cur.fetchone()[0],2)
+
+    def test_real_acl_denies_update_grant_even_with_insert_rights(self):
+        with self.conn.cursor() as cur:
+            cur.execute("RESET ROLE")
+            cur.execute("""
+                GRANT UPDATE ON investment_lab.source_documents
+                TO isl_eia_pit_staging_writer
+            """)
+            cur.execute("SET ROLE isl_eia_pit_staging_writer")
+            with self.assertRaisesRegex(SourceFormatError,"writer"):
+                apply_plan(cur,prepare("wti",fixture(),NOW))
+        self.conn.rollback()
 
     def test_real_acl_refuses_privileged_or_role_changed(self):
         with self.conn.cursor() as cur:
