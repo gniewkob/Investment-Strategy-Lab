@@ -4,6 +4,23 @@
 > **Pierwsza lektura nowego agenta:** [`../AGENTS.md`](../AGENTS.md), potem niniejszy plik, [`HISTORICAL_REFERENCE_BRIDGE_PL.md`](HISTORICAL_REFERENCE_BRIDGE_PL.md) oraz [`OPPORTUNITY_RADAR_PL.md`](OPPORTUNITY_RADAR_PL.md).  
 > **Status:** system badawczy / edukacyjne symulacje. **Nie ma zleceń, handlu, realnych inwestycji ani rekomendacji zakupowych.**
 
+## Wdrożenie v0.2 — 19.10.2026
+
+## 19.10.2026 — Opportunity Radar v0.2 Data Quality & Evidence Gate WDROŻONE (CI-only; live staging nieuruchomiony)
+
+Scalono [PR #19](https://github.com/gniewkob/Investment-Strategy-Lab/pull/19) (squash commit `ff9891bdfaed3c7d92db7b5950db132efcb91dbb`) oraz follow-up [PR #20](https://github.com/gniewkob/Investment-Strategy-Lab/pull/20) (squash `db2da856a4d1a38dae79a4ea581b3321409e2163`). Są już na `main`.
+
+- Nowy czysto offline `scripts/reference_data_quality.py` z kontrolą wieku danych względem `snapshot.as_of`: 4 dni dla dziennego BTC/ETH, 10 dni dla innych dziennych, 75 dni dla miesięcznych. To **lokalnie dobrane progi heurystyczne**, nie regulacyjne; „świeżość” nie potwierdza historycznej daty publikacji.
+- Kontrola pokrycia kalendarza referencyjnego EIA WTI względem Brent: 56 dat Brent nieobecnych w WTI (w tym 35 po ostatniej dacie WTI 25.08.2026), niezależnie od przyczyny braku. `STALE_DATA` / `PEER_COVERAGE_GAP` blokują **promocję hipotez badawczych**, nie przeprowadzają importu.
+- Ekstremalna rozbieżność BTC/ETH (|z|≥8) dodaje `SOURCE_REVALIDATION_REQUIRED` dla obu serii i diagnostykę odporną na anomalie (MAD). Wcześniejsza niezależna kontrola Neon obliczyła dla 19.08.2026 ok. klasyczne z = -16.266, odporne = -18.32; to nadal **nie jest zweryfikowany sygnał prognostyczny**.
+- `evidence_decision_ledger.make_ledger` w pełnym pipeline odczytuje fingerprint-bound quality report i klasyfikuje takie hipotezy `DATA_QUALITY_BLOCKED` / `RESOLVE_DATA_QUALITY`, zamiast `INVESTIGATE_RESEARCH_ONLY`. Nie zmienia decyzji M1/M2/M3 `HOLD_NO_CHANGE`.
+- Walidator niepokrywających się okien raportuje teraz banalny benchmark utrzymywania znaku ostatniego ruchu na **tych samych datach** co zdarzenia. Różnice są czysto opisowe, bez deklaracji przewagi lub efektu przyczynowego.
+- `opportunity_research_pipeline` dodaje `reference_data_quality.json` i podsumowanie do raportu/manifestu; `legacy_history_bridge.run_and_report` też eksportuje tylko zagregowany `reference_data_quality.json` do istniejącego manualnego artefaktu. Nie publikuje surowych notowań ani sekretów.
+- Rozbudowane testy syntetyczne, w tym kontrola WTI, anomalii BTC/ETH, fingerprint fail-closed, niezależności od alokacji i braków uprawnień. **128 testów PASS** w offline CI PR #19; cztery workflow CI na finalnym head oraz na `main` po merge #19 przeszły sukcesem. Uzupełniający bridge CI PR #20 PASS. Zlikwidowano istniejące SyntaxWarning w dwóch raportach Markdown.
+- **Nie uruchomiono** po tych zmianach workflow `legacy-history-research.yml` na prawdziwym Neon STAGING. Nie zmieniano produkcji, bazy danych, ACL, ról, haseł, sekretów, cen, wirtualnych alokacji, harmonogramów ani zleceń. `UNVERIFIED_HISTORICAL_PUBLICATION` obowiązuje nadal.
+
+**Kolejny krok:** manualny, osobno zatwierdzony jednorazowy przebieg `legacy-history-research.yml` na `main`, weryfikacja logów i agregatowego artefaktu quality; potem praca nad kompletnością źródła WTI i walidacją dat publikacji Coinbase/EIA. Żadnych zautomatyzowanych działań finansowych.
+
 ## STAN NAJNOWSZY — 19.10.2026, pierwszy historyczny bridge na STAGING wykonany pomyślnie
 
 Użytkownik ręcznie uruchomił [Historical reference research bridge, GitHub Actions #39241685091](https://github.com/gniewkob/Investment-Strategy-Lab/actions/runs/39241685091) na `main`, commit `500d87895401d62bf68a7a6a872ffeb51850e166`. Workflow zakończył się **SUCCESS** i wypisał `LEGACY_HISTORY_RESEARCH_OK observations 3711 series 8 hypotheses_for_review 4 orders 0 database_writes 0`. To **rzeczywisty workflow w GitHub z połączeniem do STAGING**, a nie offline CI. Osobny sekret `NEON_HISTORICAL_READ_DATABASE_URL` zadziałał (bez odczytu jego wartości w rozmowie). Znalazł się w chronionym GitHub Environment `research-staging`, nie w repo.
