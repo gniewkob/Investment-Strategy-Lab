@@ -32,13 +32,16 @@ MIN_RESEARCH_MONTHS = 13
 def classify_snapshot(snapshot: dict) -> dict:
     """Produce deterministic, fail-closed readiness without numeric predictions."""
     required = ("server_time", "documents", "versions", "pit_eligible",
+                "pit_fixture", "pit_nonfixture",
                 "future_local_timestamps", "unmatched_sources", "series")
     if any(k not in snapshot for k in required):
         raise ValueError("Incomplete data audit snapshot")
-    counts = ("documents", "versions", "pit_eligible",
-              "future_local_timestamps", "unmatched_sources")
+    counts = ("documents", "versions", "pit_eligible", "pit_fixture",
+              "pit_nonfixture", "future_local_timestamps", "unmatched_sources")
     if any(type(snapshot[k]) is not int or snapshot[k] < 0 for k in counts):
         raise ValueError("Invalid audit counts")
+    if snapshot["pit_fixture"] + snapshot["pit_nonfixture"] != snapshot["pit_eligible"]:
+        raise ValueError("PIT fixture and non-fixture counts must sum to PIT-visible rows")
     series = snapshot["series"]
     if not isinstance(series, list):
         raise ValueError("Expected series list")
@@ -63,7 +66,13 @@ def classify_snapshot(snapshot: dict) -> dict:
                      for c in MONTHLY_RESEARCH_WATCH}
     warnings = []
     if snapshot["future_local_timestamps"]:
+        # It is possible for deliberately future-dated PIT fixtures to occur.
+        # Keep the warning, but do not call the fixture real market evidence.
         warnings.append("FUTURE_LOCAL_INGESTION_TIMESTAMP")
+    if snapshot["pit_fixture"]:
+        warnings.append("SYNTHETIC_PIT_FIXTURES_NOT_MARKET_EVIDENCE")
+    if snapshot["pit_nonfixture"] == 0:
+        warnings.append("NO_NONFIXTURE_PIT_EVIDENCE")
     if snapshot["unmatched_sources"]:
         warnings.append("DOCUMENT_SOURCE_MISMATCH")
     if any(target_gaps.values()):
@@ -79,6 +88,9 @@ def classify_snapshot(snapshot: dict) -> dict:
         "documents": snapshot["documents"],
         "version_rows": snapshot["versions"],
         "pit_eligible_rows": snapshot["pit_eligible"],
+        "pit_fixture_rows": snapshot["pit_fixture"],
+        "pit_nonfixture_rows_unreviewed": snapshot["pit_nonfixture"],
+        "publication_vintage_certified": False,
         "future_local_timestamp_rows": snapshot["future_local_timestamps"],
         "document_source_mismatch_rows": snapshot["unmatched_sources"],
         "monthly_total_return_gaps": target_gaps,
@@ -126,12 +138,32 @@ def read_snapshot(dsn: str) -> dict:
                   WHERE v.source_code <> d.source_code)
             """, (server_time, server_time, server_time))
             docs, revisions, pit, future, mismatch = (int(v) for v in cur.fetchone())
+            # Count synthetic fixtures separately from non-fixture PIT-visible
+            # rows. Neither count independently proves publication history.
+            cur.execute("""
+                SELECT
+                 COUNT(*) FILTER (WHERE
+                     s.metadata->>'synthetic' = 'true' OR
+                     s.metadata->>'fixture_only' = 'true'),
+                 COUNT(*) FILTER (WHERE NOT (
+                     s.metadata->>'synthetic' = 'true' OR
+                     s.metadata->>'fixture_only' = 'true'))
+                FROM investment_lab.prices_asof(%s) p
+                JOIN investment_lab.source_documents s USING (document_id)
+            """, (server_time,))
+            fixture, nonfixture = (int(v) for v in cur.fetchone())
+            if fixture + nonfixture != pit:
+                raise RuntimeError("PIT provenance coverage mismatch")
             # The versioned source view already filters late data and revisions,
             # so coverage cannot be inflated by future/non-public versions.
             cur.execute("""
                 SELECT instrument_code,interval_code,value_concept,
                        COUNT(DISTINCT observed_for) AS periods
-                FROM investment_lab.prices_asof(%s)
+                FROM investment_lab.prices_asof(%s) p
+                JOIN investment_lab.source_documents s USING (document_id)
+                WHERE NOT (
+                    s.metadata->>'synthetic' = 'true' OR
+                    s.metadata->>'fixture_only' = 'true')
                 GROUP BY instrument_code,interval_code,value_concept
                 ORDER BY instrument_code,interval_code,value_concept
             """, (server_time,))
@@ -144,6 +176,8 @@ def read_snapshot(dsn: str) -> dict:
         "documents": docs,
         "versions": revisions,
         "pit_eligible": pit,
+        "pit_fixture": fixture,
+        "pit_nonfixture": nonfixture,
         "future_local_timestamps": future,
         "unmatched_sources": mismatch,
         "series": series,
@@ -162,7 +196,9 @@ def make_markdown(summary: dict) -> str:
         "| --- | ---: |",
         f"| Source documents | {summary['documents']} |",
         f"| Versioned price records | {summary['version_rows']} |",
-        f"| PIT-visible records | {summary['pit_eligible_rows']} |",
+        f"| PIT-visible records (including synthetic tests) | {summary['pit_eligible_rows']} |",
+        f"| Synthetic PIT fixture rows (not market evidence) | {summary['pit_fixture_rows']} |",
+        f"| PIT-visible non-fixture rows (not publication-certified) | {summary['pit_nonfixture_rows_unreviewed']} |",
         f"| Future local ingestion timestamps | {summary['future_local_timestamp_rows']} |",
         f"| Source mismatches | {summary['document_source_mismatch_rows']} |",
         "",
@@ -176,7 +212,9 @@ def make_markdown(summary: dict) -> str:
     lines += [f"- {w}" for w in warnings] if warnings else ["- NONE (coverage still needs independent review)"]
     lines += [
         "", "No real orders, paper fills, data writes or financial recommendations.",
-        "This coverage screen does not certify publication-vintage source quality,",
+        "Fixture records are excluded from coverage; other visible records still need",
+        "independent release-vintage source evidence before any readiness claim.",
+        "This coverage screen does not certify publication-vintage source quality.",
         "reliable source ETL, alert delivery, benchmark performance or investment readiness.",
         "An unattended schedule remains disabled.", "",
     ]
@@ -197,6 +235,8 @@ def main() -> int:
                 fh.write(make_markdown(outcome))
         print("STAGING_DATA_AUDIT", outcome["status"],
               "pit_rows", outcome["pit_eligible_rows"],
+              "fixture_rows", outcome["pit_fixture_rows"],
+              "nonfixture_rows", outcome["pit_nonfixture_rows_unreviewed"],
               "future_ingestion_rows", outcome["future_local_timestamp_rows"],
               "warnings", len(outcome["warning_codes"]))
         # NOT_READY is a valid audit finding, not a successful market-data gate.
