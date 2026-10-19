@@ -1,4 +1,21 @@
-# Opportunity Radar v0.1 — retrospective research only
+# Opportunity Radar v0.2 — retrospective research with Data Quality Gate
+
+## Data Quality & Evidence Gate v0.2 (offline, fail-closed)
+
+Quality is now a **separate deterministic result** (`scripts/reference_data_quality.py`), included in `reference_data_quality.json` from both the educational evidence pipeline and the authorized manual historical bridge. It is fingerprint-bound to the exact retrospective radar snapshot.
+
+- **Freshness heuristics, not publication verification:** daily price/reference series older than 10 calendar days, crypto daily older than 4 days, and monthly older than 75 days receive `STALE_DATA`. Lag is calculated against the snapshot export's timezone-aware `as_of`, **never the local wall clock or historic observation itself**. These conservative project-selected thresholds are screening conventions, not NIST/ISO or vendor mandates. Freshness **does not** prove actual publication chronology.
+- **EIA peer-calendar coverage diagnostic:** when both WTI and Brent are present, the report counts Brent observation dates not present in WTI, including those later than WTI's last date. These are *reference-calendar mismatches*, not proof of EIA publication lag or exact WTI missing-release dates. If there are dates after WTI's final point, `PEER_COVERAGE_GAP` blocks research promotion.
+- **Extreme cross-market divergence:** BTC/ETH matched-date relative-price divergence whose existing radar absolute z-score is at least 8 is marked `SOURCE_REVALIDATION_REQUIRED` for **both underlying series**. MAD-based robust z-score is independently reported as a diagnostic using lagged observations. Neither statistic verifies historical candle origin, explains an event, or establishes predictive alpha.
+- **Research ledger enforcement:** quality warnings result in `DATA_QUALITY_BLOCKED` and `RESOLVE_DATA_QUALITY` priority, not `INVESTIGATE_RESEARCH_ONLY`. Source history can still be explored retrospectively without a portfolio consequence. Ledger rejects mismatched fingerprints, missing analyzed series, unknown classifications or false claims of verified vintages.
+- **Same-date baseline:** independent-window diagnostics now show naive last-bar sign-persistence **on exactly the selected event dates** beside the event sign rate. The descriptive difference is not a causal advantage, confidence interval or investable benchmark.
+- **Legacy gates unchanged:** `source_vintage=UNVERIFIED_HISTORICAL_PUBLICATION`; no automatic trade decisions, no writes, no API secrets, no schedules, no virtual allocations. `HOLD_NO_CHANGE` for M1/M2/M3.
+
+### Verified 19.10.2026 staging findings behind this change
+
+- Stored WTI references end on **2026-08-25**, while Brent ends on **2026-10-14**. There are 56 Brent dates absent from WTI's archive, including 35 after WTI's last point. The existing bridge does **not** repair source coverage, and this patch does not write price rows.
+- BTC/ETH on 2026-08-19 shows approximately **−16.27** conventional z-score and **−18.32** robust MAD z-score for their daily relative USD price changes (20-bar prior reference). Anomaly arithmetic was checked against isolated staging, but original Coinbase records and publication vintages are **not independently authenticated**.
+- The initial historical research report found 4 series for investigation based on sample screens, **not validated predictive performance**. v0.2 downgrades stale or extreme-anomaly source series pending evidence review. No historical source backfill or live staging run is part of this PR.
 
 ## Goal
 Identify historical **questions worth investigating** and compare their subsequent reference-price changes with a no-flag baseline. This is an educational study, NOT an investment recommendation, order generator, live portfolio allocator or validated point-in-time backtest.
