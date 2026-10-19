@@ -1,5 +1,11 @@
 # Most historyczny — badania retrospektywne (STAGING, READ ONLY)
 
+## Bieżąca aktualizacja — 19.10.2026, po drugiej autoryzacji
+
+Użytkownik osobno zatwierdził aktywację LOGIN i sekretu staging. Zrealizowano SQL `ALTER ROLE isl_legacy_history_reader LOGIN` na gałęzi staging, z kontrolą praw przed wykonaniem. **Rzeczywisty PostgreSQL: `rolcanlogin=true`, `rolpassword IS NOT NULL=false`.** Próba zresetowania hasła przez połączone API Neon nie powiodła się; ponowny SQL odczyt potwierdza brak hasła. API Neon nadal może pokazywać wcześniejsze `authentication_method=no_login` (niespójność stanu metadanych). Poświadczenie GitHub `NEON_HISTORICAL_READ_DATABASE_URL` **nie zostało utworzone**; podłączony interfejs GitHub nie obsługuje zapisu sekretów. Workflow historyczny nie został uruchomiony.
+
+**Następna czynność operatora:** bezpiecznie ustawić hasło interaktywnym `psql \\password`, następnie z poziomu GitHub Settings → Environments → `research-staging` ustawić sekret. Szczegóły: [HISTORICAL_LOGIN_BOOTSTRAP_PL.md](HISTORICAL_LOGIN_BOOTSTRAP_PL.md). Nie wysyłać hasła ani DSN do czatu. Wszystkie późniejsze sekcje opisujące `NOLOGIN` są historyczne, wcześniejsze niż ta aktualizacja.
+
 ## Cel
 
 Oddzielić retrospektywne badanie dawnych cen od działającego, ograniczonego agenta `isl_agent_staging_limited`. **Nie zwiększać uprawnień tego agenta.** Nowy most służy jedynie do testów statystycznych, wykrywania nietypowych zmian i generowania pytań badawczych — bez transakcji.
