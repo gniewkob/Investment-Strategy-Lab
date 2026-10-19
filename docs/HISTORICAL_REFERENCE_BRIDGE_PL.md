@@ -8,7 +8,7 @@ Oddzielić retrospektywne badanie dawnych cen od działającego, ograniczonego a
 
 - Gałąź Neon staging: `br-wandering-union-ba6ogf6l`; produkcyjna gałąź pozostaje nietknięta.
 - Dla `isl_agent_staging_limited`: potwierdzony **brak SELECT** na `investment_lab.price_observations` i brak odczytu `holding_snapshots`. Tak powinno pozostać.
-- **Nowa rola `isl_legacy_history_reader` jeszcze nie została skonfigurowana.** Należy utworzyć ją po osobnej autoryzacji dostępu, wyłącznie do odczytu danych referencyjnych w staging. Nie używać hasła roli owner ani danych produkcyjnych.
+- **Aktualizacja 19.10.2026: rola `isl_legacy_history_reader` została utworzona na STAGING po wyraźnej autoryzacji użytkownika — `NOLOGIN`.** Niezależna weryfikacja: SELECT tylko na `investment_lab.price_observations`, brak zapisu/CREATE, brak dostępu do prywatnych tabel, brak takiej roli na produkcji. Login, hasło i sekret nadal NIE są skonfigurowane; wymagają odrębnej autoryzacji. Nie używać hasła roli owner ani danych produkcyjnych.
 - GitHub Environment `research-staging`: przyszły niezależny sekret `NEON_HISTORICAL_READ_DATABASE_URL`, **nie** `NEON_RESEARCH_DATABASE_URL`. Nie przesyłać adresu URL z hasłem do rozmowy, kodu, Issues ani logów.
 
 ## Minimalny zakres docelowej roli
@@ -45,7 +45,7 @@ Nie ma harmonogramu, zapisu do Neon, integracji brokerskich ani aktualizacji wir
 
 W repozytorium znajduje się **wyłącznie propozycja do przeglądu**: `db/security/legacy_history_reader_STAGING_REVIEW.sql`. Jej test w GitHub Actions odbywa się na **jednorazowym PostgreSQL 16** z całkowicie fikcyjnym hasłem. Plik ten nie jest wykonywany w Neon ani przez publiczne CI; po scaleniu nie tworzy sam konta w staging.
 
-Przed jakąkolwiek aktywacją wymagane jest osobne potwierdzenie użytkownika, że chce utworzyć konto odczytowe na konkretnej gałęzi **staging**. Po autoryzacji uprawniony administrator stosuje zweryfikowany SQL na staging, nie produkcji. Skrypt tworzy konto `NOLOGIN` i daje jedynie `SELECT` na `investment_lab.price_observations` oraz wymagany dostęp do schematu i bazy. Test odmowy obejmuje także `holding_snapshots`, `valuations`, `paper_events`, `agent_cycles`, `INSERT` i DDL.
+**Etap utworzenia konta odczytowego został wykonany 19.10.2026 wyłącznie na staging, po osobnej autoryzacji.** Skrypt utworzył rolę `NOLOGIN` z jedynie `SELECT` na `investment_lab.price_observations`, wymaganym `CONNECT` do bazy i `USAGE` schematu. Wynik sprawdzono niezależnym odczytem SQL. **Nie uruchamiać skryptu CREATE ROLE ponownie.** Odrębna zgoda jest nadal wymagana przed aktywacją loginu, ustawieniem hasła lub dodaniem sekretu. Test odmowy obejmuje także `holding_snapshots`, `valuations`, `paper_events`, `agent_cycles`, `INSERT` i DDL.
 
 Następnie administrator **interaktywnie** przez `psql` ustawia silne hasło poleceniem `\\password isl_legacy_history_reader` (wyświetli prywatne monity), a osobno zmienia `NOLOGIN` na `LOGIN`. Nie umieszczać hasła w pliku SQL, CLI, terminalowym history ani czacie. Sekret `NEON_HISTORICAL_READ_DATABASE_URL` trafia tylko do GitHub Environment `research-staging`, nie do publicznych PR. Po aktywacji trzeba jeszcze raz sprawdzić rzeczywisty stan roli i historię za pomocą ręcznie uruchomionego, ograniczonego workflow.
 
