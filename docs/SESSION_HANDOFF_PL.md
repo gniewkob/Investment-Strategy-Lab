@@ -4,6 +4,16 @@
 > **Pierwsza lektura nowego agenta:** [`../AGENTS.md`](../AGENTS.md), potem niniejszy plik, [`HISTORICAL_REFERENCE_BRIDGE_PL.md`](HISTORICAL_REFERENCE_BRIDGE_PL.md) oraz [`OPPORTUNITY_RADAR_PL.md`](OPPORTUNITY_RADAR_PL.md).  
 > **Status:** system badawczy / edukacyjne symulacje. **Nie ma zleceń, handlu, realnych inwestycji ani rekomendacji zakupowych.**
 
+## 19.10.2026 — wydzielony parser EIA bez importu scalony do main (PR #24)
+
+**WDROŻONE NA MAIN:** [PR #24](https://github.com/gniewkob/Investment-Strategy-Lab/pull/24), squash commit `db981d4639d5bc8ed0e5c5e1567bc41f32a982c8`. Reuse istniejącego parsera EIA z Draft PR #1 (`src/isl_v2/eia_sources.py`) i testów, bez kopiowania potencjalnie zapisującego do Neon `eia_ingest.py --write`.
+
+- Nowy wyłącznie odczytowy `scripts/eia_readonly_audit.py`: HTTPS z allowlisty EIA, weryfikacja stałego adresu docelowego, Content-Type HTML, limit 8 MB, oryginalny SHA-256 rzeczywiście pobranego HTML, prawdziwy czas pobrania. Opcjonalne porównanie po dacie i Decimal do LOKALNEGO, publicznego pliku 3 kolumn `instrument_code,observed_for,close_price`, bez bazy, bez zewnętrznego wysyłania cen; wypisuje agregaty i daty różnic, nie ceny.
+- Nowe testy syntetyczne `tests/test_eia_readonly_audit.py`; workflow `.github/workflows/eia-readonly-validation.yml` odpala pełną offline suite przy PR/push na main. Żywe zewnętrzne HTTPS do EIA uruchamia WYŁĄCZNIE manualny `workflow_dispatch`, bez sekretów i bez publikacji raw artifacts. **Nie uruchomiono jeszcze tego workflow manualnego na nowym kodzie**; CI PR używało fixture.
+- **CI zweryfikowane:** [read-only PR #39276159521](https://github.com/gniewkob/Investment-Strategy-Lab/actions/runs/39276159521) i [full runner PR #39276159468](https://github.com/gniewkob/Investment-Strategy-Lab/actions/runs/39276159468) = PASS; pełny test suite **149/149 PASS**, kontrola statyczna `EIA_VALIDATION_HAS_NO_DATABASE_WRITE_PATH`. Nowy przewodnik [EIA_READ_ONLY_AUDIT_PL.md](EIA_READ_ONLY_AUDIT_PL.md).
+- Wykonane wcześniej porównanie EIA vs Neon: WTI oficjalnie 695, zgodne 660, brak 35, różnic wartości 0; Brent 706/706 zgodne. Nie oznacza to gotowości oryginalnych historycznych publikacji ani pozwolenia na ingest. [Issue #22 zapis finalny](https://github.com/gniewkob/Investment-Strategy-Lab/issues/22#issuecomment-6270654753), [Issue #2 status źródeł](https://github.com/gniewkob/Investment-Strategy-Lab/issues/2#issuecomment-6270658965).
+- **OTWARTE:** Issue #21 (radar BTC/ETH lista ucięta do ostatnich 10), Issue #22 (brakujących 35 cen WTI NIE UZUPEŁNIONO), Issue #23 (wszystkie 3 wersjonowane źródła są testowym fixture), Issue #2 (wersjonowane rzeczywiste PIT). Bez zmian Neon, sekretów, ACL, produkcji, harmonogramów, wirtualnych alokacji, bez transakcji. `UNVERIFIED_HISTORICAL_PUBLICATION`, M1/M2/M3 `HOLD_NO_CHANGE`.
+
 ## 19.10.2026 — pełna kontrola dzień/cena EIA vs Neon WTI i Brent
 
 **WYKONANE, tylko odczyt:** pobrano opublikowane tabele dzienne EIA WTI Cushing i Brent (obie z nagłówkiem `Release Date: 10/15/2026`), rozpisano faktyczne wiersze tygodniowe na daty dzienne (bez domyślania brakujących komórek), wykonano `FULL OUTER JOIN` po `observed_for::date` i porównano dokładne wartości numeryczne `close_price` z oficjalnymi cenami przy tolerancji 1e-7 w Neon STAGING `br-wandering-union-ba6ogf6l`. Zakres 02.01.2024–14.10.2026:
