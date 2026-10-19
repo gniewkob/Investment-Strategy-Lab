@@ -264,3 +264,68 @@ def verify_snapshot(root: Path | str, plan: IngestionPlan) -> dict:
         "immutable_object_storage_certified": False,
         "database_writes": 0,
     }
+
+
+def verify_receipt(root: Path | str, source_code: str, raw_sha256: str,
+                   retrieved_at: datetime) -> dict:
+    """Reconstruct and validate a previously archived acquisition OFFLINE.
+
+    No original IngestionPlan, live EIA page, database, or credentials needed.
+    Verify the on-disk bytes and manifest with the original recorded clock,
+    parsing window, exact source identity and canonical hashes.
+    """
+    source = next((k for k, identity in SOURCES.items()
+                   if identity[1] == source_code), None)
+    if source is None or not isinstance(raw_sha256, str) or not DIGEST.fullmatch(raw_sha256):
+        raise SourceFormatError("Unknown EIA receipt identity")
+    if (not isinstance(retrieved_at, datetime) or retrieved_at.tzinfo is None
+            or retrieved_at.utcoffset() is None):
+        raise SourceFormatError("Invalid EIA archived retrieval time")
+    at = retrieved_at.astimezone(timezone.utc)
+    raw_name = f"{raw_sha256}.html"
+    receipt_name = f"{at.strftime(UTC_STAMP)}_{raw_sha256}.json"
+    rootfd = _root_fd(root)
+    try:
+        objects = _subdir(rootfd, "objects", create=False)
+        try:
+            receipts = _subdir(rootfd, "receipts", create=False)
+            try:
+                folder = _subdir(receipts, source_code, create=False)
+                try:
+                    raw = _read_exact(objects, raw_name, MAX_SOURCE_BYTES)
+                    manifest = _read_exact(folder, receipt_name, 16_384)
+                finally:
+                    os.close(folder)
+            finally:
+                os.close(receipts)
+        finally:
+            os.close(objects)
+    finally:
+        os.close(rootfd)
+    if hashlib.sha256(raw).hexdigest() != raw_sha256:
+        raise SourceFormatError("Original EIA HTML archive SHA-256 does not match")
+    try:
+        decoded = json.loads(manifest.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise SourceFormatError("Unreadable EIA acquisition manifest") from exc
+    if (type(decoded) is not dict or decoded.get("max_age_days") is None
+            or type(decoded["max_age_days"]) is not int
+            or not 1 <= decoded["max_age_days"] <= 1500):
+        raise SourceFormatError("Unrecognized archived source parsing window")
+    regenerated = prepare(source, raw, at, max_age_days=decoded["max_age_days"])
+    expected = _validated_plan(regenerated)
+    if (expected != decoded
+            or (json.dumps(expected, sort_keys=True, separators=(",", ":"),
+                           allow_nan=False) + "\n").encode("utf-8") != manifest):
+        raise SourceFormatError("Acquisition record no longer matches archived HTML")
+    return {
+        "status": "EIA_RAW_HTML_ARCHIVE_INDEPENDENT_OFFLINE_VERIFIED",
+        "source_code": source_code,
+        "original_html_sha256": raw_sha256,
+        "semantic_observations_sha256": expected["semantic_observations_sha256"],
+        "retrieved_at": at.isoformat(),
+        "archive_backend": "PRIVATE_LOCAL_POSIX_STAGING_NOT_WORM",
+        "immutable_object_storage_certified": False,
+        "database_connections": 0,
+        "database_writes": 0,
+    }
