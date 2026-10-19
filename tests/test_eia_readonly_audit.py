@@ -147,6 +147,41 @@ class ReadOnlyEIAAuditTests(unittest.TestCase):
             self.assertEqual(len(got), 2)
             self.assertEqual(got[date(2026, 10, 12)], Decimal("98.7300"))
 
+    def test_reference_sha256_is_of_exact_parsed_input_bytes(self):
+        with TemporaryDirectory() as td:
+            original = (
+                "instrument_code,observed_for,close_price\\r\\n"
+                "WTI_EIA_USD_BBL,2026-10-12,98.7300\\r\\n"
+                "WTI_EIA_USD_BBL,2026-10-14,101.91\\r\\n"
+            ).replace("\\r", "\r").replace("\\n", "\n").encode("utf-8")
+            p = Path(td) / "reference.csv"
+            p.write_bytes(original)
+            data, digest = subject.read_local_reference_with_digest(p, CODE)
+            self.assertEqual(digest, hashlib.sha256(original).hexdigest())
+            self.assertEqual(data[date(2026, 10, 12)], Decimal("98.7300"))
+            self.assertEqual(subject.read_local_reference(p, CODE), data)
+
+    def test_local_csv_hard_size_limit_fails_closed(self):
+        with TemporaryDirectory() as td:
+            p = Path(td) / "too-big.csv"
+            p.write_bytes(b"x" * (subject.MAX_LOCAL_CSV_BYTES + 1))
+            with self.assertRaisesRegex(ValueError, "too large"):
+                subject.read_local_reference_with_digest(p, CODE)
+
+    def test_csv_extra_row_field_and_noncanonical_date_fail_closed(self):
+        with TemporaryDirectory() as td:
+            header = "instrument_code,observed_for,close_price\\n".replace("\\n", "\n")
+            invalid_rows = (
+                "WTI_EIA_USD_BBL,2026-10-12,98.73,EXTRA\\n",
+                "WTI_EIA_USD_BBL,20261012,98.73\\n",
+                "WTI_EIA_USD_BBL,2026-10-12\\n",
+            )
+            for invalid in invalid_rows:
+                p = Path(td) / "strict.csv"
+                p.write_text(header + invalid.replace("\\n", "\n"), encoding="utf-8")
+                with self.assertRaises(ValueError):
+                    subject.read_local_reference_with_digest(p, CODE)
+
     def test_allowed_https_source_fetch_and_original_bytes_hash(self):
         data = official_html()
         def fake_open(request, timeout):

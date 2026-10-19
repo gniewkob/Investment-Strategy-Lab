@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
+import io
 from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation
 import json
@@ -45,12 +47,24 @@ def fetch_official(source: str, at: datetime, *, max_age_days: int = 420,
     return parse_snapshot(source, data, at, max_age_days=max_age_days)
 
 
-def read_local_reference(path: Path, instrument: str) -> dict[date, Decimal]:
-    """Strict public-price-only reference CSV; rejects other fields and symbols."""
-    if path.stat().st_size > MAX_LOCAL_CSV_BYTES:
+def read_local_reference_with_digest(
+    path: Path, instrument: str,
+) -> tuple[dict[date, Decimal], str]:
+    """Parse approved local reference and hash the SAME bounded input bytes.
+
+    Never emit the CSV body, paths or quote values. This is an input integrity
+    fingerprint, not a certificate of the original publication vintage.
+    """
+    with path.open("rb") as source:
+        data = source.read(MAX_LOCAL_CSV_BYTES + 1)
+    if len(data) > MAX_LOCAL_CSV_BYTES:
         raise ValueError("Reference CSV too large")
+    try:
+        contents = data.decode("utf-8-sig", errors="strict")
+    except UnicodeDecodeError as exc:
+        raise ValueError("Invalid reference CSV encoding") from exc
     observed: dict[date, Decimal] = {}
-    with path.open("r", encoding="utf-8-sig", newline="") as handle:
+    with io.StringIO(contents, newline="") as handle:
         reader = csv.DictReader(handle)
         if (reader.fieldnames is None
                 or set(reader.fieldnames) != {
@@ -60,6 +74,8 @@ def read_local_reference(path: Path, instrument: str) -> dict[date, Decimal]:
         for count, row in enumerate(reader, 1):
             if count > MAX_LOCAL_CSV_ROWS:
                 raise ValueError("Reference CSV exceeds allowed rows")
+            if None in row or any(value is None for value in row.values()):
+                raise ValueError("Malformed CSV row column count")
             if row.get("instrument_code") != instrument:
                 raise ValueError("Reference instrument differs from EIA source")
             try:
@@ -67,11 +83,17 @@ def read_local_reference(path: Path, instrument: str) -> dict[date, Decimal]:
                 price = Decimal(row["close_price"])
             except (TypeError, ValueError, InvalidOperation, KeyError):
                 raise ValueError("Malformed reference date or price") from None
+            if day.isoformat() != row["observed_for"]:
+                raise ValueError("Reference date must be canonical ISO")
             if day in observed or not price.is_finite() or price <= 0:
                 raise ValueError("Duplicate, nonfinite or nonpositive reference")
             observed[day] = price
-    return observed
+    return observed, hashlib.sha256(data).hexdigest()
 
+
+def read_local_reference(path: Path, instrument: str) -> dict[date, Decimal]:
+    """Backward-compatible three-field reference reader, strictly read-only."""
+    return read_local_reference_with_digest(path, instrument)[0]
 
 def compare_dates_prices(
     snapshot: Snapshot, reference: dict[date, Decimal],

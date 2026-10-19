@@ -5,6 +5,9 @@ on:
     paths:
       - src/isl_v2/eia_sources.py
       - scripts/eia_readonly_audit.py
+      - scripts/eia_wti_gap_receipt.py
+      - tests/test_eia_wti_gap_receipt.py
+      - docs/WTI_SOURCE_COVERAGE_RECEIPT_PL.md
       - tests/test_eia_sources.py
       - tests/test_eia_readonly_audit.py
       - docs/EIA_READ_ONLY_AUDIT_PL.md
@@ -14,6 +17,9 @@ on:
     paths:
       - src/isl_v2/eia_sources.py
       - scripts/eia_readonly_audit.py
+      - scripts/eia_wti_gap_receipt.py
+      - tests/test_eia_wti_gap_receipt.py
+      - docs/WTI_SOURCE_COVERAGE_RECEIPT_PL.md
       - tests/test_eia_sources.py
       - tests/test_eia_readonly_audit.py
       - docs/EIA_READ_ONLY_AUDIT_PL.md
@@ -41,7 +47,8 @@ jobs:
           python - <<'PY'
           from pathlib import Path
           sources = (Path("src/isl_v2/eia_sources.py").read_text(),
-                     Path("scripts/eia_readonly_audit.py").read_text())
+                     Path("scripts/eia_readonly_audit.py").read_text(),
+                     Path("scripts/eia_wti_gap_receipt.py").read_text())
           assert not any(token in src for src in sources for token in (
               "import psycopg", "psycopg.connect", "sqlalchemy", "NEON_DATABASE_URL",
               "INSERT INTO", "UPDATE investment_lab.", "DELETE FROM"))
