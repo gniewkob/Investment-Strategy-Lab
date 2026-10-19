@@ -14,7 +14,7 @@ import sys
 
 from scripts.opportunity_radar import SUPPORTED
 
-ALLOWED_DECISIONS = ("OBSERVE", "INVESTIGATE_RESEARCH_ONLY", "INSUFFICIENT_EVIDENCE")
+ALLOWED_DECISIONS = ("OBSERVE", "INVESTIGATE_RESEARCH_ONLY", "INSUFFICIENT_EVIDENCE", "DATA_QUALITY_BLOCKED")
 REQUIRED_VINTAGE = "UNVERIFIED_HISTORICAL_PUBLICATION"
 REQUIRED_STATUS = "RETROSPECTIVE_RESEARCH_COMPLETE"
 MIN_FLAGS = 5
@@ -72,9 +72,47 @@ def _verified_robustness(radar: dict, robustness: dict | None) -> dict:
     return by_key
 
 
-def make_ledger(radar: dict, robustness: dict | None = None) -> dict:
+def _verified_quality(radar: dict, quality: dict | None) -> dict:
+    """Fail closed on missing or mismatched reference-quality evidence."""
+    if quality is None:
+        return {}
+    if (not isinstance(quality, dict)
+            or quality.get("status") != "REFERENCE_DATA_QUALITY_RESEARCH_ONLY"
+            or quality.get("source_vintage") != REQUIRED_VINTAGE
+            or quality.get("source_radar_sha256") != radar["data_sha256"]
+            or quality.get("historical_release_dates_verified") is not False
+            or quality.get("prediction_or_trading_authorized") is not False
+            or quality.get("virtual_portfolio_changes") != 0
+            or quality.get("database_writes") != 0
+            or quality.get("real_orders") != 0):
+        raise ValueError("Quality evidence must match research fingerprint")
+    series = quality.get("series")
+    if not isinstance(series, list):
+        raise ValueError("Missing quality series")
+    by_key = {}
+    for row in series:
+        if not isinstance(row, dict):
+            raise ValueError("Invalid quality series")
+        key = (row.get("instrument_code"), row.get("interval_code"))
+        if (key in by_key or key[0] not in SUPPORTED or key[1] not in ("1d", "1mo")
+                or row.get("quality_gate") not in ("REVIEW_ONLY", "BLOCK_RESEARCH_PROMOTION")
+                or not isinstance(row.get("warning_codes"), list)
+                or row.get("historical_publication_verified") is not False):
+            raise ValueError("Invalid quality classification")
+        if (row["quality_gate"] == "BLOCK_RESEARCH_PROMOTION") != bool(row["warning_codes"]):
+            raise ValueError("Quality flags inconsistent with gate")
+        by_key[key] = row
+    return by_key
+
+
+def make_ledger(radar: dict, robustness: dict | None = None,
+                quality: dict | None = None) -> dict:
     series = _validated_radar(radar)
     checked = _verified_robustness(radar, robustness)
+    quality_checked = _verified_quality(radar, quality)
+    if quality is not None and any((x["instrument_code"], x["interval_code"]) not in quality_checked
+                                   for x in series):
+        raise ValueError("Quality gate missing an analyzed reference series")
     questions = []
     for entry in series:
         if not isinstance(entry, dict):
@@ -100,7 +138,11 @@ def make_ledger(radar: dict, robustness: dict | None = None) -> dict:
         if robustness is not None:
             adequate = (adequate and independent is not None
                         and robust_samples >= MIN_FLAGS and grid >= 12)
-        decision = "INVESTIGATE_RESEARCH_ONLY" if adequate else "INSUFFICIENT_EVIDENCE"
+        quality_row = quality_checked.get((name, interval))
+        blocked = (quality_row is not None and
+                   quality_row["quality_gate"] == "BLOCK_RESEARCH_PROMOTION")
+        decision = ("DATA_QUALITY_BLOCKED" if blocked else
+                    "INVESTIGATE_RESEARCH_ONLY" if adequate else "INSUFFICIENT_EVIDENCE")
         reasons_for = [
             f"{count} historical outlier events observed in {samples} evaluation windows",
             "Signal is computed from strictly lagged reference-price observations",
@@ -111,6 +153,9 @@ def make_ledger(radar: dict, robustness: dict | None = None) -> dict:
             "Conditional price-change differences do not demonstrate predictive skill",
             "Source price quotes are not executable return-inclusive instruments",
         ]
+        if blocked:
+            reasons_against.append("Research promotion blocked by data-quality flags: " +
+                                   ", ".join(quality_row["warning_codes"]))
         if robustness is not None and not adequate:
             reasons_against.append(
                 "Non-overlapping event count or pre-registered baseline grid below exploratory gate"
@@ -120,7 +165,10 @@ def make_ledger(radar: dict, robustness: dict | None = None) -> dict:
         questions.append({
             "instrument_code":name,
             "interval_code":interval,
-            "research_priority": "EVALUATE_EVIDENCE" if adequate else "COLLECT_MORE_EVIDENCE",
+            "research_priority": ("RESOLVE_DATA_QUALITY" if blocked else
+                                  "EVALUATE_EVIDENCE" if adequate else "COLLECT_MORE_EVIDENCE"),
+            "quality_gate": quality_row["quality_gate"] if quality_row else "NOT_CHECKED",
+            "data_quality_warning_codes": quality_row["warning_codes"] if quality_row else [],
             "educational_decision":decision,
             "observed_outliers":count,
             "evaluation_windows":samples,
@@ -150,6 +198,8 @@ def make_ledger(radar: dict, robustness: dict | None = None) -> dict:
         "vintage_status":REQUIRED_VINTAGE,
         "tracked_questions":len(questions),
         "nonoverlap_evidence_considered":robustness is not None,
+        "reference_data_quality_considered":quality is not None,
+        "questions_blocked_by_data_quality":sum(q["educational_decision"] == "DATA_QUALITY_BLOCKED" for q in questions),
         "questions_for_independent_review":research_interest,
         "questions":questions,
         "paper_portfolio_decisions":[
