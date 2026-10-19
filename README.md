@@ -1,5 +1,8 @@
 # Investment Strategy Lab
 
+> **Actual live EIA receipts completed (2026-10-19):** [WTI ↔ STAGING 695/695 exact matches](https://github.com/gniewkob/Investment-Strategy-Lab/actions/runs/39330376388), **0 missing and 0 price mismatches**, historical first-660 SHA unchanged; [all three official EIA snapshots](https://github.com/gniewkob/Investment-Strategy-Lab/actions/runs/39330400127) validated via public HTTPS (WTI 285, Brent 289, Henry Hub 283), original HTML and semantic SHA recorded. **No Neon write**: EIA versioned docs/observations both 0, EIA writer role absent. Current-source validation ≠ original historical PIT publication proof; `MARKET_DATA_NOT_READY`, paper M1/M2/M3 `HOLD_NO_CHANGE`. [Complete dated evidence](docs/EIA_LIVE_RECEIPTS_2026_10_19_PL.md).
+
+
 > **EIA source integrity hardening (19 October 2026):** [PR #33](https://github.com/gniewkob/Investment-Strategy-Lab/pull/33) merged: original HTML SHA and separate canonical date/price SHA, 14-day source freshness rejection, strict NO UPDATE/DELETE/TRUNCATE writer ACL. **210 offline + 3 disposable PostgreSQL tests passed**, main CI green. Actual Neon STAGING READ-ONLY check still 695 WTI, 706 Brent, 3 pre-existing documents and 3 pre-existing version rows; dedicated EIA writer role absent. No new live EIA↔Neon manual 695/695 source receipt, no live versioned ingestion, and no verified historical first-publication vintages. Research-only HOLD_NO_CHANGE. [Handoff](docs/SESSION_HANDOFF_PL.md).
 
 
