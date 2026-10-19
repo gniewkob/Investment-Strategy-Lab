@@ -16,6 +16,7 @@ import sys
 
 from scripts import evidence_decision_ledger, opportunity_radar
 from scripts import economic_geopolitical_context
+from scripts import nonoverlap_validation
 
 
 def _json(obj: object) -> str:
@@ -32,12 +33,17 @@ def run_pipeline(snapshot: dict) -> dict:
     radar = opportunity_radar.analyze(snapshot)
     ledger = evidence_decision_ledger.make_ledger(radar)
     context = economic_geopolitical_context.analyze_context(snapshot, radar)
+    robustness = nonoverlap_validation.analyze_validation(snapshot, radar)
     if (ledger["source_radar_sha256"] != radar["data_sha256"]
             or radar["source_vintage"] != "UNVERIFIED_HISTORICAL_PUBLICATION"
             or radar["pit_backtest_certified"] is not False
             or ledger["portfolio_reallocations"] != 0
             or ledger["real_orders"] != 0
-            or radar["real_orders"] != 0):
+            or radar["real_orders"] != 0
+            or robustness["source_radar_sha256"] != radar["data_sha256"]
+            or robustness["real_orders"] != 0
+            or robustness["virtual_portfolio_changes"] != 0
+            or robustness["causal_predictive_advantage_established"] is not False):
         raise ValueError("Inconsistent research evidence / safety boundary")
     manifest = {
         "status": "EDUCATIONAL_EVIDENCE_PIPELINE_COMPLETE",
@@ -46,6 +52,9 @@ def run_pipeline(snapshot: dict) -> dict:
         "input_dataset_kind": snapshot["dataset_kind"],
         "context_status": context["status"],
         "context_events": context["context_events"],
+        "nonoverlapping_event_count": robustness["total_nonoverlapping_events"],
+        "excluded_overlapping_events": robustness["total_excluded_overlaps"],
+        "independent_benchmark_review_required": True,
         "input_rows": radar["price_records"],
         "series_analyzed": radar["series_analyzed"],
         "historical_events": sum(s["shock_samples"] for s in radar["series"]),
@@ -65,11 +74,13 @@ def run_pipeline(snapshot: dict) -> dict:
         "schedule_enabled": False,
         "requires_verified_data_for_allocation_simulation": True,
     }
-    return {"radar": radar, "ledger": ledger, "context": context, "manifest": manifest}
+    return {"radar": radar, "ledger": ledger, "context": context,
+            "robustness": robustness, "manifest": manifest}
 
 
 def report(result: dict) -> str:
     manifest, ledger, context = result["manifest"], result["ledger"], result["context"]
+    robustness = result["robustness"]
     lines = [
         "# Opportunity & Decision Intelligence — educational evidence report",
         "",
@@ -96,6 +107,14 @@ def report(result: dict) -> str:
         lines.append(f"| {q['instrument_code']} ({q['interval_code']}) "
                      f"| {q['observed_outliers']} | {q['educational_decision']} |")
     lines += [
+        "",
+        "## Non-overlapping research checks",
+        "",
+        f"Non-overlapping anomaly windows: {robustness['total_nonoverlapping_events']}.",
+        f"Overlapping candidate windows excluded: {robustness['total_excluded_overlaps']}.",
+        "These are descriptive, retrospective comparisons, not validated statistical significance.",
+        "A naive last-bar direction benchmark is included as a separate reference.",
+        "Publication vintages are unverified, and virtual allocation changes remain disabled.",
         "",
         "## Counterfactual: do not change hypothetical portfolio",
         "",
@@ -136,6 +155,7 @@ def main() -> int:
             ("decision_ledger.json", "ledger"),
             ("economic_geopolitical_context.json", "context"),
             ("manifest.json", "manifest"),
+            ("nonoverlap_validation.json", "robustness"),
         ):
             (output / name).write_text(_json(result[key]) + "\n", encoding="utf-8")
         (output / "research_report.md").write_text(report(result), encoding="utf-8")
