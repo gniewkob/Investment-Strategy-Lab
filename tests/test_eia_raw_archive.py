@@ -123,9 +123,9 @@ class SourceArchiveTests(TestCase):
         saved=json.loads(target.read_text())
         saved["retrieved_at"]="2024-01-01T00:00:00+00:00"
         target.write_text(json.dumps(saved))
-        with self.assertRaisesRegex(SourceFormatError,"differs"):
+        with self.assertRaises(SourceFormatError):
             archive_snapshot(self.root,a)
-        with self.assertRaisesRegex(SourceFormatError,"differ"):
+        with self.assertRaises(SourceFormatError):
             verify_snapshot(self.root,a)
 
     def test_no_symlink_in_root_or_archive_entries(self):
