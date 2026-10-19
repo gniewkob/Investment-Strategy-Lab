@@ -4,6 +4,18 @@
 > **Pierwsza lektura nowego agenta:** [`../AGENTS.md`](../AGENTS.md), potem niniejszy plik, [`HISTORICAL_REFERENCE_BRIDGE_PL.md`](HISTORICAL_REFERENCE_BRIDGE_PL.md) oraz [`OPPORTUNITY_RADAR_PL.md`](OPPORTUNITY_RADAR_PL.md).  
 > **Status:** system badawczy / edukacyjne symulacje. **Nie ma zleceń, handlu, realnych inwestycji ani rekomendacji zakupowych.**
 
+## NAJNOWSZY stan — 19.10.2026, druga zgoda: LOGIN włączony, poświadczenie NIEGOTOWE
+
+Po jawnej **drugiej zgodzie** użytkownika na aktywację roli i skonfigurowanie poświadczenia w GitHub, wykonano na izolowanej Neon STAGING gałęzi `br-wandering-union-ba6ogf6l` bezpieczny `ALTER ROLE isl_legacy_history_reader LOGIN` z pełnym sprawdzeniem dotychczasowych uprawnień. Bezpośredni odczyt `pg_authid` po operacji potwierdził:
+
+- `rolcanlogin=true`;
+- `rolpassword IS NOT NULL=false` (hasło **nie zostało ustawione**);
+- pozostałe uprawnienia i bezpieczne ograniczenia bez zmian: SELECT tylko do legacy `price_observations`, brak SELECT do `holding_snapshots`, brak superuser/createdb/createrole/bypassrls.
+
+Wywołanie interfejsu Neon `reset_postgres_role_password` nie powiodło się; późniejsza kontrola SQL potwierdziła brak hasła. Neon control-plane `get_postgres_role` nadal podawał `authentication_method=no_login` pomimo rzeczywistego `rolcanlogin=true`; potrzebna ostrożna weryfikacja tej niespójności przy konfiguracji hasła. GitHub connector nie zapewnia zapisu Environment Secrets, więc `NEON_HISTORICAL_READ_DATABASE_URL` **nie został skonfigurowany**, a żaden manualny workflow nie został uruchomiony. Nie wysyłać sekretów przez czat ani do repo.
+
+Dalszy etap jest opisany w [HISTORICAL_LOGIN_BOOTSTRAP_PL.md](HISTORICAL_LOGIN_BOOTSTRAP_PL.md). **Nie resetować hasła ponownie przez API na ślepo, nie zmieniać ACL, nie uruchamiać bridge przed bezpieczną aktywacją i potwierdzeniem dostępu.** Poniższa sekcja `0. AKTUALIZACJA po snapshot` opisuje wcześniejszy etap `NOLOGIN` i jest zachowana jako historia.
+
 ## 0. AKTUALIZACJA po snapshot — 19.10.2026: staging reader utworzony
 
 **To jest nowszy, obowiązujący stan niż poniższy historyczny snapshot z ok. 07:11 UTC.** Użytkownik udzielił jawnej zgody wyłącznie na stworzenie odizolowanej roli `isl_legacy_history_reader` `NOLOGIN` na Neon STAGING (`br-wandering-union-ba6ogf6l`; projekt `red-lake-53043722`; baza `investment_lab`). Zastosowano istniejący przejrzany `db/security/legacy_history_reader_STAGING_REVIEW.sql` jako pojedynczą transakcję PostgreSQL; wszystkie pięć instrukcji zakończyło się bez błędów.
