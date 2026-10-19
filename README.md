@@ -1,5 +1,8 @@
 # Investment Strategy Lab
 
+> **Source-byte provenance upgrade — [PR #36](https://github.com/gniewkob/Investment-Strategy-Lab/pull/36) merged (19 October 2026):** Official EIA original HTML can now be retained in an operator-selected **private local POSIX archive**, keyed by raw SHA-256, with a distinct exact-time acquisition receipt and independent offline replay/semantic SHA. **228/228 offline + 3/3 disposable PostgreSQL tests passed**. Local no-overwrite is **NOT certified WORM**; no historical live EIA bytes have been archived, no Neon source/version writes, no new roles. [Operator capture/verify and limits](docs/EIA_ORIGINAL_HTML_ARCHIVE_PL.md). Virtual models remain HOLD_NO_CHANGE.
+
+
 > **Actual live EIA receipts completed (2026-10-19):** [WTI ↔ STAGING 695/695 exact matches](https://github.com/gniewkob/Investment-Strategy-Lab/actions/runs/39330376388), **0 missing and 0 price mismatches**, historical first-660 SHA unchanged; [all three official EIA snapshots](https://github.com/gniewkob/Investment-Strategy-Lab/actions/runs/39330400127) validated via public HTTPS (WTI 285, Brent 289, Henry Hub 283), original HTML and semantic SHA recorded. **No Neon write**: EIA versioned docs/observations both 0, EIA writer role absent. Current-source validation ≠ original historical PIT publication proof; `MARKET_DATA_NOT_READY`, paper M1/M2/M3 `HOLD_NO_CHANGE`. [Complete dated evidence](docs/EIA_LIVE_RECEIPTS_2026_10_19_PL.md).
 
 
