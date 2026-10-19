@@ -1,5 +1,8 @@
 # Investment Strategy Lab
 
+> **19 October 2026 — STAGING legacy WTI coverage FIXED (not PIT).** With explicit user authorization, 35 missing EIA WTI current-archive reference rows were inserted into the isolated STAGING legacy `investment_lab.price_observations` table. Independent SQL postflight: **695/695 WTI days**, all 35 new prices match the official EIA table, 0 mismatches, original 660-row digest unchanged; Brent 706 unchanged, `price_observation_versions` and `source_documents` remain only the three old synthetic fixtures. **Historical publication vintages still unverified**; `MARKET_DATA_NOT_READY` and M1/M2/M3 `HOLD_NO_CHANGE`. The earlier frozen receipt (expected 660/35 gap) is now ARCHIVAL; do not rerun as a current-state test. [Full handoff](docs/SESSION_HANDOFF_PL.md) / [Issue #22](https://github.com/gniewkob/Investment-Strategy-Lab/issues/22#issuecomment-6274907188).
+
+
 **Educational, research-only Opportunity & Decision Intelligence.** Reproducible market-data validation, historical anomaly research, falsifiable hypotheses, evidence-for/against and **hypothetical** portfolio comparisons. **No actual trades, brokerage/exchange execution or investment recommendations.**
 
 ## For a new ChatGPT / code agent session
