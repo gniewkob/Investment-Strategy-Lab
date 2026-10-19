@@ -128,7 +128,7 @@ def _assert_writer_identity(cur) -> datetime:
         FROM pg_roles r WHERE r.rolname=current_user
     """)
     row = cur.fetchone()
-    if row is None or len(row) != 21:
+    if row is None or len(row) != 20:
         raise SourceFormatError("Dedicated writer identity proof unavailable")
     (role, database, read_only, superuser, createdb, createrole, bypass,
      neon_admin, db_create, schema_create, doc_read, doc_write,
