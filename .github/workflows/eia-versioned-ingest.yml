@@ -13,6 +13,9 @@ on:
       - tests/fixtures/eia_pit_schema_007_disposable.sql
       - db/security/eia_pit_staging_writer_REVIEW_ONLY.sql
       - docs/EIA_VERSIONED_INGEST_GATE_PL.md
+      - docs/EIA_FIRST_SNAPSHOT_GO_NO_GO_PL.md
+      - db/verify_eia_first_snapshot_READONLY.sql
+      - tests/test_eia_first_snapshot_sql_contract.py
       - .github/workflows/eia-versioned-ingest.yml
   push:
     branches: [main]
@@ -24,6 +27,9 @@ on:
       - tests/test_eia_versioned_ingest.py
       - tests/test_eia_semantic_evidence.py
       - docs/EIA_VERSIONED_INGEST_GATE_PL.md
+      - docs/EIA_FIRST_SNAPSHOT_GO_NO_GO_PL.md
+      - db/verify_eia_first_snapshot_READONLY.sql
+      - tests/test_eia_first_snapshot_sql_contract.py
       - .github/workflows/eia-versioned-ingest.yml
   workflow_dispatch:
 
