@@ -187,6 +187,24 @@ class IngestionPlanTests(TestCase):
             self.assertEqual(cur.calls, [])
             self.assertEqual(cur.docs, {})
 
+    def test_complete_fetch_clock_flows_to_future_versioned_sql(self):
+        completed = NOW + timedelta(seconds=4)
+        plan = ingest.fetch_plan(
+            "wti", NOW, opener=lambda *a,**k: Response(fixture()),
+            completion_clock=lambda: completed)
+        cur = TransactionalCursorStub()
+        receipt = ingest.apply_plan(cur,plan)
+        self.assertTrue(receipt["document_added"])
+        document_sql = [params for sql,params in cur.calls
+                        if "INSERT INTO investment_lab.source_documents" in sql]
+        version_sql = [params for sql,params in cur.calls
+                       if "INSERT INTO investment_lab.price_observation_versions" in sql]
+        self.assertEqual(len(document_sql),1)
+        self.assertEqual(len(version_sql),18)
+        self.assertEqual(document_sql[0][4],completed)  # retrieved_at
+        self.assertTrue(all(params[6] == completed for params in version_sql))
+        self.assertNotEqual(document_sql[0][4],NOW)
+
     def test_first_insert_replay_and_one_correction(self):
         cur = TransactionalCursorStub()
         base = self.plan()
