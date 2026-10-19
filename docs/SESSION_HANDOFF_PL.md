@@ -4,7 +4,15 @@
 > **Pierwsza lektura nowego agenta:** [`../AGENTS.md`](../AGENTS.md), potem niniejszy plik, [`HISTORICAL_REFERENCE_BRIDGE_PL.md`](HISTORICAL_REFERENCE_BRIDGE_PL.md) oraz [`OPPORTUNITY_RADAR_PL.md`](OPPORTUNITY_RADAR_PL.md).  
 > **Status:** system badawczy / edukacyjne symulacje. **Nie ma zleceń, handlu, realnych inwestycji ani rekomendacji zakupowych.**
 
-## NAJNOWSZY stan — 19.10.2026, druga zgoda: LOGIN włączony, poświadczenie NIEGOTOWE
+## NAJNOWSZY stan — 19.10.2026: skuteczna inicjalizacja pierwszego hasła historycznego czytnika
+
+Użytkownik przypomniał sprawdzone rozwiązanie problemu resetu `PASSWORD NULL`. W [Issue #3](https://github.com/gniewkob/Investment-Strategy-Lab/issues/3) oraz w pierwotnej dokumentacji `NEON_LEAST_PRIVILEGE_PL.md` (gałąź Draft PR #1) odnotowano sukces dla `isl_agent_staging_limited` z 18.10.2026: jednokrotny `DO`, 3 × losowy `gen_random_uuid()` po stronie bazy, dynamiczny `ALTER ROLE`, kontrola `rolpassword IS NOT NULL`. Ten mechanizm **zastosowano teraz po wcześniejszej jawnej zgodzie na aktywację credentials** również do nowej `isl_legacy_history_reader` na staging `br-wandering-union-ba6ogf6l`.
+
+Bezpośredni SQL postflight: `rolcanlogin=true`, **`rolpassword IS NOT NULL=true`**, `rolsuper=false`, `rolcreatedb=false`, `rolcreaterole=false`, `rolbypassrls=false`; SELECT na dokładnie jednym obiekcie `investment_lab.price_observations`, zero write/CREATE, brak `holding_snapshots` SELECT, istniejący agent nie dostał dostępu do legacy. Odczyt produkcji potwierdził brak tej roli na gałęzi `main`. Początkowe hasło jest niedostępne (nie zostało zwrócone, zapisane w repo/rozmowie ani przekazane do narzędzia).
+
+**Blokada pierwszego hasła usunięta.** Wymagane: w Neon Console użyć **Reset password** istniejącej roli (tylko prywatnie), zapisać końcowe hasło w menedżerze, ustawić oddzielny chroniony GitHub Environment Secret `NEON_HISTORICAL_READ_DATABASE_URL`. Podłączony GitHub connector nie wspiera zapisu sekretu. Nie potwierdzono jeszcze finalnego resetu ani sekretu. Nie wysyłać hasła/DSN przez chat; nie przeprowadzać kolejnego bootstrapu. Manualny history bridge nieuruchomiony; brak harmonogramu, zleceń i zmian portfela. Instrukcja: [HISTORICAL_LOGIN_BOOTSTRAP_PL.md](HISTORICAL_LOGIN_BOOTSTRAP_PL.md).
+
+## WCZEŚNIEJSZY stan — 19.10.2026, druga zgoda: LOGIN włączony, poświadczenie NIEGOTOWE
 
 Po jawnej **drugiej zgodzie** użytkownika na aktywację roli i skonfigurowanie poświadczenia w GitHub, wykonano na izolowanej Neon STAGING gałęzi `br-wandering-union-ba6ogf6l` bezpieczny `ALTER ROLE isl_legacy_history_reader LOGIN` z pełnym sprawdzeniem dotychczasowych uprawnień. Bezpośredni odczyt `pg_authid` po operacji potwierdził:
 
