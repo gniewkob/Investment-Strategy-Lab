@@ -75,6 +75,8 @@ class STEOForecastMonthlyTests(TestCase):
         self.assertEqual(jan24["series"]["WTIPUUS"]["2025-02"],
                          jan25["series"]["WTIPUUS"]["2025-02"])
         self.assertEqual(jan24["series"]["BREPUUS"]["2024-01"],"78.40")
+        self.assertTrue(all(len(x.split(".")[-1]) == 2
+                            for x in jan24["series"]["WTIPUUS"].values()))
         self.assertNotEqual(jan24["raw_xlsx_sha256"],jan25["raw_xlsx_sha256"])
         self.assertFalse(jan24["original_first_release_bytes_certified"])
         self.assertFalse(jan24["forecast_completed_date_used_as_market_availability"])
