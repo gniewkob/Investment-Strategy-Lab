@@ -22,6 +22,9 @@ on:
       - tests/test_steo_robustness_audit.py
       - scripts/steo_prior_period_validation.py
       - tests/test_steo_prior_period_validation.py
+      - scripts/steo_official_notice_audit.py
+      - tests/test_steo_official_notice_audit.py
+      - docs/STEO_OFFICIAL_ERRATA_PROVENANCE_2026_10_20_PL.md
       - docs/STEO_PRIOR_2022_2023_REAL_RESULTS_PL.md
       - docs/STEO_MATURED_LABEL_ROBUSTNESS_PL.md
       - docs/STEO_VINTAGE_FORECAST_ERRORS_RESEARCH_PL.md
@@ -64,6 +67,9 @@ on:
       - tests/test_steo_robustness_audit.py
       - scripts/steo_prior_period_validation.py
       - tests/test_steo_prior_period_validation.py
+      - scripts/steo_official_notice_audit.py
+      - tests/test_steo_official_notice_audit.py
+      - docs/STEO_OFFICIAL_ERRATA_PROVENANCE_2026_10_20_PL.md
       - docs/STEO_PRIOR_2022_2023_REAL_RESULTS_PL.md
       - docs/STEO_MATURED_LABEL_ROBUSTNESS_PL.md
       - docs/STEO_VINTAGE_FORECAST_ERRORS_RESEARCH_PL.md
