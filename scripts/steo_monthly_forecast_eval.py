@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import argparse
 from collections import Counter
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
 import hashlib
 from io import BytesIO
@@ -173,8 +173,8 @@ def parse_edition(issue: str, raw: bytes) -> dict:
             "official_release_day": spec["official_release_day"],
             "release_precision": "DAY",
             "available_not_before_utc_date": (
-                date.fromisoformat(spec["official_release_day"]).toordinal() + 1
-            ),
+                date.fromisoformat(spec["official_release_day"]) + timedelta(days=1)
+            ).isoformat(),
             "raw_xlsx_sha256": hashlib.sha256(raw).hexdigest(),
             "source_vintage":"RECONSTRUCTED_FROM_CURRENTLY_HOSTED_ARCHIVED_EDITION",
             "original_first_release_bytes_certified":False,
@@ -264,7 +264,7 @@ def compare_editions(editions: list[dict], *, horizons=FUTURE_HORIZONS) -> dict:
         "status":"STEO_RECONSTRUCTED_HISTORICAL_FORECAST_ERROR_COMPARISON",
         "source_editions":len(ordered),
         "paired_target_forecasts":len(report),
-        "reference_policy":"FIRST_AVAILABLE_ARCHIVED_EDITION_AT_LEAST_TWO_CALENDAR_MONTHS_AFTER_TARGET",
+        "reference_policy":"FIRST_SAMPLED_LATER_EDITION_AT_LEAST_TWO_CALENDAR_MONTHS_AFTER_TARGET",
         "forecast_data_basis":"CURRENTLY_HOSTED_ARCHIVED_EDITION_BYTES_MAY_HAVE_BEEN_REVISED",
         "historical_source_as_published_bytes_certified":False,
         "original_observation_point_in_time_certified":False,
