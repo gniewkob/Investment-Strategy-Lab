@@ -2,9 +2,11 @@
 from datetime import date, datetime, timedelta, timezone
 import json
 from unittest import TestCase
+from unittest.mock import patch
 
 from scripts.hourly_real_paper_research import (
     SourceError, build_payload, parse_nbp, fetch_nbp, _timestamp, START, END,
+    research_once,
 )
 from scripts.paper_strategy_tournament import run_tournament
 
@@ -105,3 +107,32 @@ class HistoricalNBPPaperTests(TestCase):
     def test_reject_excessive_nbp_query(self):
         with self.assertRaises(SourceError):
             fetch_nbp(date(2026,1,1),date(2026,7,1))
+
+    def test_61day_paper_trial_reuses_one_market_source_for_three_cost_cases(self):
+        begin,end=_timestamp(START),_timestamp(END)
+        btc,eth=dummy_bars(begin,end)
+        fx={}
+        day=date(2026,7,31)
+        while day<=date(2026,9,30):
+            ts=datetime(day.year,day.month,day.day,tzinfo=timezone.utc)+timedelta(days=1)
+            fx[day]={"mid":"3.8","assumed_eligible_utc":ts.isoformat(),
+                     "effective_date":day.isoformat(),"table_no":"fixture"}
+            day+=timedelta(days=1)
+        source={"BTC-USD":btc,"ETH-USD":eth}
+        with patch("scripts.hourly_real_paper_research.fetch_hourly",
+                   side_effect=lambda asset, a, b: (source[asset],
+                      {"product_id":asset,"bars":len(source[asset]),"source_chunks":1})) as downloaded:
+            with patch("scripts.hourly_real_paper_research.fetch_nbp",
+                       return_value=(fx,{"observed_nbp_release_dates":len(fx)})) as currency:
+                result=research_once()
+        self.assertEqual(downloaded.call_count,2)
+        self.assertEqual(currency.call_count,1)
+        self.assertEqual(result["results"]["bars"],1464)
+        scenarios=result["fixed_policy_friction_sensitivity"]
+        self.assertEqual([s["scenario"] for s in scenarios],
+                         ["ZERO_COST_DIAGNOSTIC","FROZEN_BASELINE","DOUBLE_COST_STRESS"])
+        self.assertEqual(len(scenarios[0]["policies"]),5)
+        self.assertEqual({s["contributed_pln"] for s in result["results"]["strategies"]},{"200.00"})
+        self.assertFalse(result["market_prediction_edge_proven"])
+        self.assertFalse(result["results"]["historical_pit_certified"])
+        self.assertEqual(result["external_orders"],0)
