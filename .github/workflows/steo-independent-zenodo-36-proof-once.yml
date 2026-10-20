@@ -1,0 +1,84 @@
+name: STEO independent Zenodo-2025 36 monthly raw XLSX checks — one time
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/steo-independent-zenodo-36-proof-once.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  independent-source-time-anchor-research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Compare all independently deposited May-2025 original 2022-2024 STEO XLSX against source-verified EIA Oct-2026 raw hashes
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          import re
+          import sys
+          from urllib.parse import urlparse
+          from urllib.request import Request,urlopen
+
+          from scripts.steo_zenodo_vintage_crosscheck import (
+              PARTITION_BUNDLE_MD5,MAX_YEAR_ZIP_BYTES,
+              check_2025_zenodo_year_archive, consolidate_zenodo_audits,
+          )
+          # The source original EIA Oct2026 hashes are *already verified* from
+          # previous public original XLSX research jobs and archived as GitHub
+          # source docs. This workflow does NOT redownload EIA XLSX or revise
+          # forecasts. Only the independent early May2025 Zenodo source is read.
+          source_reports=(
+              Path("docs/STEO_REAL_2022_2023_FROZEN_HISTORY_2026_10_20_PL.md"),
+              Path("docs/STEO_FULL_34_REAL_RESULTS_2026_10_20_PL.md"),
+          )
+          references={}
+          for report in source_reports:
+              if not report.is_file():
+                  raise ValueError("Authenticated earlier EIA receipt not present")
+              for line in report.read_text(encoding="utf-8").splitlines():
+                  m=re.match(
+                      r"^\|\s*`([a-z]{3}\d{2})`\s*\|\s*\d{4}-\d{2}-\d{2}\s*\|\s*(?:[^|]*\|\s*)?`([a-f0-9]{64})`\s*\|",
+                      line)
+                  if m:
+                      issue, digest=m.groups()
+                      if issue in references and references[issue]!=digest:
+                          raise ValueError("Earlier source receipts disagree for EIA source issue")
+                      references[issue]=digest
+          results=[]
+          for year in (2022,2023,2024):
+              suffix=str(year)[-2:]
+              expected={name:sha for name,sha in references.items() if name.endswith(suffix)}
+              if len(expected)!=12:
+                  raise ValueError("Original EIA raw issue SHA receipt count not exactly 12")
+              url=f"https://zenodo.org/records/15386905/files/eiasteo-{year}.zip?download=1"
+              try:
+                  with urlopen(Request(url,headers={
+                      "User-Agent":"ISL-Historical-Zenodo-Source-Evidence/1.0"}),timeout=120) as reply:
+                      final=urlparse(reply.geturl())
+                      if final.scheme!="https" or final.hostname not in (
+                              "zenodo.org","files.zenodo.org"):
+                          raise ValueError("Third-party source redirected outside official Zenodo")
+                      blob=reply.read(MAX_YEAR_ZIP_BYTES+1)
+                  outcome=check_2025_zenodo_year_archive(year,blob,expected)
+                  results.append(outcome)
+                  print("STEO_INDEPENDENT_ZENODO_MAY2025_REAL_ORIGINAL_XLSX_YEAR "+
+                        json.dumps(outcome,sort_keys=True,separators=(",",":")),flush=True)
+                  del blob
+              except Exception as exc:
+                  print("STEO_ZENODO_FAIL_CLOSED_PARTITION "+str(year)+" "+
+                        type(exc).__name__,file=sys.stderr,flush=True)
+                  raise
+          summary=consolidate_zenodo_audits(results)
+          print("STEO_REAL_ZENODO_2025_VS_EIA_2026_THIRTY_SIX_RAW_XLSX_RESULT "+
+                json.dumps(summary,sort_keys=True,separators=(",",":")),flush=True)
+          PY
