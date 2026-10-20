@@ -32,6 +32,8 @@ jobs:
               prior_catalog, retrieve_prior, fixed_rule_prior_period_report
           )
 
+          # Re-run only after official Jan22 row-3 calendar year validation:
+          # Jan22 has 2018-2023, Jan23 has 2019-2024 year blocks.
           earlier=prior_catalog()
           bridge=list(catalog())[:8]
           if len(earlier)!=24 or len(bridge)!=8:
