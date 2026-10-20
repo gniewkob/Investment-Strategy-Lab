@@ -1,5 +1,8 @@
 # Investment Strategy Lab
 
+> **Actual 3-source EIA private archive now captured (20 October 2026):** operator on MyDevil FreeBSD confirmed **WTI, Brent and Henry Hub** raw original HTML files + timestamped manifests written to a private local POSIX directory with `immediate_independent_replay=true` for all three; WTI passed an additional separate **offline** `verify`. [Actual SHA-256, acquired-at timestamps and limits](docs/EIA_MYDEVIL_ACTUAL_ARCHIVE_RECEIPTS_2026_10_20_PL.md). These **NEW 20 October** captures are real; earlier **19 October CI source requests still had no retained original HTML**. Private local archive is **NOT WORM**. No Neon source/version writes, roles, credentials, schedule or trades. Historical PIT remains unverified; virtual M1/M2/M3 HOLD_NO_CHANGE.
+
+
 > **MyDevil archive readiness (20 October 2026):** [PR #37](https://github.com/gniewkob/Investment-Strategy-Lab/pull/37) merged after **235/235 offline + 3/3 disposable PostgreSQL integration tests**. New `scripts/eia_archive_storage_preflight.py` inspects an already existing private POSIX archive root **READ ONLY** without logging paths or creating files. This does **not** verify actual MyDevil quota, ZFS restore, persistence or WORM; SSH unavailable in current runtime, so no MyDevil remote check was performed. OVHcloud Object Storage Object Lock is a candidate independent WORM backend, **not configured or approved**. Live Neon versioned EIA source/price rows 0, writer role absent. [Read-only/MyDevil + OVH plan](docs/EIA_MYDEVIL_OVH_ARCHIVE_READINESS_PL.md).
 
 
