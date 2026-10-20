@@ -6,6 +6,7 @@ on:
     paths:
       - scripts/hourly_real_paper_research.py
       - tests/test_hourly_real_paper_research.py
+      - docs/PAPER_HOURLY_REAL_REFERENCE_RESEARCH_2026_10_20_PL.md
       - .github/workflows/hourly-real-paper-research-pr55.yml
 
 permissions:
