@@ -187,6 +187,33 @@ def research_once():
     if (result["orders_sent"] or result["database_writes"]
             or result["historical_pit_certified"] or result["profitability_proven"]):
         raise ValidationError("Invalid research-only output")
+    # One fixed source snapshot, same policies and monthly deposits throughout.
+    # Cost sensitivity explains financial friction; it does NOT optimize signals
+    # or promote an in-sample historical result into predictive evidence.
+    sensitivity=[]
+    for label,fee_bps,slip_bps in (
+        ("ZERO_COST_DIAGNOSTIC","0","0"),
+        ("FROZEN_BASELINE","20","10"),
+        ("DOUBLE_COST_STRESS","40","20"),
+    ):
+        candidate=dict(payload,fee_bps=fee_bps,slippage_bps=slip_bps)
+        trial=run_tournament(candidate)
+        if (trial["orders_sent"] or trial["database_writes"]
+                or trial["historical_pit_certified"] or trial["profitability_proven"]):
+            raise ValidationError("Cost sensitivity guard violated")
+        sensitivity.append({"scenario":label,"fee_bps":fee_bps,"slippage_bps":slip_bps,
+                            "policies":[{"policy":s["policy"],
+                                         "ending_value_pln":s["ending_value_pln"],
+                                         "transactions":s["transactions"],
+                                         "fees_pln":s["fees_pln"],
+                                         "slippage_pln":s["slippage_pln"]}
+                                        for s in trial["strategies"]]})
+    if sensitivity[1]["policies"]!=[
+            {"policy":s["policy"],"ending_value_pln":s["ending_value_pln"],
+             "transactions":s["transactions"],"fees_pln":s["fees_pln"],
+             "slippage_pln":s["slippage_pln"]}
+            for s in result["strategies"]]:
+        raise ValidationError("Frozen baseline cost scenario does not reproduce")
     return {
         "status":"REAL_HISTORICAL_REFERENCES_RECONSTRUCTED_PAPER_ONLY",
         "source_receipts":{"coinbase":receipts,"nbp":nbp_receipt},
@@ -197,6 +224,7 @@ def research_once():
         "market_prediction_edge_proven":False,
         "frozen_research_window":[START,END],
         "results":result,
+        "fixed_policy_friction_sensitivity":sensitivity,
         "external_orders":0,
         "data_persistence":False
     }
