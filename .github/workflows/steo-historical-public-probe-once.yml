@@ -1,0 +1,54 @@
+name: STEO historical official XLSX pilot — public read-only
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/steo-historical-public-probe-once.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  read-only-official-staging-free-probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Official historical STEO workbook structure and SHA — NO persistence
+        run: |
+          python - <<'PY'
+          import hashlib
+          import json
+          import sys
+          from scripts.steo_historical_archive import catalog, retrieve, inspect_xlsx
+          issues = ("jan24","jan25","oct26")
+          for issue in issues:
+              try:
+                  raw, official_url = retrieve(issue)
+                  workbook = inspect_xlsx(raw)
+                  record = {
+                      "issue": issue,
+                      "official_listed_release_day": catalog()[issue]["official_release_day"],
+                      "original_xlsx_sha256_at_now": hashlib.sha256(raw).hexdigest(),
+                      "original_bytes_archived_by_this_workflow": False,
+                      "listed_release_day_proves_historical_original_bytes": False,
+                      "sheet_names": workbook["sheet_names"],
+                      "sheet_count": workbook["sheet_count"],
+                      "zip_member_count": workbook["zip_member_count"],
+                      "database_connections": 0,
+                      "database_writes": 0,
+                      "real_orders": 0,
+                  }
+                  print("OFFICIAL_STEO_HISTORICAL_EDITION_PUBLIC_PROBE " +
+                        json.dumps(record,sort_keys=True,separators=(",",":")),flush=True)
+              except Exception as exc:
+                  print("OFFICIAL_STEO_PILOT_FAILED " + issue + " " +
+                        type(exc).__name__, file=sys.stderr,flush=True)
+                  sys.exit(2)
+          print("OFFICIAL_STEO_PUBLIC_PROBE_ALL_THREE_COMPLETED",flush=True)
+          PY
