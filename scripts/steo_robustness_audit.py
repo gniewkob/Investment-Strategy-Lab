@@ -10,9 +10,8 @@ from __future__ import annotations
 from collections import defaultdict
 from datetime import date
 from decimal import Decimal, InvalidOperation
-from itertools import groupby
 
-from scripts.steo_monthly_forecast_eval import HEADERS, _add_month, _ym
+from scripts.steo_monthly_forecast_eval import HEADERS, _add_month
 from src.isl_v2.eia_sources import SourceFormatError
 
 
@@ -33,6 +32,9 @@ def _rounded(value: Decimal) -> str:
 
 
 def _check(result: dict, editions: list[dict]) -> list[dict]:
+    if (result.get("database_connections") != 0 or result.get("database_writes") != 0
+            or result.get("real_orders") != 0 or result.get("virtual_model_rebalances") != 0):
+        raise SourceFormatError("Side-effect-free source research evidence required")
     if (result.get("status") != "STEO_RECONSTRUCTED_HISTORICAL_FORECAST_ERROR_COMPARISON"
             or result.get("historical_source_as_published_bytes_certified") is not False
             or result.get("original_observation_point_in_time_certified") is not False
@@ -43,6 +45,7 @@ def _check(result: dict, editions: list[dict]) -> list[dict]:
         raise SourceFormatError("Source edition coverage mismatch")
     if any(x.get("original_first_release_bytes_certified") is not False for x in editions):
         raise SourceFormatError("Independent original publication proof not available")
+    source_issues={x["issue"]:x["official_release_day"] for x in editions}
     rows = result["paired_records"]
     if not rows or result["paired_target_forecasts"] != len(rows):
         raise SourceFormatError("Missing paired target observations")
@@ -56,6 +59,8 @@ def _check(result: dict, editions: list[dict]) -> list[dict]:
         ref = row["reference_edition_release_day"]
         if (instrument not in allow_instruments or type(horizon) is not int or
                 horizon not in (1,3,6) or len(target) != 7 or
+                source_issues.get(row["forecast_edition"]) != issued or
+                source_issues.get(row["reference_edition"]) != ref or
                 date.fromisoformat(target+"-01") <= date.fromisoformat(issued) or
                 date.fromisoformat(ref) <= date.fromisoformat(issued)):
             raise SourceFormatError("Invalid chronological forecast and reference pairing")
