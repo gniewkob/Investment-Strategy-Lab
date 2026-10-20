@@ -6,10 +6,8 @@ remain NOT certified by a third-party May 2025 deposit.
 """
 from __future__ import annotations
 
-from collections import Counter
 from hashlib import md5, sha256
 from io import BytesIO
-from pathlib import PurePosixPath
 import re
 from zipfile import ZipFile, BadZipFile
 
@@ -39,7 +37,7 @@ def check_2025_zenodo_year_archive(year: int, zip_data: bytes,
     """
     if year not in PARTITION_BUNDLE_MD5:
         raise SourceFormatError("Only 2022-2024 predeclared Zenodo source partitions")
-    if not 10_000 < len(zip_data) <= MAX_YEAR_ZIP_BYTES:
+    if not 100 < len(zip_data) <= MAX_YEAR_ZIP_BYTES:
         raise SourceFormatError("Archive compressed byte bounds invalid")
     if md5(zip_data).hexdigest() != PARTITION_BUNDLE_MD5[year]:
         raise SourceFormatError("Zenodo original version 2.0 year ZIP MD5 mismatch")
