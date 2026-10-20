@@ -1,5 +1,26 @@
 # STEO — niezależny depozyt Catalyst Cooperative / Zenodo z 26.05.2025
 
+## Zweryfikowany rzeczywisty pierwszy pilot — niezależny 2025 ZIP z oryginalnym STEO XLSX
+
+[Jednorazowy GitHub Actions #39443655584](https://github.com/gniewkob/Investment-Strategy-Lab/actions/runs/39443655584) **SUCCESS**. Dokładny ZIP z Zenodo z 26.05.2025: **48,241,045 bajtów**, MD5 `21b1dc10ba6503b4446143e212ada2a0` pokrywa się z opublikowanym manifestem. W środku **12 oryginalnych plików `YYYY-MM/{issue}_base.xlsx`** i **12 pełnych raportów PDF** z każdego miesiąca 2024, bez kolejnego ZIP wewnątrz. Oryginalna paczka ma SHA-256 `08d6e512f4e88eb150116eec23a72943a0f5f6d0891c18e6775eb0e40771c7ab`.
+
+Rzeczywisty SHA-256 niezależnie zdeponowanego w maju 2025 XLSX **zgadza się bajt po bajcie** z wcześniej zweryfikowanymi oryginalnymi plikami EIA pobranymi 20.10.2026:
+
+| Oryginalny plik | SHA-256 bajtów obu kopii (Zenodo 2025 = EIA 2026) |
+|---|---|
+| `2024-01/jan24_base.xlsx` | `663ee3c648d2e88dad48dd1efd2557df99c811afe4afcc2094ed92c988fb53a9` |
+| `2024-11/nov24_base.xlsx` | `0aea752a8bd2991df43b028a9d10d673ee98710a99cd9e1864d936ba9b7059bb` |
+| `2024-12/dec24_base.xlsx` | `b650cb965a38a67e8b5e2f4d8df794b8ddfab6a429fca551cc1c7ff404ffb396` |
+
+**Znaczenie:** niezależny depozyt z 2025 zawiera te same *oryginalne bajty XLSX* co obecne EIA. To więcej niż sama zgodność cen, ale **nie** poświadcza treści na dzień pierwszej publikacji w 2024.
+
+## Kontrola pozostałych 36 pierwotnych wydań STEO 2022–2024
+
+Moduł `scripts/steo_zenodo_vintage_crosscheck.py` jest **czystą funkcją offline** do niezależnego porównania zawartości rocznych paczek Zenodo `2022`, `2023`, `2024` — każda ze ścisłą sumą MD5 wersji depozytu z 2025 — z **wcześniej utrwalonymi oryginalnymi EIA XLSX SHA-256 z października 2026**. Nie wymaga osobnego pobierania z EIA, nie przetwarza cen, nie modyfikuje historycznych prognoz.
+
+Nowa jednorazowa sonda `steo-independent-zenodo-36-proof-once.yml` pobierze trzy roczne ZIP do ulotnej pamięci runnera i wyświetli 36 par dowodowych. **Wynik jeszcze nie potwierdzony, zanim uruchomienie publicznych źródeł zakończy się sukcesem.** Każdy niezgodny hash zostanie oznaczony do przeglądu semantycznego, **nie jako automatycznie potwierdzona korekta ceny**. Dla wszystkich wydań `historical_first_publication_point_in_time_certified=false`.
+
+
 ## Ustalony niezależny punkt dowodowy
 
 [Zenodo, DOI 10.5281/zenodo.15386905](https://zenodo.org/records/15386905) to **wersja 2.0.0 EIA STEO — Short-Term Energy Outlook** opublikowana **26 maja 2025 r.** przez **Catalyst Cooperative**, niezależny podmiot archiwizujący źródłowe dane do projektu Public Utility Data Liberation (PUDL). [PUDL opisuje archiwa](https://docs.catalyst.coop/pudl/en/stable/data_access.html) jako minimalnie przetworzone, czasami pogrupowane i skompresowane pliki wejściowe. To nie jest własne archiwum EIA.
