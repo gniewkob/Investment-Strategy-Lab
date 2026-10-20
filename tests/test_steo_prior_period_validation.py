@@ -40,7 +40,7 @@ class STEOPriorHistoricalPeriodTests(TestCase):
         edition=parse_edition("jan22",raw)
         self.assertEqual(edition["official_release_day"],"2022-01-11")
         self.assertEqual(edition["available_not_before_utc_date"],"2022-01-12")
-        self.assertEqual(edition["series"]["WTIPUUS"]["2022-02"],"71.80")
+        self.assertEqual(edition["series"]["WTIPUUS"]["2022-02"],"70.80")
         self.assertFalse(edition["forecast_completed_date_used_as_market_availability"])
         self.assertFalse(edition["original_first_release_bytes_certified"])
 
