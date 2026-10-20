@@ -9,7 +9,7 @@ No database or portfolio connections, trades, scheduled jobs or disk writes.
 from __future__ import annotations
 
 import argparse
-from collections import Counter
+from itertools import groupby
 from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
 import hashlib
@@ -189,8 +189,10 @@ def compare_editions(editions: list[dict], *, horizons=FUTURE_HORIZONS) -> dict:
     if not 2 <= len(editions) <= MAX_ARCHIVES or not horizons:
         raise SourceFormatError("Historical research needs 2-34 distinct released editions")
     indexed = {x["issue"]: x for x in editions}
-    if len(indexed) != len(editions) or any(x.get("original_first_release_bytes_certified") is not False for x in editions):
-        raise SourceFormatError("Multiple or unsupported archival forecast vintages")
+    if len(indexed) != len(editions):
+        raise SourceFormatError("Historical editions must be distinct")
+    if any(x.get("original_first_release_bytes_certified") is not False for x in editions):
+        raise SourceFormatError("Unsupported historical publication certification")
     ordered = sorted(editions, key=lambda x: x["official_release_day"])
     if any(a["official_release_day"] >= b["official_release_day"] for a, b in zip(ordered, ordered[1:])):
         raise SourceFormatError("Source vintage release chronology inconsistent")
@@ -246,10 +248,9 @@ def compare_editions(editions: list[dict], *, horizons=FUTURE_HORIZONS) -> dict:
                     "reference_character":"LATER_EDITION_HISTORICAL_REFERENCE_ESTIMATE_NOT_FINAL_TRADABLE_CLOSE",
                 })
     aggregates = []
-    for (inst,h),group in sorted(
-        __import__("itertools").groupby(sorted(report,key=lambda r:(
-            r["instrument_code"],r["horizon_calendar_months"])),
-            key=lambda r:(r["instrument_code"],r["horizon_calendar_months"]))):
+    for (inst,h),group in groupby(
+        sorted(report,key=lambda r:(r["instrument_code"],r["horizon_calendar_months"])),
+        key=lambda r:(r["instrument_code"],r["horizon_calendar_months"])):
         pairs=list(group)
         forecast_mae=sum(Decimal(x["absolute_source_forecast_error"]) for x in pairs)/len(pairs)
         naive_mae=sum(Decimal(x["absolute_naive_error"]) for x in pairs)/len(pairs)
