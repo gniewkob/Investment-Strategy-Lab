@@ -136,6 +136,9 @@ def parse_edition(issue: str, raw: bytes) -> dict:
             if title(row, 1) != code or title(row, 2) != name:
                 raise SourceFormatError("STEO WTI/Brent identity mismatch")
 
+        # Official jan22 XLSX includes calendar header years 2018–2023,
+        # and jan23 includes 2019–2024. Only these public header
+        # integers—not any simulated forecast outcomes—justify the range.
         years: dict[int, int] = {}
         for col, cell in cells.get(3, {}).items():
             if col < 3:
@@ -143,7 +146,7 @@ def parse_edition(issue: str, raw: bytes) -> dict:
             val = _price(cell)
             if val is None:
                 continue
-            if val != val.to_integral_value() or not 2020 <= val <= 2035:
+            if val != val.to_integral_value() or not 2018 <= val <= 2035:
                 raise SourceFormatError("STEO calendar year header invalid")
             years[col] = int(val)
         if not 3 <= len(years) <= 8:
