@@ -92,6 +92,11 @@ def _add_month(issue: date, offset: int) -> str:
 def parse_edition(issue: str, raw: bytes) -> dict:
     spec = catalog().get(issue)
     if spec is None:
+        # Separate predeclared 2022-2023 evaluation catalogue; retaining the
+        # original 2024-2026 catalog and historic CI proof untouched.
+        from scripts.steo_prior_period_validation import prior_catalog
+        spec = prior_catalog().get(issue)
+    if spec is None:
         raise SourceFormatError("Unknown officially released STEO edition")
     inspect_xlsx(raw)
     with ZipFile(BytesIO(raw)) as z:
@@ -118,7 +123,12 @@ def parse_edition(issue: str, raw: bytes) -> dict:
         # Internal "Forecast date" can precede PUBLIC release by several days.
         # It must NEVER be used as first market availability.
         if title(3, 1) != "Forecast date:":
-            raise SourceFormatError("STEO edition forecast-completed header absent")
+            # Official Jan22 source contains no A3 forecast-date label while
+            # retaining Table 2 identity, dated public release, year/month
+            # headers and named WTI/Brent rows. This optional A3 field is
+            # presentation metadata, NOT a market availability timestamp.
+            if not (issue.endswith("22") and title(3, 1) == ""):
+                raise SourceFormatError("STEO edition forecast-completed header absent")
         for row, code, name in (
             (6, "WTIPUUS", HEADERS["WTIPUUS"][1]),
             (7, "BREPUUS", HEADERS["BREPUUS"][1]),

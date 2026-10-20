@@ -19,11 +19,11 @@ def letters(num: int) -> str:
 
 
 def archived_fixture(issue="jan24", *, shift=0, missing_year=False, incorrect_name=False,
-                     change_future=False):
+                     change_future=False, first_year=2022, omit_forecast_date=False):
     """Valid OOXML test rows 2022-2027, different starting offset per edition."""
     rows={
         1:['<c r="B1" t="inlineStr"><is><t>Table 2.  Energy Prices</t></is></c>'],
-        3:['<c r="A3" t="inlineStr"><is><t>Forecast date:</t></is></c>'],
+        3:[] if omit_forecast_date else ['<c r="A3" t="inlineStr"><is><t>Forecast date:</t></is></c>'],
         4:['<c r="A4" t="inlineStr"><is><t>Tuesday</t></is></c>'],
         6:['<c r="A6" t="inlineStr"><is><t>WTIPUUS</t></is></c>',
            '<c r="B6" t="inlineStr"><is><t>'+
@@ -32,15 +32,15 @@ def archived_fixture(issue="jan24", *, shift=0, missing_year=False, incorrect_na
         7:['<c r="A7" t="inlineStr"><is><t>BREPUUS</t></is></c>',
            '<c r="B7" t="inlineStr"><is><t>Brent Spot Average</t></is></c>']
     }
-    for y in range(2022,2028):
-        start=3+shift+(y-2022)*12
+    for y in range(first_year,first_year+6):
+        start=3+shift+(y-first_year)*12
         if y != 2023 or not missing_year:
             rows[3].append(f'<c r="{letters(start)}3"><v>{y}</v></c>')
         for month in range(1,13):
             col=letters(start+month-1)
             rows[4].append(
                 f'<c r="{col}4" t="inlineStr"><is><t>{ev.MONTHS[month-1]}</t></is></c>')
-            base=70 + (y-2022)*1.5 + month * .4
+            base=70 + (y-first_year)*1.5 + month * .4
             for row in (6,7):
                 val=base+(5 if row==7 else 0)
                 if change_future and y>=2024 and month>=2:

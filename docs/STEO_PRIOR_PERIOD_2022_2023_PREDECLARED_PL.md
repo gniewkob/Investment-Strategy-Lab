@@ -1,5 +1,16 @@
 # STEO — niezależny okres badawczy 2022–2023: bramka zgodności źródeł
 
+## Etap wdrożenia: walidacja całego wcześniej niewykorzystanego okresu
+
+Po rzeczywistym, udanym pilotażu [GitHub Actions #39431172692](https://github.com/gniewkob/Investment-Strategy-Lab/actions/runs/39431172692): `jan22`, `jan23`, `dec23` to autentyczne EIA XLSX, arkusz `2tab`, WTI `WTIPUUS` rząd 6 oraz Brent `BREPUUS` rząd 7; `jan22` nie ma tekstowego A3 `Forecast date:` i parser **dopuszcza brak tego pomocniczego nagłówka tylko dla wydań 2022**, nigdy nie używając go jako daty dostępności.
+
+Niezależny `scripts/steo_prior_period_validation.py` zachowuje oddzielny `prior_catalog()` z **24 faktycznymi oficjalnymi datami wydania** 2022–2023. Dotychczasowy `steo_historical_archive.catalog()` = 34 wydania 2024–Oct26 nie zmienia się. Do oceny końca 2023 konieczne jest **8 kolejnych wydań Jan–Aug24 jako REFERENCJE JEDYNIE**; nie wchodzą do kohorty prognozowej 2022–2023.
+
+Program wymaga 24 + 8 = 32 poprawnych dokumentów, sprawdza 24 × 2 instrumenty × 3 horyzonty = **144 prognozy retrospektywne**, nie uzupełnia braków syntetycznie, stosuje nieruszane MAE EIA vs simple previous-month naive z TEGO SAMEGO historycznego dokumentu. Podaje źródłowy EIA release day dla 24 prognoz i późniejsze dane referencyjne `>= target_month + 2 miesiące`, a także grupy po roczniku wydania. Zwraca FAIL zamiast uznać niekompletną próbę.
+
+**Uwaga:** 2022–2023 to **wcześniej niezbadana starsza epoka**, a nie przyszły chronologiczny out-of-sample; nie zapewnia niezależnego dowodu realnego zysku, pierwotnego historycznego stanu bajtów, ani inwestowalności WTI/Brent. Wyniki realne zostaną zapisane dopiero po sukcesie publicznego jednorazowego joba `steo-prior-2022-23-fixed-once.yml`. Żadne dane źródłowe XLSX nie są trwale przechowywane przez to uruchomienie.
+
+
 **Cel:** sprawdzić już sformułowane wnioski z 2024–2026 na nieanalizowanych wcześniej archiwalnych wydaniach EIA. **Nie dopasowujemy zasad po poznaniu wyników.** Rok 2022 stanowi odrębny historyczny okres o silniejszych wahaniach cen energii; 2023 pozwala kontrolować wyniki także po nim. Nie jest to „przyszły out-of-sample” w sensie chronologii, tylko **wcześniej nieużywany okres historyczny**.
 
 ## Źródło
