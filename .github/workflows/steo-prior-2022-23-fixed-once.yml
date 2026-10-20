@@ -1,0 +1,80 @@
+name: STEO 2022-23 frozen-rule independent earlier-period research — one time
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/steo-prior-2022-23-fixed-once.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  official-prior-era-archived-source-research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Retrieve 24 prior issues and 8 reference-only 2024 issues, no state writes
+        run: |
+          python - <<'PY'
+          import hashlib
+          import json
+          import sys
+          import time
+          from scripts.steo_historical_archive import catalog, retrieve
+          from scripts.steo_monthly_forecast_eval import parse_edition
+          from scripts.steo_prior_period_validation import (
+              prior_catalog, retrieve_prior, fixed_rule_prior_period_report
+          )
+
+          earlier=prior_catalog()
+          bridge=list(catalog())[:8]
+          if len(earlier)!=24 or len(bridge)!=8:
+              raise ValueError("Predeclared historical source coverage changed")
+          early_docs=[]
+          bridge_docs=[]
+          for idx,issue in enumerate([*earlier,*bridge]):
+              try:
+                  raw,_=(retrieve_prior(issue) if issue in earlier
+                         else retrieve(issue))
+                  edition=parse_edition(issue,raw)
+                  if edition["original_first_release_bytes_certified"] is not False:
+                      raise ValueError("No original historic source bytes PIT certification")
+                  if issue in earlier:
+                      early_docs.append(edition)
+                  else:
+                      bridge_docs.append(edition)
+                  print("STEO_PRIOR_SOURCE_ORIGINAL_XLSX_VALIDATED "+
+                        json.dumps({
+                          "issue":issue,
+                          "role":"FROZEN_HISTORICAL_STRESS_FORECAST" if issue in earlier
+                                 else "POST_TARGET_REFERENCE_ONLY",
+                          "official_release_day":edition["official_release_day"],
+                          "original_html_or_xlsx_raw_sha256":hashlib.sha256(raw).hexdigest(),
+                          "wti_edition_months":len(edition["series"]["WTIPUUS"]),
+                          "brent_edition_months":len(edition["series"]["BREPUUS"]),
+                          "historical_as_published_bytes_certified":False,
+                        },sort_keys=True,separators=(",",":")),flush=True)
+                  if idx<31:
+                      time.sleep(.25)
+              except Exception as exc:
+                  print("STEO_PRIOR_FAIL_CLOSED_SOURCE "+issue+" "+
+                        type(exc).__name__,file=sys.stderr,flush=True)
+                  raise
+
+          result=fixed_rule_prior_period_report(early_docs,bridge_docs)
+          if (result["original_old_era_forecast_pairs"]!=144
+              or result["prior_editions"]!=24
+              or result["reference_only_bridge_editions"]!=8
+              or len(result["by_source_horizon"])!=6
+              or result["database_writes"]!=0
+              or result["real_orders"]!=0):
+              raise ValueError("Frozen historical older-set evaluation validation failed")
+          print("STEO_2022_2023_REAL_HISTORICAL_FROZEN_RULE_RESULT "+
+                json.dumps(result,sort_keys=True,separators=(",",":")),flush=True)
+          PY
