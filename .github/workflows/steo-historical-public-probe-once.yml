@@ -26,11 +26,13 @@ jobs:
           import json
           import sys
           from scripts.steo_historical_archive import catalog, retrieve, inspect_xlsx
+          from scripts.steo_xlsx_label_probe import inspect_price_table_labels
           issues = ("jan24","jan25","oct26")
           for issue in issues:
               try:
                   raw, official_url = retrieve(issue)
                   workbook = inspect_xlsx(raw)
+                  price_sheet = inspect_price_table_labels(raw, sheet_name='2tab')
                   record = {
                       "issue": issue,
                       "official_listed_release_day": catalog()[issue]["official_release_day"],
@@ -40,6 +42,9 @@ jobs:
                       "sheet_names": workbook["sheet_names"],
                       "sheet_count": workbook["sheet_count"],
                       "zip_member_count": workbook["zip_member_count"],
+                      "price_table_2_nonnumeric_labels": price_sheet["labels"],
+                      "price_table_2_numeric_year_header_cells": price_sheet["numeric_year_headers"],
+                      "numeric_price_values_exposed": 0,
                       "database_connections": 0,
                       "database_writes": 0,
                       "real_orders": 0,
