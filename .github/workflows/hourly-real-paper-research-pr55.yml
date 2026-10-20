@@ -1,0 +1,86 @@
+name: Hourly reference paper tournament - PR55 one-shot
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+    paths:
+      - scripts/hourly_real_paper_research.py
+      - tests/test_hourly_real_paper_research.py
+      - docs/PAPER_HOURLY_REAL_REFERENCE_RESEARCH_2026_10_20_PL.md
+      - .github/workflows/hourly-real-paper-research-pr55.yml
+
+permissions:
+  contents: read
+
+jobs:
+  full-offline-regression:
+    if: github.event.pull_request.number == 55 && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install existing offline test adapter only
+        run: python -m pip install 'psycopg[binary]>=3.2,<4'
+      - name: All Python tests including new source-lag bridge tests
+        run: python -m unittest discover -s tests -v
+      - name: Source code should not use authenticated orders or database credentials
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path("scripts/hourly_real_paper_research.py").read_text()
+          forbidden=("coinbase_orders", "mcp__Coinbase", "psycopg",
+                     "sqlalchemy", "NEON_DATABASE_URL", "os.environ",
+                     "os.getenv", "api_key", "Authorization", "subprocess",
+                     "INSERT INTO", "DELETE FROM", "UPDATE investment_lab.")
+          assert not any(s in p for s in forbidden), "source probe may be read-only only"
+          print("NO_BROKER_ORDER_OR_DATABASE_ACCESS_PATH")
+          PY
+
+  isolated-postgres-existing:
+    if: github.event.pull_request.number == 55 && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: investment_lab
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: disposable-ci-fixture-only
+        ports: [5432:5432]
+        options: >-
+          --health-cmd "pg_isready -U postgres -d investment_lab"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      ISL_TEST_POSTGRES_URL: postgresql://postgres:disposable-ci-fixture-only@127.0.0.1:5432/investment_lab
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install 'psycopg[binary]>=3.2,<4'
+      - name: Existing immutable PIT integration in disposable container only
+        run: python -m unittest discover -s tests/integration -p 'test_eia_versioned_pg.py' -v
+
+  public-61day-once:
+    if: github.event.pull_request.number == 55 && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Historical public reference research; no account, secrets or writes
+        run: python -m scripts.hourly_real_paper_research
