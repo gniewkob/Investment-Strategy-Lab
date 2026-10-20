@@ -1,0 +1,93 @@
+name: Paper Strategy Tournament PR53 - offline verification
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+    paths:
+      - .github/workflows/paper-strategy-tournament-pr53.yml
+      - scripts/paper_strategy_tournament.py
+      - tests/test_paper_strategy_tournament.py
+      - scripts/paper_tournament_synthetic_demo.py
+      - tests/test_paper_tournament_synthetic_demo.py
+      - scripts/coinbase_public_hourly_research.py
+      - tests/test_coinbase_public_hourly_research.py
+      - docs/PAPER_STRATEGY_TOURNAMENT_V1_DELIVERY_2026_10_20_PL.md
+
+permissions:
+  contents: read
+
+jobs:
+  full-offline-tests:
+    if: github.event.pull_request.number == 53 && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install only existing offline test adapter (no database connection)
+        run: python -m pip install 'psycopg[binary]>=3.2,<4'
+      - name: Complete synthetic/offline test suite
+        run: python -m unittest discover -s tests -v
+      - name: Repeatable 1h and 1d pure synthetic educational demonstration
+        run: python -m scripts.paper_tournament_synthetic_demo
+      - name: Block direct broker, databases and environment credentials from the pure tournament module
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          code = Path("scripts/paper_strategy_tournament.py").read_text()
+          forbidden = ("requests.", "urlopen", "psycopg", "sqlalchemy",
+                       "os.getenv", "os.environ", "coinbase_orders",
+                       "NEON_DATABASE_URL", "INSERT INTO", "UPDATE investment_lab.",
+                       "DELETE FROM", "subprocess", "socket.", "eval(", "exec(")
+          assert not any(token in code for token in forbidden), "unexpected side-effect path in offline module"
+          print("PURE_PAPER_TOURNAMENT_NO_BROKER_DATABASE_SECRETS_OR_NETWORK")
+          PY
+
+  isolated-postgres-existing-tests:
+    if: github.event.pull_request.number == 53 && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: investment_lab
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: disposable-ci-fixture-only
+        ports: [5432:5432]
+        options: >-
+          --health-cmd "pg_isready -U postgres -d investment_lab"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      ISL_TEST_POSTGRES_URL: postgresql://postgres:disposable-ci-fixture-only@127.0.0.1:5432/investment_lab
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install disposable container-only PostgreSQL adapter
+        run: python -m pip install 'psycopg[binary]>=3.2,<4'
+      - name: Run existing isolated PIT/schema integration suite
+        run: python -m unittest discover -s tests/integration -p 'test_eia_versioned_pg.py' -v
+
+  public-source-one-shot:
+    if: github.event.pull_request.number == 53 && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Two bounded public Coinbase read-only hourly requests; no credentials or trading
+        run: python -m scripts.coinbase_public_hourly_research
