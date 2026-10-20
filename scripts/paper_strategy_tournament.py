@@ -10,7 +10,7 @@ ASSETS=("BTC","ETH")
 POLICIES=("equal_dca","momentum","mean_reversion","risk_filter","ensemble")
 LOOKBACK={"1h":24,"1d":20}
 STEP={"1h":timedelta(hours=1),"1d":timedelta(days=1)}
-MAX_BARS=20000
+MAX_BARS=60000
 MAX_FX_AGE=timedelta(days=5)
 BAND=Decimal(".03")
 
