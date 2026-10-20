@@ -24,6 +24,9 @@ on:
       - tests/test_steo_prior_period_validation.py
       - scripts/steo_official_notice_audit.py
       - tests/test_steo_official_notice_audit.py
+      - scripts/steo_zenodo_vintage_crosscheck.py
+      - tests/test_steo_zenodo_vintage_crosscheck.py
+      - docs/STEO_INDEPENDENT_ZENODO_2025_EVIDENCE_PL.md
       - docs/STEO_OFFICIAL_ERRATA_PROVENANCE_2026_10_20_PL.md
       - docs/STEO_PRIOR_2022_2023_REAL_RESULTS_PL.md
       - docs/STEO_MATURED_LABEL_ROBUSTNESS_PL.md
@@ -69,6 +72,9 @@ on:
       - tests/test_steo_prior_period_validation.py
       - scripts/steo_official_notice_audit.py
       - tests/test_steo_official_notice_audit.py
+      - scripts/steo_zenodo_vintage_crosscheck.py
+      - tests/test_steo_zenodo_vintage_crosscheck.py
+      - docs/STEO_INDEPENDENT_ZENODO_2025_EVIDENCE_PL.md
       - docs/STEO_OFFICIAL_ERRATA_PROVENANCE_2026_10_20_PL.md
       - docs/STEO_PRIOR_2022_2023_REAL_RESULTS_PL.md
       - docs/STEO_MATURED_LABEL_ROBUSTNESS_PL.md
