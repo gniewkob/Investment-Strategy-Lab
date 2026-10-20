@@ -11,15 +11,15 @@ The existing [36/36 report](STEO_INDEPENDENT_ZENODO_36_BYTE_MATCH_2026_10_20_PL.
 | --- | --- | --- | --- | --- |
 | `nov23` | 2023-11-07 | Not recovered | Not possible without captured original workbook | **UNKNOWN** |
 | `jan24` | 2024-01-09 | Not recovered | Not possible without captured original workbook | **UNKNOWN** |
-| `jan25` | To be independently reconfirmed before acceptance | Not recovered | Not possible without captured original workbook | **UNKNOWN** |
+| `jan25` | 2025-01-14 (official EIA archive) | Not recovered | Not possible without captured original workbook | **UNKNOWN** |
 
-The [official EIA STEO archive](https://www.eia.gov/outlooks/steo/outlook.php) exposes release dates and XLSX links, but contemporaneous web pages are **not** independently timestamped original file captures. The 2023 November notice documents reposting of other tables, without establishing unchanged WTI/Brent Table 2 or original XLSX byte status; see [notice register](STEO_OFFICIAL_ERRATA_PROVENANCE_2026_10_20_PL.md).
+The [official EIA STEO archive](https://www.eia.gov/outlooks/steo/outlook.php) verifies January 2025 release as **2025-01-14** (with separate official correction notice), in addition to the other dates, and exposes release dates and XLSX links, but contemporaneous web pages are **not** independently timestamped original file captures. The 2023 November notice documents reposting of other tables, without establishing unchanged WTI/Brent Table 2 or original XLSX byte status; see [notice register](STEO_OFFICIAL_ERRATA_PROVENANCE_2026_10_20_PL.md).
 
-**Internet Archive Wayback CDX**: attempted public index URL query for `jan24_base.xlsx`; client returned *not accessible*. **Not evidence that no capture exists**. No replay WARC/HTTP body, timestamp, or binary SHA-256 recovered. Therefore no hash equality or WTI/Brent equivalence conclusion.
+**Internet Archive Wayback CDX**: retried public index URL query for `jan24_base.xlsx` in the 2024 window; client returned *not accessible*. **Not evidence that no capture exists**. No replay WARC/HTTP body, timestamp, or binary SHA-256 recovered. Therefore no hash equality or WTI/Brent equivalence conclusion.
 
 **Common Crawl**: [official index catalogue](https://index.commoncrawl.org/collinfo.json) and [format/access documentation](https://www.commoncrawl.org/get-started) confirmed that 2023–2024 index and WARC collections exist and expose timestamped crawls in principle. Attempted `CC-MAIN-2024-10-index` query for the `jan24_base.xlsx` exact URL, but the index query endpoint was not accessible in this browsing client. The mere existence of a crawl index is **not evidence it contains this Excel attachment**. No relevant index record, WARC payload, SHA-256, or Table 2 values were obtained.
 
-A discovered third-party GitHub STEO scraping project contains processed artefacts, not a verified dated original-month XLSX capture with independent binary receipt. It has **not** been treated as original byte evidence.
+Independent [Archive-It CDX/C documentation](https://support.archive-it.org/hc/en-us/articles/115001790023-Access-Archive-It-s-Wayback-index-with-the-CDX-C-API) identifies another collection-scoped archived index with timestamp and WARC retrieval metadata, but no STEO capture verified there. A discovered third-party GitHub STEO scraping project contains processed artefacts, not a verified dated original-month XLSX capture with independent binary receipt. It has **not** been treated as original byte evidence.
 
 ## Acceptance gates for any future promotion from UNKNOWN
 1. Verify curator independence, actual immutable archive/capture timestamp and canonical captured target URL against official EIA release day; distinguish dated index metadata, redirect, link-only HTML and genuine binary HTTP 200 payload.
