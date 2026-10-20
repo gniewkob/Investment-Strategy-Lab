@@ -46,6 +46,8 @@ def _check(result: dict, editions: list[dict]) -> list[dict]:
     if any(x.get("original_first_release_bytes_certified") is not False for x in editions):
         raise SourceFormatError("Independent original publication proof not available")
     source_issues={x["issue"]:x["official_release_day"] for x in editions}
+    source_docs={x["issue"]:x for x in editions}
+    series_codes={v[0]:k for k,v in HEADERS.items()}
     rows = result["paired_records"]
     if not rows or result["paired_target_forecasts"] != len(rows):
         raise SourceFormatError("Missing paired target observations")
@@ -64,6 +66,20 @@ def _check(result: dict, editions: list[dict]) -> list[dict]:
                 date.fromisoformat(target+"-01") <= date.fromisoformat(issued) or
                 date.fromisoformat(ref) <= date.fromisoformat(issued)):
             raise SourceFormatError("Invalid chronological forecast and reference pairing")
+        target_date=date.fromisoformat(target+"-01")
+        issue_date=date.fromisoformat(issued[:7]+"-01")
+        min_reference_month=_add_month(target_date,2)
+        if (target != _add_month(issue_date,horizon)
+                or ref[:7] < min_reference_month):
+            raise SourceFormatError("Paired source target or reference cutoff chronology invalid")
+        code=series_codes[instrument]
+        old=source_docs[row["forecast_edition"]]["series"][code]
+        later=source_docs[row["reference_edition"]]["series"][code]
+        month_before_issue=_add_month(issue_date,-1)
+        if (old.get(target) != row["source_forecast_value"]
+                or old.get(month_before_issue) != row["same_edition_previous_month_naive_value"]
+                or later.get(target) != row["later_edition_reference_value"]):
+            raise SourceFormatError("Paired forecast fields disagree with archived source edition")
         rowkey = (instrument, horizon, target)
         if rowkey in keys:
             raise SourceFormatError("Duplicate same-instrument/horizon target month")
