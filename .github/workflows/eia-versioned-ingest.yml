@@ -18,6 +18,9 @@ on:
       - tests/test_steo_xlsx_label_probe.py
       - scripts/steo_monthly_forecast_eval.py
       - tests/test_steo_monthly_forecast_eval.py
+      - scripts/steo_robustness_audit.py
+      - tests/test_steo_robustness_audit.py
+      - docs/STEO_MATURED_LABEL_ROBUSTNESS_PL.md
       - docs/STEO_VINTAGE_FORECAST_ERRORS_RESEARCH_PL.md
       - docs/STEO_HISTORICAL_ARCHIVE_RESEARCH_PL.md
       - docs/EIA_MYDEVIL_OVH_ARCHIVE_READINESS_PL.md
@@ -54,6 +57,9 @@ on:
       - tests/test_steo_xlsx_label_probe.py
       - scripts/steo_monthly_forecast_eval.py
       - tests/test_steo_monthly_forecast_eval.py
+      - scripts/steo_robustness_audit.py
+      - tests/test_steo_robustness_audit.py
+      - docs/STEO_MATURED_LABEL_ROBUSTNESS_PL.md
       - docs/STEO_VINTAGE_FORECAST_ERRORS_RESEARCH_PL.md
       - docs/STEO_HISTORICAL_ARCHIVE_RESEARCH_PL.md
       - docs/EIA_MYDEVIL_OVH_ARCHIVE_READINESS_PL.md
