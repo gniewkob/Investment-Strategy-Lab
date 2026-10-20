@@ -192,7 +192,7 @@ def compare_editions(editions: list[dict], *, horizons=FUTURE_HORIZONS) -> dict:
     if len(indexed) != len(editions):
         raise SourceFormatError("Historical editions must be distinct")
     if any(x.get("original_first_release_bytes_certified") is not False for x in editions):
-        raise SourceFormatError("Unsupported historical publication certification")
+        raise SourceFormatError("unsupported historical publication certification")
     ordered = sorted(editions, key=lambda x: x["official_release_day"])
     if any(a["official_release_day"] >= b["official_release_day"] for a, b in zip(ordered, ordered[1:])):
         raise SourceFormatError("Source vintage release chronology inconsistent")
