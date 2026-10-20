@@ -1,5 +1,20 @@
 # STEO: rzeczywiste kopie Wayback 2022–25 i porównanie źródłowe
 
+## NOWY DOWÓD — 2026-10-20: `jun24` Table 10b sprzed/po dacie oficjalnej korekty — RZECZYWISTY AUDYT CI
+
+- **Rzeczywisty GitHub Actions [#39492595224](https://github.com/gniewkob/Investment-Strategy-Lab/actions/runs/39492595224): SUCCESS**, kod źródłowy commita `25a7d9a859999d9f05b4fcc8a982f654230e6669` (nie błędnie przypisywać go starszym sukcesom). Workflow wywołany automatycznie przez PR #52, bez sekretów/Neon/zleceń i bez harmonogramu. Testy syntetyczne: **6/6 PASS**, niezależny *rzeczywisty* read-only replay **2/2 pobrane i zweryfikowane**. Testy syntetyczne nie stanowią dowodów cen; ponowne pobranie prawdziwych XLSX stanowi odrębny dowód.
+- **13.06.2024 19:04:15 UTC**: Memento HTTPS 200, `1 024 116` bajtów, SHA-256 `dde84a2e66e7652b75a2db8f6e24059e05d105a4d2dcce59dc1f920a717487c7`; źródło: [dokładny XLSX replay](https://web.archive.org/web/20240613190415id_/https://www.eia.gov/outlooks/steo/archives/jun24_base.xlsx).
+- **02.10.2024 19:57:59 UTC**: Memento HTTPS 200, `1 024 084` bajty, SHA-256 `12cd939ba0d9d6b559d56d40cc0650e99c57d249fff1ecc691af601a2e0de636`; źródło: [dokładny XLSX replay](https://web.archive.org/web/20241002195759id_/https://www.eia.gov/outlooks/steo/archives/jun24_base.xlsx). Brak przekierowania na nowszy snapshot.
+- Odczytano rzeczywisty arkusz `10btab`, zidentyfikowano dwie unikatowe serie w kolumnie A, bez wykonywania formuł; porównano zapisane oryginalne wartości numeryczne przez `Decimal` z obu plików. **`SNGPRPM` 53/53 komórki zmieniły zapisaną wartość; `SNGPRL48` 53/53; RAZEM 106/106 zmienionych wartości.** Żaden odczytany wiersz nie był brakujący.
+- Konkretne dowody porównania: `SNGPRPM!AA24` przed: `15.822678518`, po: `12.873640133306871`; `SNGPRL48!AA15` przed: `78.727263058999995`, po: `75.778224674588245`. Pełny zestaw **106 zmian** z dokładnymi starymi/nowymi wartościami jest w surowym logu CI, rekord `STEO_JUN24_TABLE10B_REAL_RESULT`. Wykryto także 106 zmian komórek z formułami włącznie; w obu przykładach pole formula jest `null`.
+- [Oficjalny komunikat EIA z 27.06.2024](https://www.eia.gov/outlooks/steo/archives/notice_data_06_27_2024.php) wymienia **dokładnie te dwie serie** i informuje o repost o 13:30 EDT. **Mamy istotną i precyzyjną korelację nazw serii oraz realnych zmian między kopiami sprzed/po, ale nie dowiedliśmy, że konkretna zmiana nastąpiła *dokładnie* w chwili korekty ani że nie było innych modyfikacji pomiędzy przechwyceniami.** `causal_attribution_to_notice_proven=false`.
+- Zachowana [wcześniejsza analiza Table 2](#jun24-potwierdzona-zmiana-bajtów-wtibrent-bez-wykrytej-zmiany) dokumentuje **144/144 niezmienionych wartości WTI/Brent**. Nowy kod nie powtarzał kontroli Table 2; nie mylić zmian w Table 10b z błędem prognoz cen WTI/Brent. `historical_first_release_bytes_certified=false`; źródłowo autentyczne konkretne momenty capture ≠ autentyczne pierwsze bajty z 11 czerwca 2024.
+- Zakres techniczny: `scripts/steo_jun24_repost_audit.py`, `tests/test_steo_jun24_repost_audit.py`, `.github/workflows/steo-jun24-repost-proof-pr52.yml`. Żadnych surowych XLSX w repo/artefaktach GitHub, żadnych zapisów w Neon/zmian uprawnień/harmonogramów/modeli/strategii/transakcji. `M1–M3=HOLD_NO_CHANGE`.
+
+**Status dowodowy:** `jun24_two_timestamp_original_byte_mismatch=PASS; jun24_Table10b_two_target_series_value_difference=PASS; jun24_first_release_PIT=UNKNOWN`. Historyczny wynik 36/36 May2025 ↔ Oct2026 nadal obowiązuje dla porównywanych dat.
+
+---
+
 Zweryfikowano: **2026-10-20**, zakończenie zestawienia `2026-10-20T18:36:27.803698+00:00`. Research only; M1–M3 `HOLD_NO_CHANGE`.
 
 ## Nowe ustalenia — zastępują wcześniejszy status braku pobranych bajtów
