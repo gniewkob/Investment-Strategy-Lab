@@ -164,7 +164,10 @@ def parse_edition(issue: str, raw: bytes) -> dict:
                 cell = cells[row].get(col)
                 value = _price(cell) if cell is not None else None
                 if value is not None:
-                    values[target_month] = str(value)
+                    # EIA Table 2 displays USD/bbl monthly values at cent
+                    # precision. Normalize XLSX binary-float cache tails
+                    # (e.g. 71.900000000000006) without changing raw SHA.
+                    values[target_month] = str(value.quantize(Decimal("0.01")))
             if len(values) < 18:
                 raise SourceFormatError("Insufficient STEO monthly reference-price cells")
             series[code] = values

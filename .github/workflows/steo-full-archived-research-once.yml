@@ -1,0 +1,113 @@
+name: STEO 34 archived monthly releases — one-time historical forecast research
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/steo-full-archived-research-once.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  official-public-historical-forecast-evaluation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Retrospectively compare 34 OFFICIAL archived EIA releases (no persistence or trading)
+        run: |
+          python - <<'PY'
+          from collections import defaultdict
+          from decimal import Decimal
+          import hashlib
+          import json
+          from statistics import median
+          import sys
+          import time
+
+          from scripts.steo_historical_archive import catalog, retrieve
+          from scripts.steo_monthly_forecast_eval import parse_edition, compare_editions
+
+          sources = catalog()
+          if len(sources) != 34:
+              raise ValueError("Unexpected official archive edition count")
+          vintages = []
+          for idx, issue in enumerate(sources):
+              try:
+                  source_bytes, _ = retrieve(issue)
+                  vintage = parse_edition(issue, source_bytes)
+                  vintages.append(vintage)
+                  evidence = {
+                      "issue": issue,
+                      "listed_release_day": vintage["official_release_day"],
+                      "archive_original_sha256_acquired_today": hashlib.sha256(source_bytes).hexdigest(),
+                      "wti_reference_months": len(vintage["series"]["WTIPUUS"]),
+                      "brent_reference_months": len(vintage["series"]["BREPUUS"]),
+                      "as_published_historical_bytes_certified": False,
+                  }
+                  print("STEO_ARCHIVED_REAL_ISSUE_VERIFIED "+
+                        json.dumps(evidence,sort_keys=True,separators=(",",":")),flush=True)
+                  # Avoid hitting public EIA too rapidly during this one-off study.
+                  if idx != len(sources)-1:
+                      time.sleep(0.3)
+              except Exception as exc:
+                  print("STEO_ARCHIVED_SOURCE_ISSUE_FAILED "+issue+" "+
+                        type(exc).__name__,file=sys.stderr,flush=True)
+                  raise
+
+          result = compare_editions(vintages)
+          if result["source_editions"] != 34 or result["paired_target_forecasts"] < 20:
+              raise ValueError("Insufficient archive editions or reported forecast pairs")
+          if result["historical_source_as_published_bytes_certified"] is not False:
+              raise ValueError("Invalid historical publication certification")
+          if result["database_connections"] != 0 or result["database_writes"] != 0 or result["real_orders"] != 0:
+              raise ValueError("Forbidden side effect reported")
+
+          by_year = defaultdict(list)
+          for item in result["paired_records"]:
+              by_year[(item["edition_release_day"][:4],
+                       item["instrument_code"],
+                       item["horizon_calendar_months"])].append(item)
+
+          groups = []
+          for (year, code, horizon), pairs in sorted(by_year.items()):
+              def mae(key):
+                  return str((sum(Decimal(p[key]) for p in pairs) / len(pairs))
+                            .quantize(Decimal(".01")))
+              groups.append({
+                  "forecast_issue_year": year,
+                  "instrument_code": code,
+                  "horizon_calendar_months": horizon,
+                  "paired_forecasts": len(pairs),
+                  "eia_mae_usd_per_barrel": mae("absolute_source_forecast_error"),
+                  "same_edition_naive_mae_usd_per_barrel": mae("absolute_naive_error"),
+                  "eia_better_individual_pair_count": sum(
+                      Decimal(p["absolute_source_forecast_error"]) <
+                      Decimal(p["absolute_naive_error"]) for p in pairs),
+              })
+          overview = {
+              "status": "STEO_ALL_34_OFFICIAL_HISTORICAL_RELEASES_RETROSPECTIVE_RESEARCH_COMPLETE",
+              "source_editions": result["source_editions"],
+              "paired_target_forecasts": result["paired_target_forecasts"],
+              "all_time_paired_mae_by_horizon": result["aggregates"],
+              "by_forecast_year": groups,
+              "report_reference_policy": result["reference_policy"],
+              "historical_pit_source_bytes_certified": False,
+              "independent_original_publication_time_certified": False,
+              "future_predictive_edge_established": False,
+              "source_values_type": "STE0_MONTHLY_SPOT_PRICE_REFERENCE_USD_PER_BARREL_NOT_TRADABLE_RETURNS",
+              "database_connections": 0,
+              "database_writes": 0,
+              "orders": 0,
+              "virtual_allocations_changed": 0,
+              "artifacts_persisted": 0,
+              "schedules_created": 0,
+          }
+          print("STEO_REAL_34_RELEASE_HISTORICAL_FORECAST_RESULT "+
+                json.dumps(overview,sort_keys=True,separators=(",",":")),flush=True)
+          PY
