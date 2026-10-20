@@ -9,6 +9,9 @@ on:
       - scripts/eia_archive_local.py
       - scripts/eia_archive_storage_preflight.py
       - tests/test_eia_archive_storage_preflight.py
+      - scripts/eia_prospective_archive_research.py
+      - tests/test_eia_prospective_archive_research.py
+      - docs/EIA_PROSPECTIVE_ARCHIVE_RESEARCH_PL.md
       - docs/EIA_MYDEVIL_OVH_ARCHIVE_READINESS_PL.md
       - tests/test_eia_raw_archive.py
       - tests/test_eia_archive_cli.py
@@ -34,6 +37,9 @@ on:
       - scripts/eia_archive_local.py
       - scripts/eia_archive_storage_preflight.py
       - tests/test_eia_archive_storage_preflight.py
+      - scripts/eia_prospective_archive_research.py
+      - tests/test_eia_prospective_archive_research.py
+      - docs/EIA_PROSPECTIVE_ARCHIVE_RESEARCH_PL.md
       - docs/EIA_MYDEVIL_OVH_ARCHIVE_READINESS_PL.md
       - tests/test_eia_raw_archive.py
       - tests/test_eia_archive_cli.py
