@@ -14,11 +14,9 @@ def eligible_editions():
     originals=[]
     for issue in prior.prior_catalog():
         # Jan22 original source lacks A3 labelled forecast-completion text.
-        raw=archived_fixture(issue)
-        if issue=="jan22":
-            raw=raw.replace(b'<c r="A3" t="inlineStr"><is><t>Forecast date:</t></is></c>',b"")
+        raw=archived_fixture(issue,first_year=2021,omit_forecast_date=(issue=="jan22"))
         originals.append(parse_edition(issue,raw))
-    bridge=[parse_edition(issue,archived_fixture(issue))
+    bridge=[parse_edition(issue,archived_fixture(issue,first_year=2021))
             for issue in list(prior.catalog())[:8]]
     return originals,bridge
 
@@ -35,8 +33,7 @@ class STEOPriorHistoricalPeriodTests(TestCase):
         self.assertTrue(set(c).isdisjoint(prior.catalog()))
 
     def test_prior_pilot_jan22_allows_missing_non_public_forecast_date(self):
-        raw=archived_fixture("jan22")
-        raw=raw.replace(b'<c r="A3" t="inlineStr"><is><t>Forecast date:</t></is></c>',b"")
+        raw=archived_fixture("jan22",omit_forecast_date=True)
         edition=parse_edition("jan22",raw)
         self.assertEqual(edition["official_release_day"],"2022-01-11")
         self.assertEqual(edition["available_not_before_utc_date"],"2022-01-12")
@@ -45,8 +42,7 @@ class STEOPriorHistoricalPeriodTests(TestCase):
         self.assertFalse(edition["original_first_release_bytes_certified"])
 
     def test_missing_forecast_header_in_2023_remains_rejected(self):
-        raw=archived_fixture("jan23").replace(
-            b'<c r="A3" t="inlineStr"><is><t>Forecast date:</t></is></c>',b"")
+        raw=archived_fixture("jan23",omit_forecast_date=True)
         with self.assertRaisesRegex(SourceFormatError,"forecast-completed"):
             parse_edition("jan23",raw)
 
