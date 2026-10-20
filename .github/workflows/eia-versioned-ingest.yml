@@ -7,6 +7,9 @@ on:
       - tests/test_eia_readonly_audit.py
       - src/isl_v2/eia_raw_archive.py
       - scripts/eia_archive_local.py
+      - scripts/eia_archive_storage_preflight.py
+      - tests/test_eia_archive_storage_preflight.py
+      - docs/EIA_MYDEVIL_OVH_ARCHIVE_READINESS_PL.md
       - tests/test_eia_raw_archive.py
       - tests/test_eia_archive_cli.py
       - docs/EIA_ORIGINAL_HTML_ARCHIVE_PL.md
@@ -29,6 +32,9 @@ on:
       - tests/test_eia_readonly_audit.py
       - src/isl_v2/eia_raw_archive.py
       - scripts/eia_archive_local.py
+      - scripts/eia_archive_storage_preflight.py
+      - tests/test_eia_archive_storage_preflight.py
+      - docs/EIA_MYDEVIL_OVH_ARCHIVE_READINESS_PL.md
       - tests/test_eia_raw_archive.py
       - tests/test_eia_archive_cli.py
       - docs/EIA_ORIGINAL_HTML_ARCHIVE_PL.md
