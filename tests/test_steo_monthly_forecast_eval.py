@@ -89,15 +89,15 @@ class STEOForecastMonthlyTests(TestCase):
         self.assertEqual(out["source_editions"],2)
         self.assertFalse(out["historical_source_as_published_bytes_certified"])
         self.assertEqual(out["reference_policy"],
-                         "FIRST_AVAILABLE_ARCHIVED_EDITION_AT_LEAST_TWO_CALENDAR_MONTHS_AFTER_TARGET")
+                         "FIRST_SAMPLED_LATER_EDITION_AT_LEAST_TWO_CALENDAR_MONTHS_AFTER_TARGET")
         row=next(x for x in out["paired_records"]
                  if x["instrument_code"]=="WTI_EIA_STEO_USD_BBL"
                  and x["target_month"]=="2024-02")
         self.assertEqual(row["forecast_edition"],"jan24")
         self.assertEqual(row["reference_edition"],"jan25")
         self.assertEqual(row["horizon_calendar_months"],1)
-        self.assertEqual(row["source_forecast_value"],"74.30")
-        self.assertEqual(row["later_edition_reference_value"],"82.30")
+        self.assertEqual(row["source_forecast_value"],"73.80")
+        self.assertEqual(row["later_edition_reference_value"],"81.80")
         self.assertEqual(row["same_edition_previous_month_naive_value"],"73.40")
         self.assertEqual(row["absolute_source_forecast_error"],"8.00")
         self.assertEqual(out["database_writes"],0)
@@ -121,7 +121,7 @@ class STEOForecastMonthlyTests(TestCase):
     def test_release_date_not_replaced_by_forecast_completion(self):
         obj=ev.parse_edition("jan25",archived_fixture("jan25"))
         self.assertEqual(obj["official_release_day"],"2025-01-14")
-        self.assertEqual(obj["available_not_before_utc_date"],date(2025,1,15).toordinal())
+        self.assertEqual(obj["available_not_before_utc_date"],"2025-01-15")
 
     def test_duplicate_issue_and_spoofed_pit_fail_closed(self):
         x=ev.parse_edition("jan24",archived_fixture())
