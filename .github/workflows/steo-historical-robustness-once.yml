@@ -1,0 +1,97 @@
+name: STEO archived 34-vintage robustness — one-time, public read-only
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/steo-historical-robustness-once.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  official-archive-walkforward-and-revision-sensitivity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Actual historic EIA source GET, strict as-of labels and revision sensitivity
+        run: |
+          python - <<'PY'
+          import hashlib
+          import json
+          import sys
+          import time
+          from scripts.steo_historical_archive import catalog, retrieve
+          from scripts.steo_monthly_forecast_eval import parse_edition, compare_editions
+          from scripts.steo_robustness_audit import walkforward_audit, reference_revision_audit
+
+          sources=catalog()
+          if len(sources)!=34:
+              raise ValueError("Unexpected historical STEO catalog count")
+          parsed=[]
+          for idx,issue in enumerate(sources):
+              try:
+                  raw,_=retrieve(issue)
+                  report=parse_edition(issue,raw)
+                  parsed.append(report)
+                  print("STEO_ROBUSTNESS_REAL_SOURCE_VERIFIED "+
+                        json.dumps({
+                            "issue":issue,
+                            "official_release_day":report["official_release_day"],
+                            "original_raw_xlsx_sha256":hashlib.sha256(raw).hexdigest(),
+                            "original_historical_publication_bytes_certified":False,
+                        },sort_keys=True,separators=(",",":")),flush=True)
+                  if idx!=len(sources)-1:
+                      time.sleep(.25)
+              except Exception as exc:
+                  print("STEO_ROBUSTNESS_SOURCE_FAILED "+issue+" "+type(exc).__name__,
+                        file=sys.stderr,flush=True)
+                  raise
+
+          original=compare_editions(parsed)
+          if original["source_editions"]!=34 or original["paired_target_forecasts"]!=172:
+              raise ValueError("Real-source paired forecast coverage changed; investigate before interpreting")
+          walk=walkforward_audit(original,parsed,min_matured=6)
+          revise=reference_revision_audit(original,parsed)
+          assert len(walk["groups"])==6 and len(revise["groups"])==6
+          assert all(g["no_future_labels_used_in_rule_selection"] for g in walk["groups"])
+          if any(g["eligible_chronological_evaluations"]<=0 for g in walk["groups"]):
+              raise ValueError("Insufficient source-matured historical evaluation coverage")
+          report={
+              "status":"STEO_34_EDITION_WALKFORWARD_AND_REVISION_ROBUSTNESS_REAL_SOURCE_PASS",
+              "source_editions":len(parsed),
+              "source_paired_forecasts":original["paired_target_forecasts"],
+              "walkforward":{
+                  "status":walk["status"],
+                  "min_matured_known_before_forecast":6,
+                  "evaluated_forecasts":sum(g["eligible_chronological_evaluations"]
+                                            for g in walk["groups"]),
+                  "unique_instrument_target_months_across_horizons":
+                      walk["unique_instrument_target_months_across_all_horizons"],
+                  "target_months_reused_across_different_horizons":
+                      walk["reused_target_months_across_horizons"],
+                  "groups":[{key:value for key,value in group.items() if key!="decisions"}
+                            for group in walk["groups"]],
+              },
+              "reference_revision_sensitivity":{
+                  "status":revise["status"],
+                  "groups":revise["groups"],
+              },
+              "official_original_historical_bytes_PIT_certified":False,
+              "future_predictive_edge_established":False,
+              "spot_reference_is_investable_portfolio_return":False,
+              "database_connections":0,
+              "database_writes":0,
+              "orders":0,
+              "portfolio_allocations_changed":0,
+              "source_workbooks_committed_or_uploaded":0,
+              "scheduled_jobs_created":0,
+          }
+          print("STEO_34_REAL_WALKFORWARD_ROBUSTNESS_RESULT "+
+                json.dumps(report,sort_keys=True,separators=(",",":")),flush=True)
+          PY
