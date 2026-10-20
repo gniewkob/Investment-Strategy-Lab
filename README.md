@@ -1,5 +1,8 @@
 # Investment Strategy Lab
 
+> **MyDevil archive readiness (20 October 2026):** [PR #37](https://github.com/gniewkob/Investment-Strategy-Lab/pull/37) merged after **235/235 offline + 3/3 disposable PostgreSQL integration tests**. New `scripts/eia_archive_storage_preflight.py` inspects an already existing private POSIX archive root **READ ONLY** without logging paths or creating files. This does **not** verify actual MyDevil quota, ZFS restore, persistence or WORM; SSH unavailable in current runtime, so no MyDevil remote check was performed. OVHcloud Object Storage Object Lock is a candidate independent WORM backend, **not configured or approved**. Live Neon versioned EIA source/price rows 0, writer role absent. [Read-only/MyDevil + OVH plan](docs/EIA_MYDEVIL_OVH_ARCHIVE_READINESS_PL.md).
+
+
 > **Source-byte provenance upgrade — [PR #36](https://github.com/gniewkob/Investment-Strategy-Lab/pull/36) merged (19 October 2026):** Official EIA original HTML can now be retained in an operator-selected **private local POSIX archive**, keyed by raw SHA-256, with a distinct exact-time acquisition receipt and independent offline replay/semantic SHA. **228/228 offline + 3/3 disposable PostgreSQL tests passed**. Local no-overwrite is **NOT certified WORM**; no historical live EIA bytes have been archived, no Neon source/version writes, no new roles. [Operator capture/verify and limits](docs/EIA_ORIGINAL_HTML_ARCHIVE_PL.md). Virtual models remain HOLD_NO_CHANGE.
 
 
