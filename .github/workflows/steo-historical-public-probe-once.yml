@@ -27,12 +27,15 @@ jobs:
           import sys
           from scripts.steo_historical_archive import catalog, retrieve, inspect_xlsx
           from scripts.steo_xlsx_label_probe import inspect_price_table_labels
+          from scripts.steo_monthly_forecast_eval import parse_edition, compare_editions
           issues = ("jan24","jan25","oct26")
+          source_editions = []
           for issue in issues:
               try:
                   raw, official_url = retrieve(issue)
                   workbook = inspect_xlsx(raw)
                   price_sheet = inspect_price_table_labels(raw, sheet_name='2tab')
+                  source_editions.append(parse_edition(issue, raw))
                   record = {
                       "issue": issue,
                       "official_listed_release_day": catalog()[issue]["official_release_day"],
@@ -55,5 +58,24 @@ jobs:
                   print("OFFICIAL_STEO_PILOT_FAILED " + issue + " " +
                         type(exc).__name__, file=sys.stderr,flush=True)
                   sys.exit(2)
+          if len(source_editions) != len(issues):
+              raise ValueError("Missing official historical source edition")
+          result = compare_editions(source_editions)
+          public_score = {
+              "status":result["status"],
+              "source_editions":result["source_editions"],
+              "paired_target_forecasts":result["paired_target_forecasts"],
+              "reference_policy":result["reference_policy"],
+              "historical_source_as_published_bytes_certified":result["historical_source_as_published_bytes_certified"],
+              "aggregates":result["aggregates"],
+              "paired_records":result["paired_records"],
+              "research_decision":result["research_decision"],
+              "real_orders":0,
+              "database_connections":0,
+              "database_writes":0,
+              "virtual_model_rebalances":0,
+          }
+          print("OFFICIAL_STEO_REAL_RETROSPECTIVE_PAIRED_RESEARCH "+
+                json.dumps(public_score,sort_keys=True,separators=(",",":")),flush=True)
           print("OFFICIAL_STEO_PUBLIC_PROBE_ALL_THREE_COMPLETED",flush=True)
           PY
