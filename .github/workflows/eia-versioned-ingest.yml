@@ -20,6 +20,9 @@ on:
       - tests/test_steo_monthly_forecast_eval.py
       - scripts/steo_robustness_audit.py
       - tests/test_steo_robustness_audit.py
+      - scripts/steo_prior_period_validation.py
+      - tests/test_steo_prior_period_validation.py
+      - docs/STEO_PRIOR_2022_2023_REAL_RESULTS_PL.md
       - docs/STEO_MATURED_LABEL_ROBUSTNESS_PL.md
       - docs/STEO_VINTAGE_FORECAST_ERRORS_RESEARCH_PL.md
       - docs/STEO_HISTORICAL_ARCHIVE_RESEARCH_PL.md
@@ -59,6 +62,9 @@ on:
       - tests/test_steo_monthly_forecast_eval.py
       - scripts/steo_robustness_audit.py
       - tests/test_steo_robustness_audit.py
+      - scripts/steo_prior_period_validation.py
+      - tests/test_steo_prior_period_validation.py
+      - docs/STEO_PRIOR_2022_2023_REAL_RESULTS_PL.md
       - docs/STEO_MATURED_LABEL_ROBUSTNESS_PL.md
       - docs/STEO_VINTAGE_FORECAST_ERRORS_RESEARCH_PL.md
       - docs/STEO_HISTORICAL_ARCHIVE_RESEARCH_PL.md
