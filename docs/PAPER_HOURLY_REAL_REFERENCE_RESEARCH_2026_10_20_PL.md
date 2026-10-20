@@ -33,7 +33,21 @@ Original source checksums in that CI:
 
 ## Additional cost sensitivity — not model/strategy parameter tuning
 
-A following implementation revision repeats the **same fixed policy rules** on the same fetched source bytes, without refetching within that CI run, for three fee/slippage cases: `0/0`, `20/10`, `40/20` basis points. It is diagnostic accounting for friction, NOT retrospective selection of an optimized strategy. The 61-day real-source result for those cases is recorded in the later exact-head CI log. Results should remain `UNKNOWN` until that exact run completes.
+A follow-up implementation reran the **same fixed policy rules** on the *same downloaded source bytes within the same run*, for three cost assumptions: `0/0`, `20/10`, `40/20` fee/slippage basis points. This is diagnostic accounting for friction, NOT selecting or fitting a new strategy based on its observed results. [Actual replay CI #39505037266](https://github.com/gniewkob/Investment-Strategy-Lab/actions/runs/39505037266) SUCCESS; source BTC/ETH and NBP canonical SHA values identical to the first run; all three PR jobs green.
+
+**End value PLN** from equal hypothetical 200 PLN contributions, by *cost* scenario:
+
+| Frozen policy | 0+0 bps diagnostic | 20+10 bps base | 40+20 bps double cost |
+|---|---:|---:|---:|
+| equal_dca | 253.79 | 253.02 | 252.24 |
+| momentum | 231.94 | 119.90 | 65.30 |
+| mean_reversion | 218.71 | 114.76 | 62.92 |
+| risk_filter | 229.65 | 118.56 | 64.02 |
+| ensemble | 256.97 | 118.00 | 57.04 |
+
+In particular, `ensemble` exceeds `equal_dca` by **3.18 PLN only under the *fictional* zero-cost assumption**, then trails by **135.02 PLN** under the frozen friction case. This demonstrates **extreme turnover sensitivity** in this brief retrospective example; it is NOT an invitation to trade or any validated predictive advantage. Fee/slippage entries and trade counts change across cost scenarios because transaction sizes, available cash and the portfolio's drift-triggered rebalancing history themselves change. These effects have not been externally audited against real order fills.
+
+**Source/robustness limits unchanged:** hourly candles and NBP were downloaded retrospectively, the exact NBP publication time is assumed from following-day eligibility, no orderbook/real fills/FX spreads, only 61 days and 2 monthly contributions, no independent future evaluation. `profitability_proven=false`, `historical_pit_certified=false`.
 
 ## Executable reproducibility and fail-closed scope
 
@@ -55,5 +69,5 @@ python3 -m scripts.hourly_real_paper_research   # one-time public HTTPS GET only
 - [x] NBP public USDPLN publication-date reference integrity checked; next-day eligibility assumption labeled.
 - [x] First real paper-only five-policy retrospective comparison with contributions, costs and drawdown; no alpha claim.
 - [x] 321 tests + 3 isolated integration + real source CI PASS for initial implementation.
-- [ ] Latest exact-head CI for additionally requested **cost sensitivity** PASS.
+- [x] Real cost sensitivity 0/base/2x verified on source-identical data in CI #39505037266; latest documentation-only commit CI to be checked.
 - [ ] Review latest diff and either merge this research-only PR or document actual blocker.
