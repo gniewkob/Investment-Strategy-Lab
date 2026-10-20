@@ -1,5 +1,8 @@
 # Investment Strategy Lab
 
+> **Research milestone (20 October 2026):** EIA operational backup is **CLOSED / USER-CONFIRMED** after a 6-file Mac mini copy matched 3/3 original HTML SHA-256 and 3/3 manifests; MyDevil sources passed independent offline verification. No paid OVH bucket required for current simulation. [Backup acceptance and precise limits](docs/EIA_BACKUP_ACCEPTANCE_2026_10_20_PL.md). [PR #38](https://github.com/gniewkob/Investment-Strategy-Lab/pull/38) merged (242/242 offline + 3/3 disposable PG integration PASS): read-only `scripts/eia_prospective_archive_research.py` independently reparses archived official HTML+manifest vintages and compares overlapping date/price revisions **only between truly acquired snapshots**. First captures = baseline only, not historical PIT. [Operator offline runbook](docs/EIA_PROSPECTIVE_ARCHIVE_RESEARCH_PL.md). Virtual M1/M2/M3 remain HOLD_NO_CHANGE; zero Neon writes or orders.
+
+
 > **Actual 3-source EIA private archive now captured (20 October 2026):** operator on MyDevil FreeBSD confirmed **WTI, Brent and Henry Hub** raw original HTML files + timestamped manifests written to a private local POSIX directory with `immediate_independent_replay=true` for all three; WTI passed an additional separate **offline** `verify`. [Actual SHA-256, acquired-at timestamps and limits](docs/EIA_MYDEVIL_ACTUAL_ARCHIVE_RECEIPTS_2026_10_20_PL.md). These **NEW 20 October** captures are real; earlier **19 October CI source requests still had no retained original HTML**. Private local archive is **NOT WORM**. No Neon source/version writes, roles, credentials, schedule or trades. Historical PIT remains unverified; virtual M1/M2/M3 HOLD_NO_CHANGE.
 
 
