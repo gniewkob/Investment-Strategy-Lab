@@ -30,3 +30,12 @@ Independent [Archive-It CDX/C documentation](https://support.archive-it.org/hc/e
 
 ## End-of-session operational facts
 Initial repo head inspected: `fe986b23b47d080302b253eb87bbf7a10a93b0d4`; recent listed actual [source workflow 39444963696](https://github.com/gniewkob/Investment-Strategy-Lab/actions/runs/39444963696) SUCCESS; [main regression 39444963465](https://github.com/gniewkob/Investment-Strategy-Lab/actions/runs/39444963465) SUCCESS; [PR CI 39444788790](https://github.com/gniewkob/Investment-Strategy-Lab/actions/runs/39444788790) SUCCESS. At inspection, open PR #1; open issues #2, #3, #4, #22. No new data-source CI run launched, no file hash claims invented. This research note is documentation-only, submitted through PR for review. No Neon writes, no permissions/secrets/schedules/paid services, no trades or model tuning. Closed MyDevil+Mac backup unchanged.
+
+
+## Additional source discovery — same-day continuation
+
+Public search identified later Catalyst Cooperative / Zenodo **records [15877499](https://zenodo.org/records/15877499), [16893042](https://zenodo.org/records/16893042), [17119793](https://zenodo.org/records/17119793)**. Their published annual 2022–24 ZIP MD5 values are the same as May-2025 [record 15386905](https://zenodo.org/records/15386905): 2022 `cff52df8d14f214df0c1a47a0a3185e7`, 2023 `0f59168a86433af4e0e7be53c4684535`, 2024 `21b1dc10ba6503b4446143e212ada2a0`. These are *later versions of the same curator archive*, NOT earlier independent issue-day captures. They add no evidence that 2022–24 source bytes were available on first publication day. Annual ZIP metadata agreement is not an actual per-month replay in this session; the prior 36/36 run remains the supporting actual original-XLSX comparison.
+
+Independent third-party [NatGas-Consumption-Forecast](https://github.com/DamirStyles/NatGas-Consumption-Forecast) README explicitly instructs users to download STEO vintages from PUDL/Zenodo; this is **derivative reuse** and does not furnish an independently captured first-release original XLSX. Older [EIA-STEO scraping project](https://github.com/leachandrew/EIA-STEO) contains processed files and an unrelated `aeso_proj_list.xlsx`, with no demonstrated authentic `jan24_base.xlsx` original from 2024-01-09.
+
+**Result:** extra repositories are not a substitute for contemporaneous WARC payload. Original near-release raw SHA-256 and `WTIPUUS`/`BREPUUS` values continue **UNKNOWN**. No invented attestation, no new real source CI, no model execution.
