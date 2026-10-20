@@ -14,6 +14,8 @@ on:
       - docs/EIA_PROSPECTIVE_ARCHIVE_RESEARCH_PL.md
       - scripts/steo_historical_archive.py
       - tests/test_steo_historical_archive.py
+      - scripts/steo_xlsx_label_probe.py
+      - tests/test_steo_xlsx_label_probe.py
       - docs/STEO_HISTORICAL_ARCHIVE_RESEARCH_PL.md
       - docs/EIA_MYDEVIL_OVH_ARCHIVE_READINESS_PL.md
       - tests/test_eia_raw_archive.py
@@ -45,6 +47,8 @@ on:
       - docs/EIA_PROSPECTIVE_ARCHIVE_RESEARCH_PL.md
       - scripts/steo_historical_archive.py
       - tests/test_steo_historical_archive.py
+      - scripts/steo_xlsx_label_probe.py
+      - tests/test_steo_xlsx_label_probe.py
       - docs/STEO_HISTORICAL_ARCHIVE_RESEARCH_PL.md
       - docs/EIA_MYDEVIL_OVH_ARCHIVE_READINESS_PL.md
       - tests/test_eia_raw_archive.py
