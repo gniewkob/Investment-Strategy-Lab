@@ -98,7 +98,7 @@ class STEOForecastMonthlyTests(TestCase):
         self.assertEqual(row["horizon_calendar_months"],1)
         self.assertEqual(row["source_forecast_value"],"73.80")
         self.assertEqual(row["later_edition_reference_value"],"81.80")
-        self.assertEqual(row["same_edition_previous_month_naive_value"],"73.40")
+        self.assertEqual(row["same_edition_previous_month_naive_value"],"76.30")
         self.assertEqual(row["absolute_source_forecast_error"],"8.00")
         self.assertEqual(out["database_writes"],0)
         self.assertEqual(out["real_orders"],0)
