@@ -27,7 +27,11 @@ jobs:
           from urllib.request import Request, urlopen
           from urllib.parse import urlparse
           from scripts.steo_historical_archive import inspect_xlsx
-          from scripts.steo_xlsx_label_probe import inspect_price_table_labels
+          from scripts.steo_xlsx_label_probe import (
+              inspect_price_table_labels, _resolve_sheet, _read_part, MAIN
+          )
+          from zipfile import ZipFile
+          from io import BytesIO
 
           # Predeclared, official release-dated editions; not an automated
           # investment backtest and NOT part of prior 2024-2026 model fitting.
@@ -67,6 +71,23 @@ jobs:
                       if entry["cell"] in ("A6","B6","A7","B7","B1","A3")
                   ]
                   evidence["year_headers"]=labels["numeric_year_headers"][:15]
+                  with ZipFile(BytesIO(raw)) as archive:
+                      root = _read_part(archive, _resolve_sheet(archive,"2tab"),14_000_000)
+                      candidates=[]
+                      for row in root.iter(MAIN+"row"):
+                          if row.attrib.get("r") != "3":
+                              continue
+                          for cell in row.findall(MAIN+"c"):
+                              value=cell.find(MAIN+"v")
+                              if value is None or value.text is None:
+                                  continue
+                              raw_value=value.text.strip()
+                              if raw_value.isdigit() and 1900<=int(raw_value)<=2100:
+                                  printed=raw_value
+                              else:
+                                  printed="NON_YEAR_NUMERIC_OR_STRING_INDEX"
+                              candidates.append({"cell":cell.attrib.get("r",""),"year_or_class":printed})
+                      evidence["all_row3_year_candidates"]=candidates[:25]
               else:
                   evidence["price_sheet_missing"]=True
               print("STEO_OLDER_OFFICIAL_EDITION_COMPATIBILITY "+
