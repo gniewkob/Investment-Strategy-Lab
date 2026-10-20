@@ -9,6 +9,8 @@ on:
       - tests/test_paper_strategy_tournament.py
       - scripts/paper_tournament_synthetic_demo.py
       - tests/test_paper_tournament_synthetic_demo.py
+      - scripts/coinbase_public_hourly_research.py
+      - tests/test_coinbase_public_hourly_research.py
       - docs/PAPER_STRATEGY_TOURNAMENT_V1_DELIVERY_2026_10_20_PL.md
 
 permissions:
@@ -75,3 +77,17 @@ jobs:
         run: python -m pip install 'psycopg[binary]>=3.2,<4'
       - name: Run existing isolated PIT/schema integration suite
         run: python -m unittest discover -s tests/integration -p 'test_eia_versioned_pg.py' -v
+
+  public-source-one-shot:
+    if: github.event.pull_request.number == 53 && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Two bounded public Coinbase read-only hourly requests; no credentials or trading
+        run: python -m scripts.coinbase_public_hourly_research
