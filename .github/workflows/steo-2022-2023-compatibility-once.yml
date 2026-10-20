@@ -1,0 +1,75 @@
+name: STEO untouched 2022-23 historical XLSX compatibility probe — once
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/steo-2022-2023-compatibility-once.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  older-steo-public-source-compatibility:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Probe EIA official 2022/23 historical XLSX structure, no data writes
+        run: |
+          python - <<'PY'
+          import hashlib
+          import json
+          from urllib.request import Request, urlopen
+          from urllib.parse import urlparse
+          from scripts.steo_historical_archive import inspect_xlsx
+          from scripts.steo_xlsx_label_probe import inspect_price_table_labels
+
+          # Predeclared, official release-dated editions; not an automated
+          # investment backtest and NOT part of prior 2024-2026 model fitting.
+          official = {
+              "jan22": "2022-01-11",
+              "jan23": "2023-01-10",
+              "dec23": "2023-12-12",
+          }
+          for issue, release_day in official.items():
+              url = "https://www.eia.gov/outlooks/steo/archives/" + issue + "_base.xlsx"
+              with urlopen(Request(url,headers={
+                  "User-Agent":"ISL-STEO-Research-Compatibility/1.0"}),timeout=30) as r:
+                  final = urlparse(r.geturl())
+                  if (final.scheme != "https" or final.netloc != "www.eia.gov" or
+                          final.path != "/outlooks/steo/archives/"+issue+"_base.xlsx"):
+                      raise ValueError("Source redirected outside official EIA archive")
+                  raw = r.read(24*1024*1024 + 1)
+              workbook = inspect_xlsx(raw)
+              evidence = {
+                  "issue":issue,
+                  "official_listed_release_day":release_day,
+                  "original_xlsx_sha256_acquired_today":hashlib.sha256(raw).hexdigest(),
+                  "sheet_count":workbook["sheet_count"],
+                  "sheet_names":workbook["sheet_names"],
+                  "original_historical_publication_bytes_certified":False,
+                  "saved_raw_workbooks":0,
+                  "database_connections":0,
+                  "database_writes":0,
+                  "real_orders":0,
+              }
+              if "2tab" in workbook["sheet_names"]:
+                  labels=inspect_price_table_labels(raw,"2tab")
+                  # Show source identities and actual worksheet coordinates,
+                  # not source numeric prices.
+                  evidence["price_table_labels"]=[
+                      entry for entry in labels["labels"]
+                      if entry["cell"] in ("A6","B6","A7","B7","B1","A3")
+                  ]
+                  evidence["year_headers"]=labels["numeric_year_headers"][:15]
+              else:
+                  evidence["price_sheet_missing"]=True
+              print("STEO_OLDER_OFFICIAL_EDITION_COMPATIBILITY "+
+                    json.dumps(evidence,sort_keys=True,separators=(",",":")),flush=True)
+          print("STEO_OLDER_OFFICIAL_PUBLIC_SOURCE_PROBE_COMPLETED",flush=True)
+          PY
