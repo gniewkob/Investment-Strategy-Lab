@@ -1,3 +1,17 @@
+## 20.10.2026 — Backup CLOSED/USER-CONFIRMED; PR #38 prospective EIA archive research merged; only paper research
+
+**No more backup purchase/provisioning blocker.** Operator confirmed backup protection and explicitly requested close: [EIA_BACKUP_ACCEPTANCE_2026_10_20_PL.md](EIA_BACKUP_ACCEPTANCE_2026_10_20_PL.md) documents **MyDevil 3 independently offline VERIFIED EIA HTML+receipts**, **dated Mac 6-file copy**, **3/3 original SHA-256** and Mac `MAC_BACKUP_INTEGRITY_PASS`. **Backup operationally CLOSED and USER-CONFIRMED.** No independent WORM/Time Machine actual destination/restore test evidence (do not mislabel these as verified), but no need to procure OVH for current educational activity. [GitHub Issue #2 operator closure comment](https://github.com/gniewkob/Investment-Strategy-Lab/issues/2#issuecomment-6288511342).
+
+[PR #38](https://github.com/gniewkob/Investment-Strategy-Lab/pull/38) squash merged to main at `d22a90f09b4aa0cbe7b2eb5ca9f04f1da2b2b108`. [PR CI #39406305271](https://github.com/gniewkob/Investment-Strategy-Lab/actions/runs/39406305271) **242/242** offline synthetic tests PASS, **3/3** disposable PostgreSQL integration tests PASS; manual-public-EIA job SKIPPED as expected on PR. Added [`scripts/eia_prospective_archive_research.py`](../scripts/eia_prospective_archive_research.py): **READ-ONLY** independent verification of saved ORIGINAL EIA HTML and exact timestamped manifests for all 3 sources, safe bounded 128 receipts per series, fails on original hash/semantic SHA/source/timestamp/manifest corruption, and compares overlapping observed dates between successive real acquisition vintages. It differentiates layout-only raw HTML SHA drift vs rolling window changes vs actual revised prices on shared dates; outputs counts, source SHA and timestamps only — no raw HTML/prices/path/secrets in JSON, no network/DB/file writes/orders/schedules/reallocations. First 2026-10-20 capture for each source = `FIRST_SOURCE_CAPTURE_BASELINE_ONLY` and `RESEARCH_ONLY_HOLD_NO_CHANGE`, NOT historical PIT certification.
+
+**Next operator READ-ONLY actual test on Mac backup**, from up-to-date Investment Strategy Lab working dir:
+```bash
+python3 -m scripts.eia_prospective_archive_research --archive-root "$HOME/.isl-eia-backups/20261020T093647Z"
+```
+Expect 3 source series, one captured vintage each, first-source baseline only, zero revisions, zero DB/actions, not yet executed on user's private Mac by this session. No new capture needed immediately.
+
+Separate data strategy gate unchanged: previous Neon STAGING docs EIA 0, versions EIA 0, EIA writer absent; **no new role/ACL/secret/Neon INSERT** granted by backup confirmation or PR #38. The copied 20-Oct EIA spot prices are not independently known on their old observed dates, so retrospective PIT `MARKET_DATA_NOT_READY`. M1/M2/M3 paper `HOLD_NO_CHANGE`; no real orders or investable allocation performance claims.
+
 ## 20.10.2026 — REAL 3/3 private EIA original-byte archive CAPTURE complete (MyDevil); WTI independent offline verification PASS
 
 **Current newest operational state:** operator ran `python3 -m scripts.eia_archive_local capture` for WTI, Brent, Henry Hub in their preflight-PASS private local POSIX MyDevil archive; **all 3 returned `EIA_RAW_HTML_ARCHIVED_LOCAL_STAGING_NOT_WORM`, `object_created=true`, `receipt_created=true`, `immediate_independent_replay=true`, `database_connections=0`, `database_writes=0`**. This is proven by operator stdout, **not direct SSH access** by assistant, which remains unavailable here.
