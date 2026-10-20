@@ -1,0 +1,111 @@
+name: EIA STEO independent Zenodo May-2025 archival-byte pilot (once)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/steo-independent-zenodo-proof-once.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  read-only-third-party-provenance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Read 2025 timestamped third-party ZIP, verify published MD5 and inspect authentic member names
+        run: |
+          python3 - <<'PY'
+          from collections import Counter
+          from io import BytesIO
+          import hashlib
+          import json
+          from pathlib import PurePosixPath
+          from urllib.parse import urlparse
+          from urllib.request import Request,urlopen
+          from zipfile import ZipFile,BadZipFile
+          import sys
+
+          # Independently versioned May-26-2025 Catalyst Cooperative raw
+          # EIA STEO archive on Zenodo. These old report files were preserved
+          # before our October 2026 EIA research; original report-day PIT
+          # (2022–24) is NOT implied.
+          record_id=15386905
+          year=2024
+          expected_md5="21b1dc10ba6503b4446143e212ada2a0"
+          max_bytes=53_000_000
+          url=f"https://zenodo.org/records/{record_id}/files/eiasteo-{year}.zip?download=1"
+          try:
+              with urlopen(Request(url,headers={"User-Agent":"ISL-Independent-Source-Provenance/1.0"}),timeout=90) as reply:
+                  end=urlparse(reply.geturl())
+                  if end.scheme!="https" or end.hostname not in ("zenodo.org","files.zenodo.org"):
+                      raise ValueError("Zenodo origin/redirect allowlist failed")
+                  raw=reply.read(max_bytes+1)
+              if len(raw)>max_bytes:
+                  raise ValueError("Third-party source archive exceeds 53MB bound")
+              actual_md5=hashlib.md5(raw).hexdigest()
+              if actual_md5!=expected_md5:
+                  raise ValueError("Zenodo versioned 2025 declared archive MD5 mismatch")
+              with ZipFile(BytesIO(raw)) as z:
+                  listing=z.infolist()
+                  if not listing or len(listing)>10000:
+                      raise ValueError("Third-party ZIP member count invalid")
+                  if sum(x.file_size for x in listing)>1_200_000_000:
+                      raise ValueError("Third-party ZIP uncompressed sum exceeds limit")
+                  if any(x.flag_bits&1 or
+                          x.filename.startswith("/") or
+                          "\\" in x.filename or
+                          ".." in x.filename.split("/")
+                          for x in listing):
+                      raise ValueError("Third-party archive has malformed ZIP member")
+                  extensions=Counter(PurePosixPath(x.filename).suffix.lower() for x in listing)
+                  xlsx=[x for x in listing if PurePosixPath(x.filename).name.lower()
+                        in ("jan24_base.xlsx","nov24_base.xlsx","dec24_base.xlsx")]
+                  nested_zips=[x for x in listing if x.filename.lower().endswith(".zip")]
+                  # Content hashes are only computed when an original XLSX
+                  # is explicitly present in the zip with bounded file size.
+                  checks=[]
+                  for entry in xlsx[:6]:
+                      if entry.file_size>15_000_000:
+                          raise ValueError("Individual XLSX member too large")
+                      original=z.read(entry)
+                      checks.append({
+                          "member_path":entry.filename,
+                          "raw_xlsx_sha256_from_independent_2025_archive":
+                              hashlib.sha256(original).hexdigest(),
+                          "raw_xlsx_bytes":len(original),
+                      })
+                  report={
+                      "status":"ZENODO_MAY_2025_EIA_STEO_THIRD_PARTY_RAW_ARCHIVE_PROBE",
+                      "zenodo_record":record_id,
+                      "archived_record_published":"2025-05-26",
+                      "source_partition_year":year,
+                      "raw_zip_bytes":len(raw),
+                      "zip_source_md5_matches_zenodo_record":True,
+                      "zip_source_sha256_acquired_now":hashlib.sha256(raw).hexdigest(),
+                      "zip_member_count":len(listing),
+                      "file_type_counts":dict(extensions),
+                      "sample_member_names":[x.filename for x in listing[:24]],
+                      "nested_zip_member_samples":[x.filename for x in nested_zips[:12]],
+                      "direct_original_xlsx_members":checks,
+                      "independent_2024_original_issue_day_PIT_certified":False,
+                      "independent_at_least_2025_archive_record_evidenced":True,
+                      "original_source_binaries_committed":0,
+                      "database_connections":0,
+                      "database_writes":0,
+                      "orders":0,
+                      "paper_allocations_changed":0,
+                  }
+                  print("ZENODO_2025_INDEPENDENT_RAW_STEO_PROBE "+
+                        json.dumps(report,sort_keys=True,separators=(",",":")),flush=True)
+          except Exception as exc:
+              print("ZENODO_2025_INDEPENDENT_RAW_STEO_PROBE_FAILED "+
+                    type(exc).__name__,file=sys.stderr,flush=True)
+              raise
+          PY
