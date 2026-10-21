@@ -268,6 +268,12 @@ def observe_wallets(config, now, *, rpc=rpc_read, history_blocks=0):
             raw = rpc(chain, 'eth_call', [{'to': contract, 'data': '0x70a08231'+'0'*24+addr[2:]}, tag])
             positions.append({'asset': symbol, 'contract': contract, 'quantity': _units(_hex(raw), digits)})
         history = _history(chain, addr, approved, number, history_blocks, rpc) if history_blocks else None
+        if history is not None:
+            for event in history['events']:
+                # One blockchain log can be observed by multiple watched wallets.
+                # Scope each leg to its local label without exposing the address.
+                event['wallet_label'] = label
+                event['event_id'] = sha256((label+':'+event['event_id']).encode()).hexdigest()
         check = rpc(chain, 'eth_getBlockByNumber', [tag, False])
         if check.get('hash') != b['hash']: raise ReadOnlyError('SOURCE_BLOCK_CHANGED')
         output.append({'wallet_label': label, 'chain_id': chain, 'source': RPC_URLS[chain],

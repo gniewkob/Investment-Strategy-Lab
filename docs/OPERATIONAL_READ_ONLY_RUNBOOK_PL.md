@@ -18,11 +18,11 @@ Odczyt salda nie jest uprawnieniem do jego przeniesienia.
 | Coinbase → CLI | PASS: rzeczywisty capture przeszedł normalizację i CLI; CLI nie uwierzytelnia się sam do Coinbase |
 | Wallet Ethereum/Base | PASS: wspólny rzeczywisty raport CLI z ETH i jawnym kontraktem cbBTC obu sieci, sfinalizowane bloki, bez adresów kont w wyniku |
 | Historia Ethereum | PASS tylko dla próby jednego sfinalizowanego bloku, 0 logów cbBTC; nie dowodzi braku wcześniejszych zdarzeń |
-| Historia Base | PENDING: publiczne RPC odrzuciło odczyt logów HTTP; saldo odczytano niezależnie |
+| Historia Base | PENDING: publiczne RPC odrzuciło odczyt logów HTTP (także 429 w ponownej próbie); saldo odczytano niezależnie |
 | Historia wpłat/wypłat Coinbase | PENDING: dostępny konektor nie wystawia tej operacji; fills nie zastępują historii transferów |
 | Uzgadnianie transferów | PASS offline dla syntetycznych par; PENDING live, brak autoryzowanej historii obu stron |
 | Coinbase publiczne OHLCV + NBP | PASS: rzeczywiste pobranie trzech zakresów 72h i datowanego USD/PLN przez istniejące moduły |
-| Testy | 378 offline testów PASS w Pythonie 3.12 z istniejącą zależnością psycopg; w tym 14 nowych testów, subprocess CLI i wspólna ścieżka CLI z kontrolowanym RPC |
+| Testy | 379 offline testów PASS w Pythonie 3.12 z istniejącą zależnością psycopg; w tym 15 nowych testów, subprocess CLI i wspólna ścieżka CLI z kontrolowanym RPC |
 | Pełna wycena majątku / P&L | UNKNOWN: brak pełnej enumeracji tokenów, DeFi/NFT, innych sieci i historycznych kosztów; nie wyliczamy pełnego USD total |
 
 Udany odczyt sald obu sieci użył sfinalizowanych bloków Ethereum **26239845**
@@ -134,7 +134,10 @@ nie trafiają do stdout. Brak fallbacku do niesfinalizowanego `latest`.
 
 Logi tylko `Transfer` z potwierdzonego kontraktu ERC-20 i skonfigurowanego konta,
 w zadanym przedziale. Walidacja topiców, chain/kontraktu, block/log index,
-braku `removed`; deduplikacja `(chain, txhash, logIndex)`. Nie ma pełnej historii
+braku `removed`; deduplikacja `(chain, txhash, logIndex)` w obrębie walleta.
+Każda strona logu zachowuje lokalną `wallet_label` i ID zależne od tej etykiety,
+więc transfer między dwoma obserwowanymi walletami nie przerywa uzgodnienia.
+Etykiety powinny być stabilne i nieidentyfikujące; nie są dowodem własności. Nie ma pełnej historii
 natywnych transferów/internal calls/NFT/DeFi. Czas pojedynczego zdarzenia może
 być UNKNOWN; numer/hash bloku pozostaje źródłową referencją, nie wymyślamy dat.
 

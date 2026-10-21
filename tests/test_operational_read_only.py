@@ -256,6 +256,33 @@ class OperationalTests(unittest.TestCase):
         finally:
             server.shutdown(); server.server_close(); thread.join()
 
+    def test_shared_transfer_between_watched_wallets_does_not_abort_audit(self):
+        other = '0x'+'2'*40
+        cfg = watch()
+        cfg['watch'].append(dict(cfg['watch'][0], label='secondary', address=other))
+        transfer = {'address': TOKEN, 'topics': [m.TRANSFER_TOPIC,
+            '0x'+'0'*24+ADDR[2:], '0x'+'0'*24+other[2:]],
+            'transactionHash': HASH, 'blockHash': HASH, 'blockNumber': '0x64',
+            'logIndex': '0x0', 'data': hex(100), 'removed': False}
+        def rpc(c, method, params):
+            if method == 'eth_getLogs':
+                topics = params[0]['topics']
+                matches = all(v is None or transfer['topics'][i] == v for i,v in enumerate(topics))
+                return [deepcopy(transfer)] if matches else []
+            return fake_rpc(c, method, params)
+        result = m.observe_wallets(cfg, NOW, rpc=rpc, history_blocks=10)
+        legs = [e for w in result['wallets'] for e in w['history']['events']]
+        self.assertEqual(len(legs), 2)
+        self.assertEqual({e['direction'] for e in legs}, {'in','out'})
+        audit = m.reconcile_events([], legs)
+        self.assertEqual({e['wallet_label'] for e in legs}, {'primary','secondary'})
+        self.assertNotEqual(legs[0]['event_id'], legs[1]['event_id'])
+        self.assertEqual(audit['matched_internal_movements'], 0)
+        self.assertEqual(audit['unmatched_events'], 2)
+        self.assertEqual(audit['balance_adjustment'], '0')
+        self.assertNotIn(ADDR, json.dumps(result))
+        self.assertNotIn(other, json.dumps(result))
+
     def test_private_file_permissions_symlinks_and_cli_end_to_end(self):
         with tempfile.TemporaryDirectory() as d:
             p = Path(d)/'capture.json'; m.write_private(p, capture())
