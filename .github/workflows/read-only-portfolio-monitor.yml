@@ -8,6 +8,9 @@ on:
       - tests/test_read_only_portfolio_monitor.py
       - scripts/private_wallet_chain_monitor.py
       - tests/test_private_wallet_chain_monitor.py
+      - scripts/private_multi_source_flow_audit.py
+      - tests/test_private_multi_source_flow_audit.py
+      - docs/PRIVATE_MULTI_SOURCE_FLOW_AUDIT_PL.md
       - docs/PRIVATE_WALLET_COINBASE_CONSOLIDATION_PL.md
       - .gitignore
       - docs/READ_ONLY_PORTFOLIO_MONITOR_PL.md
@@ -37,12 +40,14 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
-          s=Path('scripts/read_only_portfolio_monitor.py').read_text()
+          paths=('scripts/read_only_portfolio_monitor.py',
+                 'scripts/private_multi_source_flow_audit.py')
+          code={p:Path(p).read_text() for p in paths}
           forbidden=('psycopg', 'sqlalchemy', 'coinbase_orders_create',
                      'mcp__Coinbase__', 'Authorization:', 'NEON_DATABASE_URL',
                      'os.environ', 'os.getenv', 'subprocess.', 'INSERT INTO',
                      'UPDATE investment_lab.', 'DELETE FROM')
-          assert not any(x in s for x in forbidden), 'read-only boundary violation'
+          assert not any(x in s for s in code.values() for x in forbidden), 'read-only boundary violation'
           print('PUBLIC_READ_ONLY_ACCOUNT_FREE_SOURCE_BOUNDARY_OK')
           PY
 
