@@ -64,7 +64,30 @@ python -m scripts.wallet_transfer_portal --watchlist /PRIVATE/watch.json --trans
 2. Podaj kwotę w jednostkach tokena. Podgląd sprawdza konto, chain, saldo i gas.
 3. Porównaj pełny adres i sieć z Coinbase. Zaznacz potwierdzenie.
 4. Otwórz osobnym przyciskiem okno portfela, sprawdź pełne koszty i dopiero tam podpisz.
-5. Sprawdź receipt i osobno uznanie wpłaty w Coinbase. Wpłata nie tworzy `fills`.
+5. Panel sam sprawdzi receipt; osobno sprawdź uznanie wpłaty w Coinbase. Wpłata nie tworzy `fills`.
+
+## Karta do potwierdzenia
+
+Główny ekran przedstawia pojedynczy transfer. Po podłączeniu ustawienia połączenia
+zwijają się; po utracie połączenia rozwijają ponownie. Karta zawiera kwotę, skrócone
+źródło, pełny adres odbiorczy, sieć i dokładnie przeliczony koszt wykonania w ETH
+(bez zaokrąglania przez floating point). Wycena PLN jest jawnie niedostępna: panel
+nie ma zweryfikowanego źródła ceny/FX. Pełna opłata Base pozostaje do sprawdzenia
+w portfelu. Limit tokenów i koszt wykonania nie zastępują łącznego budżetu USD.
+
+Podgląd ma widoczne odliczanie 60 sekund. Po wygaśnięciu podglądu lub polityki
+potwierdzenie jest wyłączone; zmiana kwoty usuwa wcześniejszy podgląd i zgodę.
+Przycisk „Sprawdź w portfelu” wymaga uprzedniego zaznaczenia weryfikacji odbiorcy.
+Nie ma automatycznego otwarcia prośby o podpis ani przedłużania polityki.
+
+Po zwróceniu hash przez portfel panel automatycznie wykonuje do sześciu sprawdzeń
+receipt, w odstępach 10 sekund po zakończeniu poprzedniego odczytu. Pierwszy odczyt
+jest natychmiastowy. Finalizacja albo revert kończą sprawdzanie. Błąd API zatrzymuje
+automatyczne odczyty bez retry; przycisk umożliwia pojedynczy kolejny odczyt.
+Żaden odczyt nie ponawia wysyłki. Widok pokazuje hash oraz oddzielny, niezweryfikowany
+status zaksięgowania Coinbase. Przeładowanie strony kończy odliczanie i odczyty;
+nie odtwarza wyniku i nie anuluje transakcji. Testy syntetyczne obejmują finalizację,
+limit sześciu odczytów, HTTP429, wygaśnięcie i układ mobilny.
 
 Limit kwoty jest w tokenach, nie USD. **Nie ma automatycznej gwarancji 10 USD
 łącznie z opłatami.** Koszt wykonania ma bufor gas 20% i gasPrice 2x; polityka
