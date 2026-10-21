@@ -259,7 +259,7 @@ def analyze_portfolio(payload, report_at):
     }
 
 
-def build_report(now, market, usdpln, private_snapshot=None):
+def build_report(now, market, usdpln, private_snapshot=None, wallet_report=None):
     if isinstance(now, str):
         now = _when(now)
     if now.tzinfo is None or now.utcoffset() != timedelta(0):
@@ -275,12 +275,18 @@ def build_report(now, market, usdpln, private_snapshot=None):
     if not isinstance(usdpln, dict) or not usdpln.get("usdpln_mid_reference"):
         raise MonitoringError("Verified NBP reference missing")
     portfolio = analyze_portfolio(private_snapshot, now) if private_snapshot is not None else None
+    combined = None
+    if wallet_report is not None:
+        from scripts.private_wallet_chain_monitor import reconcile_custodial_and_wallet
+        combined = reconcile_custodial_and_wallet(portfolio, wallet_report)
     return {
         "status": "READ_ONLY_MARKET_AND_PORTFOLIO_INTELLIGENCE",
         "generated_at_utc": now.isoformat(),
         "market_prices": market,
         "nbp_usdpln": usdpln,
         "portfolio": portfolio,
+        "onchain_wallets": wallet_report,
+        "combined_known_holdings": combined,
         "portfolio_data": "NOT_CONNECTED_TO_CLI" if portfolio is None else "USER_SUPPLIED_PRIVATE_SNAPSHOT",
         "research_assessment": "OBSERVATIONAL_NO_BUY_SELL_SIGNALS",
         "profitability_proven": False,
@@ -319,6 +325,24 @@ def render_markdown(report):
             f"Wartość oznaczona jako staking: {p['staked_value_usd']} USD ({p['staked_share_pct']}%).",
             "Nie ustalono dostępności do handlu na podstawie łącznych sald.",
             "Kontrole: " + (", ".join(p["risk_flags"]) or "brak sygnałów przekroczenia przyjętych progów") + "."])
+    wallet = report.get("onchain_wallets")
+    if wallet is not None:
+        lines.extend(["", "## Wallet on-chain (osobny od giełdy Coinbase)",
+            "Odczyt: " + wallet["observed_at_utc"],
+            "Zweryfikowany zakres sieci: Ethereum/Base — wyłącznie skonfigurowane prywatnie adresy.",
+            "Podzbiór wyceniony przez eksplorator: " + wallet["priced_subtotal_usd"] + " USD.",
+            "Niewycenione albo niezweryfikowane pozycje: " +
+                str(wallet["unpriced_or_unreviewed_position_count"]) + "."])
+        for item in wallet["wallets"]:
+            lines.append("- " + item["wallet_label"] + " / " + item["network"] +
+                         ": wyceniony podzbiór " + item["priced_subtotal_usd"] + " USD.")
+        known = report.get("combined_known_holdings")
+        if known is not None:
+            lines.append("Suma zidentyfikowanego wycenionego podzbioru CEX + wallet: " +
+                         known["known_priced_amount_usd"] +
+                         " USD — NIE jest to kompletna wartość wszystkich aktywów.")
+        lines.append("Brak potwierdzenia cen możliwych do wykonania, pozycji DeFi/NFT "
+                     "oraz dostępności środków do handlu.")
     lines.extend(["", "## Granice interpretacji",
         "Dane rynkowe i salda służą wyłącznie monitoringowi. Brak wskazań kupna/sprzedaży i zleceń.",
         "Ostatnie zamknięcie świecy nie jest notowaniem bid/ask ani gwarantowaną ceną transakcji.",
@@ -330,6 +354,8 @@ def render_markdown(report):
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Public read-only market and optional local account risk report")
     parser.add_argument("--portfolio-file", type=Path, help="PRIVATE local snapshot; NEVER use in public GitHub Actions")
+    parser.add_argument("--wallet-watchlist", type=Path,
+                        help="PRIVATE LOCAL Ethereum/Base addresses; never pass to GitHub Actions")
     parser.add_argument("--format", choices=("markdown", "json"), default="markdown")
     args = parser.parse_args(argv)
     now = datetime.now(timezone.utc)
@@ -341,7 +367,15 @@ def main(argv=None):
         private = None
     markets = fetch_markets(now)
     fx = fetch_usdpln(now)
-    report = build_report(now, markets, fx, private)
+    wallet = None
+    if args.wallet_watchlist:
+        from scripts.private_wallet_chain_monitor import (
+            inspect_wallet_watchlist, MAX_CONFIG)
+        if args.wallet_watchlist.stat().st_size > MAX_CONFIG:
+            raise MonitoringError("Local wallet watchlist too large")
+        config = json.loads(args.wallet_watchlist.read_text(encoding="utf-8"))
+        wallet = inspect_wallet_watchlist(config, now)
+    report = build_report(now, markets, fx, private, wallet)
     print(json.dumps(report, sort_keys=True, ensure_ascii=False) if args.format == "json"
           else render_markdown(report))
 
