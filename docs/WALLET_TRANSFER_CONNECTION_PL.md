@@ -109,6 +109,14 @@ Podgląd ważny 60s; zmiana konta/sieci go unieważnia. Receipt wymaga właściw
 transferu, statusu success, hash bloku i finalizacji. Nie jest dowodem uznania wpłaty.
 Nie odtwarzamy identyfikatora po przeładowaniu strony: historia pozostaje w portfelu.
 
+Po błędzie zwróconym przez interfejs portfela diagnostyka pokazuje wyłącznie
+stałą kategorię i opcjonalny standardowy kod numeryczny (np. 4200). Nie zapisuje
+treści błędu, adresów, RPC URL, sesji ani treści żądania. Kategorie obejmują brak
+obsługi metody, oczekujące żądanie, utratę sesji, timeout i błąd publikacji relay.
+Kategoria jest wskazówką diagnostyczną, nie dowodem braku broadcastu. Nieznany
+wynik nadal blokuje ponowienie niezależnie od kategorii. Nowa diagnostyka nie
+odtwarza błędu wcześniejszej próby i nie odblokowuje istniejącego okna.
+
 ## Granice, testy i wycofanie
 
 HTTP: wyłącznie loopback, dokładny Host, same-origin `/session`, brak CORS, no-store,

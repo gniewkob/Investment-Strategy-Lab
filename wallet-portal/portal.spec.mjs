@@ -24,7 +24,7 @@ async function setup(page,enabled=true,sendError='reject',fromAccount=FROM,provi
    window.walletCalls.push(method);
    if(method==='eth_chainId')return activeChain;
    if(method==='wallet_switchEthereumChain'){activeChain=params[0].chainId;return null;}
-   if(method==='eth_sendTransaction'){if(sendError==='reject')throw {code:4001};if(['success','pending','receipt-error'].includes(sendError))return '0x'+'a'.repeat(64);throw new Error('NO_GAS');}
+   if(method==='eth_sendTransaction'){if(sendError==='reject')throw {code:4001};if(sendError==='unsupported')throw {code:4200,message:'PRIVATE_PROVIDER_DETAILS'};if(['success','pending','receipt-error'].includes(sendError))return '0x'+'a'.repeat(64);throw new Error('NO_GAS');}
    return ({eth_requestAccounts:[from],eth_accounts:[from],eth_chainId:'0x2105',eth_getBalance:'0x38d7ea4c68000',eth_call:'0xf4240',eth_estimateGas:'0x186a0',eth_gasPrice:'0x3b9aca00'})[method];
   }};
   if(providerChoice==='coinbase')window.coinbaseWalletExtension=window.ethereum;
@@ -152,5 +152,14 @@ test('small live fee movement reaches wallet with unchanged reviewed fee limits'
  await page.check('#confirm');await page.click('#send');
  await expect(page.locator('#status')).toContainText('Podpis anulowany');
  await expect(page.locator('#attempt')).toContainText('odmowę');
+ expect(await page.evaluate(()=>window.walletCalls.filter(x=>x==='eth_sendTransaction').length)).toBe(1);
+});
+
+test('safe wallet error category is visible while uncertain outcome remains locked',async({page})=>{
+ await setup(page,true,'unsupported');await page.fill('#amount','0.00000001');await page.click('#preview');
+ await page.check('#confirm');await page.click('#send');
+ await expect(page.locator('#attempt')).toContainText('UNSUPPORTED_METHOD (4200)');
+ await expect(page.locator('#status')).toContainText('nieznany');await expect(page.locator('#send')).toBeDisabled();
+ await expect(page.locator('body')).not.toContainText('PRIVATE_PROVIDER_DETAILS');
  expect(await page.evaluate(()=>window.walletCalls.filter(x=>x==='eth_sendTransaction').length)).toBe(1);
 });

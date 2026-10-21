@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {TransferSession, parseAmount, TOKEN} from './transfer.mjs';
+import {TransferSession, parseAmount, TOKEN, classifyWalletError} from './transfer.mjs';
 const FROM='0x'+'1'.repeat(40), TO='0x'+'2'.repeat(40), HASH='0x'+'a'.repeat(64);
 const TRANSFER='0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
 const policy=()=>({chainId:8453,from:FROM,to:TO,asset:'cbBTC',maxAmount:'0.0001',maxExecutionFeeWei:'1000000000000000',expiresAt:Date.now()+600000});
@@ -157,4 +157,32 @@ test('requirements above either reviewed gas or price limit block before wallet 
   assert.equal(p.calls.some(c=>c.method==='eth_sendTransaction'),false);
   assert.equal(s.state,'connected');assert.equal(s.lastAttempt.sendAttempted,false);
  }
+});
+
+test('wallet diagnostics retain only allowlisted categories and standard numeric codes',()=>{
+ const cases=[
+  [{code:4200,message:'PRIVATE_ADDRESS'},'UNSUPPORTED_METHOD',4200],
+  [new Error('Unsupported method eth_sendTransaction PRIVATE_ADDRESS'),'UNSUPPORTED_METHOD',null],
+  [{code:-32002,message:'PRIVATE_SESSION'},'REQUEST_PENDING',-32002],
+  [new Error('RPC URL is not set PRIVATE_URL'),'RPC_CONFIGURATION',null],
+  [new Error('Request timed out PRIVATE_SECRET'),'TIMEOUT',null],
+  [new Error('failed to publish event'),'RELAY_PUBLISH_FAILED',null],
+  [new Error('instance is destroyed'),'SESSION_DESTROYED',null],
+  [new Error('SEND_STATUS_UNKNOWN'),'INVALID_RESULT',null],
+  [{code:'PRIVATE_SECRET',message:'PRIVATE_MESSAGE'},'UNCLASSIFIED',null],
+ ];
+ for(const [e,category,code] of cases){
+  const d=classifyWalletError(e);assert.deepEqual(d,{category,code});
+  assert.equal(JSON.stringify(d).includes('PRIVATE'),false);assert.ok(Object.isFrozen(d));
+ }
+});
+
+test('post-invocation unsupported error is diagnosed but never unlocks or retries',async()=>{
+ const p=provider({eth_sendTransaction:()=>{throw {code:4200,message:'PRIVATE_PROVIDER_DETAILS'};}});
+ const s=new TransferSession(p,policy());await s.connect();await s.prepare('0.00000001');
+ await assert.rejects(s.submit(true),/SEND_STATUS_UNKNOWN/);
+ assert.deepEqual(s.lastAttempt.diagnostic,{category:'UNSUPPORTED_METHOD',code:4200});
+ assert.equal(s.state,'unknown');await assert.rejects(s.submit(true));
+ assert.equal(p.calls.filter(c=>c.method==='eth_sendTransaction').length,1);
+ assert.equal(JSON.stringify(s.lastAttempt).includes('PRIVATE'),false);
 });

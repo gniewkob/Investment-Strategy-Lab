@@ -6,6 +6,31 @@ function check(ok,code){if(!ok)throw new Error(code);}
 function address(v){check(typeof v==='string'&&ADDRESS.test(v),'INVALID_ADDRESS');return v.toLowerCase();}
 function quantity(v){check(typeof v==='string'&&/^0x[0-9a-fA-F]{1,64}$/.test(v),'INVALID_RPC_QUANTITY');return BigInt(v);}
 const hex=v=>'0x'+v.toString(16);
+export function classifyWalletError(error){
+ // Never retain provider messages, RPC URLs, request bodies or arbitrary error codes.
+ let code=null,message='';
+ try{
+  const allowed=new Set([4001,4100,4200,4900,4901,-32002,-32601,-32602,-32603]);
+  if(allowed.has(error?.code))code=error.code;
+  if(typeof error?.message==='string')message=error.message.slice(0,512).toLowerCase();
+ }catch{/* Untrusted error objects may have throwing accessors. */}
+ let category=({4001:'REJECTED',4100:'UNAUTHORIZED',4200:'UNSUPPORTED_METHOD',4900:'DISCONNECTED',4901:'CHAIN_DISCONNECTED',
+  '-32002':'REQUEST_PENDING','-32601':'UNSUPPORTED_METHOD','-32602':'INVALID_PARAMETERS'})[code];
+ if(!category){
+  if(message==='send_status_unknown')category='INVALID_RESULT';
+  else if(message==='failed to publish event')category='RELAY_PUBLISH_FAILED';
+  else if(message==='instance is destroyed')category='SESSION_DESTROYED';
+  else if(/unsupported method|method .*not supported|method not found/.test(message))category='UNSUPPORTED_METHOD';
+  else if(/already pending|request pending/.test(message))category='REQUEST_PENDING';
+  else if(/rpc.*url.*(missing|not set|unavailable|required)/.test(message))category='RPC_CONFIGURATION';
+  else if(/timed out|timeout/.test(message))category='TIMEOUT';
+  else if(/disconnect|connection closed|session expired|session not found/.test(message))category='DISCONNECTED';
+  else if(/user rejected|user denied|user cancelled|user canceled/.test(message))category='REJECTION_MESSAGE';
+  else if(/insufficient funds/.test(message))category='INSUFFICIENT_FUNDS';
+  else category='UNCLASSIFIED';
+ }
+ return Object.freeze({category,code});
+}
 export function parseAmount(value,decimals){
  check(typeof value==='string'&&value.length<=80&&/^(0|[1-9][0-9]*)(\.[0-9]+)?$/.test(value),'INVALID_AMOUNT');
  const [whole,fraction='']=value.split('.');check(fraction.length<=decimals,'EXCESS_PRECISION');
@@ -87,8 +112,8 @@ export class TransferSession{
    Object.freeze(result.transaction);this.prepared=Object.freeze(result);this.state='prepared';return result;
   }finally{this.busy=false;}
  }
- recordAttempt(phase,sendAttempted){
-  this.lastAttempt=Object.freeze({phase,sendAttempted,at:Date.now()});
+ recordAttempt(phase,sendAttempted,diagnostic){
+  this.lastAttempt=Object.freeze({phase,sendAttempted,at:Date.now(),...(diagnostic?{diagnostic}:{})});
   try{this.onAttempt?.(this.lastAttempt);}catch{/* Observers cannot change submission control flow. */}
  }
  async submit(reviewConfirmed){
@@ -117,7 +142,7 @@ export class TransferSession{
     this.state='connected';this.prepared=null;this.recordAttempt('preflight_failed',false);
     throw new Error(known?e.message:'PREFLIGHT_FAILED');
    }
-   this.state='unknown';this.recordAttempt('outcome_unknown',true);throw new Error('SEND_STATUS_UNKNOWN');
+   this.state='unknown';this.recordAttempt('outcome_unknown',true,classifyWalletError(e));throw new Error('SEND_STATUS_UNKNOWN');
   }finally{this.busy=false;}
  }
  async checkReceipt(){

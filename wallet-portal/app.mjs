@@ -45,7 +45,7 @@ $('connect').onclick=()=>action(async()=>{
  session=new TransferSession(provider,config.policy,config.accounts,config.policy?createReadOnlyRpc(config.policy.chainId):provider);
  session.onAttempt=attempt=>{
   const labels={preflight:'Sprawdzanie przed podpisem — żądanie wysyłki jeszcze niewysłane.',wallet_confirmation:'Żądanie przekazane do portfela — sprawdź potwierdzenie w telefonie.',broadcast_hash_received:'Portfel zwrócił identyfikator — pozostaje sprawdzić potwierdzenie w sieci.',preflight_failed:'Błąd przed podpisem — nie przekazano żądania wysyłki.',wallet_rejected:'Portfel zgłosił odmowę potwierdzenia.',outcome_unknown:'Brak potwierdzonego wyniku żądania portfela — ponowienie zablokowane.'};
-  $('attempt').textContent=labels[attempt.phase];
+  $('attempt').textContent=labels[attempt.phase]+(attempt.diagnostic?` Diagnostyka: ${attempt.diagnostic.category}${attempt.diagnostic.code!==null?` (${attempt.diagnostic.code})`:''}.`:'');
   render();
   if(attempt.phase==='wallet_confirmation')status('Otwórz aplikację portfela na telefonie. Oczekiwanie na Twoją decyzję; nie ponawiaj żądania.');
  };
