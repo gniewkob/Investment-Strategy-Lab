@@ -118,3 +118,20 @@ test('wallet identity and signature stay separate from independent preflight rea
  assert.equal(reads.calls.some(c=>c.method==='eth_getBalance'),true);
  assert.equal(reads.calls.some(c=>c.method==='eth_sendTransaction'),false);
 });
+test('unexpected preflight identity error does not become an unknown send',async()=>{
+ let accounts=0;
+ const p=provider({eth_accounts:()=>{if(++accounts===3)throw new Error('PRIVATE_RPC_ERROR');return[FROM];}});
+ const s=new TransferSession(p,policy());await s.connect();await s.prepare('0.00000001');
+ await assert.rejects(s.submit(true),/PREFLIGHT_FAILED/);assert.equal(s.state,'connected');
+ assert.equal(s.prepared,null);assert.equal(p.calls.some(c=>c.method==='eth_sendTransaction'),false);
+ assert.equal(s.lastAttempt.phase,'preflight_failed');assert.equal(s.lastAttempt.sendAttempted,false);
+});
+test('wallet transport failure records phase and keeps unknown send locked',async()=>{
+ const p=provider({eth_sendTransaction:()=>{throw new Error('PRIVATE_TRANSPORT_ERROR');}}),s=new TransferSession(p,policy());
+ const phases=[];s.onAttempt=a=>{phases.push(a.phase);};await s.connect();await s.prepare('0.00000001');
+ await assert.rejects(s.submit(true),/SEND_STATUS_UNKNOWN/);
+ assert.deepEqual(phases,['preflight','wallet_confirmation','outcome_unknown']);
+ assert.equal(s.lastAttempt.sendAttempted,true);assert.equal(s.state,'unknown');
+ assert.equal(JSON.stringify(s.lastAttempt).includes('PRIVATE_'),false);
+ await assert.rejects(s.submit(true));assert.equal(p.calls.filter(c=>c.method==='eth_sendTransaction').length,1);
+});

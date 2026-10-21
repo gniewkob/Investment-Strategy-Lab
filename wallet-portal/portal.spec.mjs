@@ -40,11 +40,13 @@ test('review is explicit; rejected wallet signature clears approval',async({page
  await expect(page.locator('#review')).toContainText(TO);await expect(page.locator('#send')).toBeDisabled();
  expect(await page.evaluate(()=>window.walletCalls.includes('eth_sendTransaction'))).toBe(false);
  await page.check('#confirm');await page.click('#send');await expect(page.locator('#status')).toContainText('Podpis anulowany');
+ await expect(page.locator('#attempt')).toContainText('odmowę');
  await expect(page.locator('#send')).toBeDisabled();expect(await page.evaluate(()=>window.walletCalls.filter(x=>x==='eth_sendTransaction').length)).toBe(1);
 });
 test('ambiguous send locks session without retry',async({page})=>{
  await setup(page,true,'unknown');await page.fill('#amount','0.00000001');await page.click('#preview');await page.check('#confirm');await page.click('#send');
- await expect(page.locator('#status')).toContainText('nieznany');await expect(page.locator('#preview')).toBeDisabled();await expect(page.locator('#connect')).toBeDisabled();
+ await expect(page.locator('#status')).toContainText('nieznany');
+ await expect(page.locator('#attempt')).toContainText('ponowienie zablokowane');await expect(page.locator('#preview')).toBeDisabled();await expect(page.locator('#connect')).toBeDisabled();
  expect(await page.evaluate(()=>window.walletCalls.filter(x=>x==='eth_sendTransaction').length)).toBe(1);
 });
 

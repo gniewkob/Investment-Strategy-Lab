@@ -132,3 +132,16 @@ lokalny nie jest proxy. Portfel nadal niezależnie potwierdza konto i sieć oraz
 jest jedyną ścieżką podpisu użytkownika. Błąd odczytu ETH/tokena/estymacji/ceny gas
 ma osobny stały komunikat, bez prywatnych szczegółów błędu dostawcy. Niedostępność
 źródła nie pozwala pominąć sprawdzenia i odblokować podpisu.
+
+Etap ostatniej próby jest jawny w pamięci sesji (`lastAttempt`) i na ekranie:
+preflight, oczekiwanie na portfel, zwrócony hash, odmowa albo nieznany wynik.
+Zapis obejmuje wyłącznie etap, czas i informację, czy wywołano żądanie wysyłki;
+nie zawiera adresów, sekretów ani surowych błędów dostawcy. Obserwator UI nie może
+zmienić przebiegu wysyłki przez zgłoszenie wyjątku. Dowolny błąd **przed**
+`eth_sendTransaction` czyści podgląd i raportuje niewykonaną próbę wysyłki.
+Po wywołaniu portfela nieznany wynik nadal blokuje powtórzenie; poprawka nie
+rozstrzyga wstecznie starych błędów ani nie resetuje istniejącego stanu UNKNOWN.
+Zniknięcie powiadomienia na telefonie nie jest dowodem wykonania ani anulowania.
+Wygasła konfiguracja nie jest automatycznie odnawiana. Przy braku hash i
+nieznanym wyniku najpierw należy uzgodnić stan portfela/odbiorcy oraz zakończyć
+starą prośbę w portfelu; nie obchodź blokady przez odświeżanie lub nową sesję.

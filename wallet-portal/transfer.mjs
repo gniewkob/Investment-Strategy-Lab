@@ -86,10 +86,14 @@ export class TransferSession{
    Object.freeze(result.transaction);this.prepared=Object.freeze(result);this.state='prepared';return result;
   }finally{this.busy=false;}
  }
+ recordAttempt(phase,sendAttempted){
+  this.lastAttempt=Object.freeze({phase,sendAttempted,at:Date.now()});
+  try{this.onAttempt?.(this.lastAttempt);}catch{/* Observers cannot change submission control flow. */}
+ }
  async submit(reviewConfirmed){
   check(reviewConfirmed===true,'REVIEW_REQUIRED');check(this.state==='prepared'&&!this.busy,'NOT_READY');
   const reviewed=this.prepared;check(Date.now()-reviewed.reviewedAt<60000,'REVIEW_EXPIRED');
-  this.state='submitting';this.busy=true;let sendAttempted=false;
+  this.state='submitting';this.busy=true;let sendAttempted=false;this.recordAttempt('preflight',false);
   try{
    const current=await this.inspect(reviewed.amount);
    check(current.generation===reviewed.generation,'IDENTITY_CHANGED');
@@ -97,18 +101,20 @@ export class TransferSession{
    await this.checkIdentity();
    check(this.generation===reviewed.generation,'IDENTITY_CHANGED');
    // Keep the reviewed fields, not a mutable form object. Wallet approval is final.
-   sendAttempted=true;
+   sendAttempted=true;this.recordAttempt('wallet_confirmation',true);
    const result=await this.provider.request({method:'eth_sendTransaction',params:[{...reviewed.transaction}]});
    check(typeof result==='string'&&HASH.test(result),'SEND_STATUS_UNKNOWN');
-   this.hash=result;this.prepared=reviewed;this.state='submitted';return result;
+   this.hash=result;this.prepared=reviewed;this.state='submitted';this.recordAttempt('broadcast_hash_received',true);return result;
   }catch(e){
-   if(e?.code===4001){this.state='connected';this.prepared=null;throw new Error('USER_REJECTED');}
-   if(!sendAttempted&&['POLICY_EXPIRED','WRONG_CHAIN','ACCOUNT_CHANGED','IDENTITY_CHANGED','FEE_CHANGED_REVIEW_AGAIN','NO_GAS',
+   if(e?.code===4001){this.state='connected';this.prepared=null;this.recordAttempt('wallet_rejected',sendAttempted);throw new Error('USER_REJECTED');}
+   if(!sendAttempted){
+    const known=['POLICY_EXPIRED','WRONG_CHAIN','ACCOUNT_CHANGED','IDENTITY_CHANGED','FEE_CHANGED_REVIEW_AGAIN','NO_GAS',
        'INSUFFICIENT_TOKEN_BALANCE','INSUFFICIENT_GAS_BALANCE','EXECUTION_FEE_CAP_EXCEEDED',
-       'BALANCE_RPC_UNAVAILABLE','TOKEN_RPC_UNAVAILABLE','GAS_ESTIMATE_UNAVAILABLE','GAS_PRICE_UNAVAILABLE'].includes(e?.message)){
-    this.state='connected';this.prepared=null;throw new Error(e.message);
+       'BALANCE_RPC_UNAVAILABLE','TOKEN_RPC_UNAVAILABLE','GAS_ESTIMATE_UNAVAILABLE','GAS_PRICE_UNAVAILABLE'].includes(e?.message);
+    this.state='connected';this.prepared=null;this.recordAttempt('preflight_failed',false);
+    throw new Error(known?e.message:'PREFLIGHT_FAILED');
    }
-   this.state='unknown';throw new Error('SEND_STATUS_UNKNOWN');
+   this.state='unknown';this.recordAttempt('outcome_unknown',true);throw new Error('SEND_STATUS_UNKNOWN');
   }finally{this.busy=false;}
  }
  async checkReceipt(){
