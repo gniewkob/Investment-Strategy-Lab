@@ -328,11 +328,14 @@ def render_markdown(report):
     wallet = report.get("onchain_wallets")
     if wallet is not None:
         lines.extend(["", "## Wallet on-chain (osobny od giełdy Coinbase)",
-            "Odczyt: " + wallet["observed_at_utc"],
+            "Czas danych walleta (UTC): " + wallet["observed_at_utc"],
+            "Źródło: " + wallet["source"],
             "Zweryfikowany zakres sieci: Ethereum/Base — wyłącznie skonfigurowane prywatnie adresy.",
             "Podzbiór wyceniony przez eksplorator: " + wallet["priced_subtotal_usd"] + " USD.",
             "Niewycenione albo niezweryfikowane pozycje: " +
                 str(wallet["unpriced_or_unreviewed_position_count"]) + "."])
+        if wallet.get("stale_snapshot_warning"):
+            lines.append("UWAGA: snapshot walleta jest starszy niż 24 godziny — to nie jest aktualny stan.")
         for item in wallet["wallets"]:
             lines.append("- " + item["wallet_label"] + " / " + item["network"] +
                          ": wyceniony podzbiór " + item["priced_subtotal_usd"] + " USD.")
@@ -354,8 +357,11 @@ def render_markdown(report):
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Public read-only market and optional local account risk report")
     parser.add_argument("--portfolio-file", type=Path, help="PRIVATE local snapshot; NEVER use in public GitHub Actions")
-    parser.add_argument("--wallet-watchlist", type=Path,
-                        help="PRIVATE LOCAL Ethereum/Base addresses; never pass to GitHub Actions")
+    wallet_input = parser.add_mutually_exclusive_group()
+    wallet_input.add_argument("--wallet-watchlist", type=Path,
+                              help="PRIVATE LOCAL Ethereum/Base addresses for live explorer GETs")
+    wallet_input.add_argument("--wallet-snapshot-file", type=Path,
+                              help="PRIVATE LOCAL archived explorer-shaped JSON; OFFLINE")
     parser.add_argument("--format", choices=("markdown", "json"), default="markdown")
     args = parser.parse_args(argv)
     now = datetime.now(timezone.utc)
@@ -368,13 +374,15 @@ def main(argv=None):
     markets = fetch_markets(now)
     fx = fetch_usdpln(now)
     wallet = None
-    if args.wallet_watchlist:
+    local_wallet = args.wallet_watchlist or args.wallet_snapshot_file
+    if local_wallet:
         from scripts.private_wallet_chain_monitor import (
-            inspect_wallet_watchlist, MAX_CONFIG)
-        if args.wallet_watchlist.stat().st_size > MAX_CONFIG:
-            raise MonitoringError("Local wallet watchlist too large")
-        config = json.loads(args.wallet_watchlist.read_text(encoding="utf-8"))
-        wallet = inspect_wallet_watchlist(config, now)
+            inspect_wallet_watchlist, inspect_local_wallet_snapshot, MAX_CONFIG)
+        if local_wallet.stat().st_size > MAX_CONFIG:
+            raise MonitoringError("Local wallet input too large")
+        config = json.loads(local_wallet.read_text(encoding="utf-8"))
+        wallet = (inspect_wallet_watchlist(config, now)
+                  if args.wallet_watchlist else inspect_local_wallet_snapshot(config, now))
     report = build_report(now, markets, fx, private, wallet)
     print(json.dumps(report, sort_keys=True, ensure_ascii=False) if args.format == "json"
           else render_markdown(report))
