@@ -17,12 +17,12 @@ Odczyt salda nie jest uprawnieniem do jego przeniesienia.
 | Coinbase — autoryzowany odczyt | PASS: istniejący konektor zwrócił listę, breakdown i salda jednego autoryzowanego portfela; dane prywatne nie są w Git |
 | Coinbase → CLI | PASS: rzeczywisty capture przeszedł normalizację i CLI; CLI nie uwierzytelnia się sam do Coinbase |
 | Wallet Ethereum/Base | PASS: wspólny rzeczywisty raport CLI z ETH i jawnym kontraktem cbBTC obu sieci, sfinalizowane bloki, bez adresów kont w wyniku |
-| Historia Ethereum | PASS tylko dla próby jednego sfinalizowanego bloku, 0 logów cbBTC; nie dowodzi braku wcześniejszych zdarzeń |
+| Historia Ethereum | PASS dla małego zakresu (ostatnia próba: 10 sfinalizowanych bloków); nie dowodzi kompletności wcześniejszych zdarzeń |
 | Historia Base | PENDING: publiczne RPC odrzuciło odczyt logów HTTP (także 429 w ponownej próbie); saldo odczytano niezależnie |
 | Historia wpłat/wypłat Coinbase | PENDING: dostępny konektor nie wystawia tej operacji; fills nie zastępują historii transferów |
 | Uzgadnianie transferów | PASS offline dla syntetycznych par; PENDING live, brak autoryzowanej historii obu stron |
 | Coinbase publiczne OHLCV + NBP | PASS: rzeczywiste pobranie trzech zakresów 72h i datowanego USD/PLN przez istniejące moduły |
-| Testy | 379 offline testów PASS w Pythonie 3.12 z istniejącą zależnością psycopg; w tym 15 nowych testów, subprocess CLI i wspólna ścieżka CLI z kontrolowanym RPC |
+| Testy | 384 offline testów PASS w Pythonie 3.12 z istniejącą zależnością psycopg; w tym 20 nowych testów, subprocess CLI i wspólna ścieżka CLI z kontrolowanym RPC |
 | Pełna wycena majątku / P&L | UNKNOWN: brak pełnej enumeracji tokenów, DeFi/NFT, innych sieci i historycznych kosztów; nie wyliczamy pełnego USD total |
 
 Udany odczyt sald obu sieci użył sfinalizowanych bloków Ethereum **26239845**
@@ -101,6 +101,31 @@ python -m scripts.operational_read_only \
   --output /PRIVATE_DIR/history-NEW.private-wallet.json
 ```
 
+Opcjonalny tryb odporny na niedostępną historię:
+
+```bash
+python -m scripts.operational_read_only \
+  --exchange-capture /PRIVATE_DIR/exchange.portfolio-private.json \
+  --wallet-watchlist /PRIVATE_DIR/watch.wallet-private.json \
+  --history-blocks 10 --allow-partial-history --public-markets \
+  --output /PRIVATE_DIR/report-PARTIAL-NEW.private-wallet.json
+```
+
+`--allow-partial-history` zachowuje odczytane salda przy błędzie pobrania lub
+weryfikacji historii tokenów. Zawsze ponownie weryfikuje blok salda; zmieniony
+hash, zła sieć lub niepoprawny zakres nadal przerywają raport.
+Niedostępna historia ma `status=UNAVAILABLE`, `event_count=null`, a nie zero.
+Raport ma `PRIVATE_READ_ONLY_PARTIAL_OBSERVATION` i kod wyjścia **3**;
+uzgadnianie zawiera `wallet_history_coverage=PARTIAL`. Brakujące zdarzenia
+pozostają UNKNOWN. Domyślne zachowanie bez flagi nadal przerywa raport.
+Nie pomijaj kodu 3 w skryptach operatora. Ten tryb nie maskuje błędów sald,
+źródeł rynkowych, konfiguracji ani nie nadaje uprawnień do transferu.
+
+Zweryfikowana próba live nowego trybu (2026-10-21) zachowała odświeżony odczyt
+Coinbase, salda Ethereum/Base, trzy zakresy OHLCV i NBP. Historia ostatnich
+10 bloków Ethereum została odczytana; historia Base była UNAVAILABLE.
+Raport zapisano prywatnie z uprawnieniami 0600 i kodem wyjścia 3.
+
 Bez `--history-blocks` pobierane są tylko salda. Bez `--public-markets` nie ma
 żądań OHLCV/NBP. Osobne próby pozwalają badać źródła niezależnie.
 `--at` służy tylko replay offline capture, zabronione przy live wallet/market;
@@ -108,7 +133,7 @@ raport oznacza taki zegar `OFFLINE_REPLAY`.
 
 Wyjście stdout jest stałym komunikatem, bez sald, adresów, ID i ścieżek.
 Exit 0 = zapisano raport w zadeklarowanym zakresie, **nie** pełny majątek;
-exit 2 = błąd, nie powstał kompletny raport. Nie włączaj traceback/raw HTTP.
+exit 2 = błąd, nie powstał kompletny raport; exit 3 = zapisano jawny raport częściowy z brakującą historią. Nie włączaj traceback/raw HTTP.
 Pliki są wrażliwe mimo braku adresu konta: zawierają salda, bloki, a historia
 hash transakcji. Nie publikuj ich ani ich fingerprintów jako „anonimowych”.
 Katalog właściciela 0700, wejścia i nowe wyniki 0600, odrzucenie symlinków
@@ -138,8 +163,12 @@ braku `removed`; deduplikacja `(chain, txhash, logIndex)` w obrębie walleta.
 Każda strona logu zachowuje lokalną `wallet_label` i ID zależne od tej etykiety,
 więc transfer między dwoma obserwowanymi walletami nie przerywa uzgodnienia.
 Etykiety powinny być stabilne i nieidentyfikujące; nie są dowodem własności. Nie ma pełnej historii
-natywnych transferów/internal calls/NFT/DeFi. Czas pojedynczego zdarzenia może
-być UNKNOWN; numer/hash bloku pozostaje źródłową referencją, nie wymyślamy dat.
+natywnych transferów/internal calls/NFT/DeFi. Czas zdarzenia pochodzi z jego konkretnego bloku, którego numer i hash muszą
+zgadzać się z logiem. Powtarzane bloki są odczytywane raz; maksymalnie 100 bloków
+dowodowych (wliczając blok końcowy) na wallet w pojedynczym raporcie.
+Brak lub niespójność dowodu czasu/hash przerywa historię; przy jawnej fladze
+raport częściowy zachowuje tylko zweryfikowane salda. Nie zastępuj czasu
+historycznego bloku czasem pobrania ani czasem bloku końcowego.
 
 Opcjonalny `--exchange-events` przyjmuje **prywatny eksport już zaobserwowanych**
 zdarzeń: `mode=PRIVATE_OBSERVED_EXCHANGE_EVENTS`, `events=[...]`.

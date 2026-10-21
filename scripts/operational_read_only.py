@@ -204,10 +204,12 @@ def normalize_exchange(capture, now):
     return normalized
 
 
-def _history(chain, addr, contracts, end, count, rpc):
+def _history(chain, addr, contracts, end, count, rpc, finalized_block):
     if not 1 <= count <= 1000: raise ReadOnlyError('HISTORY_RANGE_OUTSIDE_1_1000_BLOCKS')
     start = max(0, end-count+1)
     events = {}
+    blocks = {end: finalized_block}
+    end_timestamp = _hex(finalized_block.get('timestamp'))
     topic_addr = '0x' + '0'*24 + addr[2:]
     for contract in sorted(contracts):
         symbol, decimals = TOKENS[chain][contract]
@@ -225,6 +227,16 @@ def _history(chain, addr, contracts, end, count, rpc):
                     or not HEX32.fullmatch(log.get('transactionHash', ''))
                     or not HEX32.fullmatch(log.get('blockHash', ''))):
                     raise ReadOnlyError('UNCONFIRMED_OR_INVALID_LOG')
+                if block not in blocks:
+                    if len(blocks) >= 100:
+                        raise ReadOnlyError('HISTORY_BLOCK_EVIDENCE_BUDGET_EXCEEDED')
+                    blocks[block] = rpc(chain, 'eth_getBlockByNumber', [hex(block), False])
+                source_block = blocks[block]
+                if (_hex(source_block.get('number')) != block
+                        or source_block.get('hash', '').lower() != log['blockHash'].lower()
+                        or _hex(source_block.get('timestamp')) > end_timestamp):
+                    raise ReadOnlyError('HISTORY_BLOCK_EVIDENCE_MISMATCH')
+                event_time = datetime.fromtimestamp(_hex(source_block['timestamp']), timezone.utc).isoformat()
                 tx = log['transactionHash'].lower()
                 index = _hex(log.get('logIndex'))
                 direction = 'self' if t[1].lower() == t[2].lower() else ('out' if t[1].lower() == topic_addr else 'in')
@@ -233,10 +245,11 @@ def _history(chain, addr, contracts, end, count, rpc):
                     'chain_id': chain, 'tx_hash': tx, 'contract': contract, 'asset': symbol,
                     'quantity': _units(_hex(log.get('data')), decimals), 'direction': direction,
                     'confirmed': True, 'location': 'wallet', 'block_number': block,
-                    'block_hash': log['blockHash'].lower(), 'source_event_timestamp_utc': None}
+                    'block_hash': log['blockHash'].lower(), 'source_event_timestamp_utc': event_time}
                 if key in events and events[key] != event: raise ReadOnlyError('CONFLICTING_LOG')
                 events[key] = event
-    return {'from_block': start, 'to_block': end, 'event_count': len(events),
+    return {'status': 'COMPLETE_REQUESTED_TOKEN_RANGE',
+            'from_block': start, 'to_block': end, 'event_count': len(events),
             'events': list(events.values()), 'scope': 'REGISTERED_ERC20_TRANSFER_LOGS_ONLY',
             'native_internal_nft_defi_history_included': False, 'full_history': False}
 
@@ -247,7 +260,9 @@ def _units(value, decimals):
         return format(Decimal(value) / Decimal(10)**decimals, 'f')
 
 
-def observe_wallets(config, now, *, rpc=rpc_read, history_blocks=0):
+def observe_wallets(config, now, *, rpc=rpc_read, history_blocks=0, allow_partial_history=False):
+    if isinstance(history_blocks, bool) or not isinstance(history_blocks, int) or not 0 <= history_blocks <= 1000:
+        raise ReadOnlyError('HISTORY_RANGE_OUTSIDE_0_1000_BLOCKS')
     try: entries = _private_config(config)
     except WalletSourceError: raise ReadOnlyError('WALLET_CONFIG_INVALID') from None
     output = []
@@ -267,7 +282,19 @@ def observe_wallets(config, now, *, rpc=rpc_read, history_blocks=0):
             symbol, digits = TOKENS[chain][contract]
             raw = rpc(chain, 'eth_call', [{'to': contract, 'data': '0x70a08231'+'0'*24+addr[2:]}, tag])
             positions.append({'asset': symbol, 'contract': contract, 'quantity': _units(_hex(raw), digits)})
-        history = _history(chain, addr, approved, number, history_blocks, rpc) if history_blocks else None
+        history = None
+        if history_blocks:
+            try:
+                history = _history(chain, addr, approved, number, history_blocks, rpc, b)
+            except ReadOnlyError:
+                if not allow_partial_history:
+                    raise
+                # Missing history is UNKNOWN, never a zero-event observation.
+                # Keep only balances whose pinned block is checked again below.
+                history = {'status': 'UNAVAILABLE', 'event_count': None, 'events': [],
+                    'from_block': max(0, number-history_blocks+1), 'to_block': number,
+                    'error_code': 'READ_ONLY_HISTORY_SOURCE_UNAVAILABLE',
+                    'scope': 'REGISTERED_ERC20_TRANSFER_LOGS_ONLY', 'full_history': False}
         if history is not None:
             for event in history['events']:
                 # One blockchain log can be observed by multiple watched wallets.
@@ -282,6 +309,9 @@ def observe_wallets(config, now, *, rpc=rpc_read, history_blocks=0):
             'finality': 'PROVIDER_FINALIZED_NOT_INDEPENDENT_CONSENSUS_PROOF',
             'positions': positions, 'history': history, 'usd_valuation': None})
     return {'status': 'FINALIZED_CONFIGURED_BALANCES', 'wallets': output,
+            'history_complete_for_requested_range': (
+                all(w['history']['status'] == 'COMPLETE_REQUESTED_TOKEN_RANGE' for w in output)
+                if history_blocks else None),
             'all_assets_enumerated': False, 'prices_verified': False,
             'scope': 'NATIVE_ETH_AND_EXPLICIT_REGISTRY_TOKENS_ONLY', 'financial_operations': 0}
 
@@ -355,16 +385,21 @@ def main(argv=None):
     p.add_argument('--wallet-watchlist', type=Path)
     p.add_argument('--exchange-events', type=Path, help='Private observed history export; never transaction instructions')
     p.add_argument('--history-blocks', type=int, default=0, help='0 disables; max 1000 finalized blocks, registered ERC20 only')
+    p.add_argument('--allow-partial-history', action='store_true', help='Keep verified balances on history failure; partial report exits 3')
     p.add_argument('--public-markets', action='store_true', help='Include existing Coinbase closed OHLCV + dated NBP FX sources')
     p.add_argument('--at', help='UTC clock for offline capture validation only; not permitted for live wallet reads')
     p.add_argument('--output', type=Path, required=True)
     args = p.parse_args(argv)
     if not args.exchange_capture and not args.wallet_watchlist: p.error('At least one source required')
+    if not 0 <= args.history_blocks <= 1000: p.error('--history-blocks must be 0..1000')
+    if args.allow_partial_history and not (args.wallet_watchlist and args.history_blocks):
+        p.error('--allow-partial-history requires live wallet history')
     if args.at and (args.wallet_watchlist or args.public_markets): p.error('--at is offline-only')
     try:
         now = _when(args.at) if args.at else datetime.now(timezone.utc)
         exchange = normalize_exchange(read_private(args.exchange_capture), now) if args.exchange_capture else None
-        wallet = observe_wallets(read_private(args.wallet_watchlist), now, history_blocks=args.history_blocks) if args.wallet_watchlist else None
+        wallet = observe_wallets(read_private(args.wallet_watchlist), now, history_blocks=args.history_blocks,
+                                 allow_partial_history=args.allow_partial_history) if args.wallet_watchlist else None
         legs = [e for w in wallet['wallets'] for e in (w['history'] or {}).get('events', [])] if wallet else []
         history = read_private(args.exchange_events) if args.exchange_events else None
         if history is not None and history.get('mode') != 'PRIVATE_OBSERVED_EXCHANGE_EVENTS':
@@ -372,12 +407,15 @@ def main(argv=None):
         audit = reconcile_events(history.get('events'), legs) if history else {
             'status': 'EXCHANGE_HISTORY_UNAVAILABLE', 'balance_adjustment': '0',
             'matched_internal_movements': None, 'unmatched_is_external_funding': False}
+        partial_history = wallet is not None and wallet['history_complete_for_requested_range'] is False
+        audit['wallet_history_coverage'] = ('PARTIAL' if partial_history else
+            'COMPLETE_REQUESTED_TOKEN_RANGE' if wallet and args.history_blocks else 'NOT_REQUESTED')
         market_sources = None
         if args.public_markets:
             from scripts.read_only_portfolio_monitor import fetch_markets, fetch_usdpln
             market_sources = {'coinbase_closed_72h': fetch_markets(now), 'nbp_usdpln': fetch_usdpln(now),
                               'retrieved_at_utc': datetime.now(timezone.utc).isoformat()}
-        report = {'status': 'PRIVATE_READ_ONLY_OBSERVATION', 'generated_at_utc': now.isoformat(),
+        report = {'status': 'PRIVATE_READ_ONLY_PARTIAL_OBSERVATION' if partial_history else 'PRIVATE_READ_ONLY_OBSERVATION', 'generated_at_utc': now.isoformat(),
             'clock_mode': 'OFFLINE_REPLAY' if args.at else 'LIVE_RETRIEVAL',
             'exchange': exchange, 'onchain': wallet, 'public_market_sources': market_sources, 'transfer_reconciliation': audit,
             'consolidation': {'exchange_usd': exchange['reported_total_usd'] if exchange else None,
@@ -386,8 +424,9 @@ def main(argv=None):
                  'event_amounts_added_to_balances': False},
             'financial_operations': 0, 'neon_writes': 0}
         write_private(args.output, report)
-        print('READ_ONLY_REPORT_WRITTEN_PRIVATE; financial_operations=0; complete_net_worth=false')
-        return 0
+        print('READ_ONLY_PARTIAL_REPORT_WRITTEN_PRIVATE; history_incomplete=true' if partial_history else
+              'READ_ONLY_REPORT_WRITTEN_PRIVATE; financial_operations=0; complete_net_worth=false')
+        return 3 if partial_history else 0
     except (ValueError, KeyError, TypeError, OSError, ArithmeticError, AttributeError, RecursionError):
         # No traceback, request payload, path, balances, IDs or API messages in stdout/stderr.
         print('READ_ONLY_OBSERVATION_FAILED; no complete report produced')

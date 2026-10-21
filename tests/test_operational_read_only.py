@@ -283,6 +283,101 @@ class OperationalTests(unittest.TestCase):
         self.assertNotIn(ADDR, json.dumps(result))
         self.assertNotIn(other, json.dumps(result))
 
+    def test_history_event_time_is_from_matching_source_block(self):
+        r = m.observe_wallets(watch(), NOW, rpc=fake_rpc, history_blocks=10)
+        event = r['wallets'][0]['history']['events'][0]
+        self.assertEqual(event['source_event_timestamp_utc'], '2026-10-21T08:59:30+00:00')
+        self.assertEqual(r['wallets'][0]['history']['status'], 'COMPLETE_REQUESTED_TOKEN_RANGE')
+        def wrong_block(c, method, params):
+            value = fake_rpc(c, method, params)
+            if method == 'eth_getLogs':
+                for log in value: log['blockHash'] = '0x'+'b'*64
+            return value
+        with self.assertRaises(m.ReadOnlyError):
+            m.observe_wallets(watch(), NOW, rpc=wrong_block, history_blocks=10)
+
+    def test_partial_history_keeps_confirmed_balances_and_marks_missing_not_zero(self):
+        cfg = watch()
+        cfg['watch'].append(dict(cfg['watch'][0], label='ethereum', chain_id=1))
+        def limited(c, method, params):
+            if c == 8453 and method == 'eth_getLogs':
+                raise m.ReadOnlyError('UPSTREAM_CONTAINS_'+ADDR)
+            return fake_rpc(c, method, params)
+        with self.assertRaises(m.ReadOnlyError):
+            m.observe_wallets(cfg, NOW, rpc=limited, history_blocks=10)
+        result = m.observe_wallets(cfg, NOW, rpc=limited, history_blocks=10, allow_partial_history=True)
+        self.assertFalse(result['history_complete_for_requested_range'])
+        base = result['wallets'][0]
+        self.assertEqual(base['positions'][0]['quantity'], '0.1')
+        self.assertIsNone(base['history']['event_count'])
+        self.assertEqual(base['history']['status'], 'UNAVAILABLE')
+        self.assertEqual(result['wallets'][1]['history']['event_count'], 1)
+        self.assertNotIn(ADDR, json.dumps(result))
+
+    def test_partial_history_cli_writes_private_report_and_returns_exit_three(self):
+        from unittest.mock import patch
+        from contextlib import redirect_stdout
+        from io import StringIO
+        observe = m.observe_wallets
+        def limited(c, method, params):
+            if method == 'eth_getLogs': raise m.ReadOnlyError('UNAVAILABLE_'+ADDR)
+            value = fake_rpc(c, method, params)
+            if method == 'eth_getBlockByNumber':
+                value['timestamp'] = hex(int(datetime.now(timezone.utc).timestamp())-30)
+            return value
+        def wallet(config, now, **kw): return observe(config, now, rpc=limited, **kw)
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d); m.write_private(root/'watch', watch())
+            a = capture(); a['captured_at'] = datetime.now(timezone.utc).isoformat()
+            m.write_private(root/'cex', a)
+            output = StringIO()
+            with patch.object(m, 'observe_wallets', side_effect=wallet), redirect_stdout(output):
+                rc = m.main(['--exchange-capture',str(root/'cex'),'--wallet-watchlist', str(root/'watch'),
+                    '--history-blocks','10','--allow-partial-history','--output',str(root/'report')])
+            self.assertEqual(rc, 3)
+            r = m.read_private(root/'report')
+            self.assertEqual(r['status'], 'PRIVATE_READ_ONLY_PARTIAL_OBSERVATION')
+            self.assertEqual(r['exchange']['reported_total_usd'], '100.0000')
+            self.assertEqual(r['onchain']['wallets'][0]['positions'][0]['quantity'], '0.1')
+            self.assertEqual(r['transfer_reconciliation']['wallet_history_coverage'], 'PARTIAL')
+            self.assertNotIn(ADDR,output.getvalue())
+
+    def test_older_event_block_time_is_verified_and_fetched_once(self):
+        calls = []
+        older_hash = '0x'+'b'*64
+        def older(c, method, params):
+            calls.append((method, params))
+            value = fake_rpc(c, method, params)
+            if method == 'eth_getLogs':
+                for log in value:
+                    log['blockNumber'] = '0x63'; log['blockHash'] = older_hash
+            if method == 'eth_getBlockByNumber' and params[0] == '0x63':
+                return {'number':'0x63','hash':older_hash,'timestamp':hex(int(NOW.timestamp())-60)}
+            return value
+        r = m.observe_wallets(watch(), NOW, rpc=older, history_blocks=10)
+        e = r['wallets'][0]['history']['events'][0]
+        self.assertEqual(e['source_event_timestamp_utc'], '2026-10-21T08:59:00+00:00')
+        self.assertEqual(e['block_hash'], older_hash)
+        self.assertEqual(sum(method == 'eth_getBlockByNumber' and params[0] == '0x63'
+                             for method,params in calls), 1)
+
+    def test_partial_mode_cannot_relax_bad_range_or_changed_balance_block(self):
+        calls = []
+        def rpc(c, method, params):
+            calls.append(method); return fake_rpc(c, method, params)
+        for count in (-1, 1001, True):
+            with self.subTest(count=count), self.assertRaises(m.ReadOnlyError):
+                m.observe_wallets(watch(),NOW,rpc=rpc,history_blocks=count,allow_partial_history=True)
+        self.assertEqual(calls, [])
+        def changed(c, method, params):
+            if method == 'eth_getLogs': raise m.ReadOnlyError('MISSING')
+            value = fake_rpc(c, method, params)
+            if method == 'eth_getBlockByNumber' and params[0] != 'finalized':
+                value['hash'] = '0x'+'b'*64
+            return value
+        with self.assertRaises(m.ReadOnlyError):
+            m.observe_wallets(watch(),NOW,rpc=changed,history_blocks=10,allow_partial_history=True)
+
     def test_private_file_permissions_symlinks_and_cli_end_to_end(self):
         with tempfile.TemporaryDirectory() as d:
             p = Path(d)/'capture.json'; m.write_private(p, capture())
