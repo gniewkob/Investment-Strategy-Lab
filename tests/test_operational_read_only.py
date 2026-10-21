@@ -213,6 +213,49 @@ class OperationalTests(unittest.TestCase):
             self.assertIsNone(report['consolidation']['combined_total_usd'])
             self.assertNotIn(ADDR, output.getvalue())
 
+    def test_malformed_rpc_shape_and_capture_do_not_emit_tracebacks(self):
+        class Response(BytesIO):
+            status = 200
+            def geturl(self): return m.RPC_URLS[8453]
+        def wrong_shape(req, timeout):
+            return Response(b'{"jsonrpc":"2.0","id":1,"result":[]}')
+        with self.assertRaises(m.ReadOnlyError):
+            m.rpc_read(8453, 'eth_getBlockByNumber', ['finalized', False], opener=wrong_shape)
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d); a = capture(); a['reads'][0]['breakdown'] = []
+            m.write_private(root/'bad', a)
+            r = subprocess.run([sys.executable, '-m', 'scripts.operational_read_only',
+                '--exchange-capture', str(root/'bad'), '--at', NOW.isoformat(),
+                '--output', str(root/'out')], capture_output=True, text=True)
+            self.assertEqual(r.returncode, 2)
+            self.assertNotIn('Traceback', r.stderr)
+            self.assertFalse((root/'out').exists())
+
+    def test_real_http_redirect_is_rejected_before_following(self):
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+        from threading import Thread
+        from unittest.mock import patch
+        requests = []
+        class Handler(BaseHTTPRequestHandler):
+            def do_POST(self):
+                requests.append(self.path)
+                self.send_response(302)
+                self.send_header('Location', '/forbidden')
+                self.end_headers()
+            def do_GET(self):
+                requests.append(self.path)
+                self.send_response(200); self.end_headers()
+            def log_message(self, *args): pass
+        server = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+        thread = Thread(target=server.serve_forever, daemon=True); thread.start()
+        try:
+            with patch.dict(m.RPC_URLS, {8453: 'http://127.0.0.1:'+str(server.server_port)}):
+                with self.assertRaises(m.ReadOnlyError):
+                    m.rpc_read(8453, 'eth_chainId', [])
+            self.assertEqual(requests, ['/'])
+        finally:
+            server.shutdown(); server.server_close(); thread.join()
+
     def test_private_file_permissions_symlinks_and_cli_end_to_end(self):
         with tempfile.TemporaryDirectory() as d:
             p = Path(d)/'capture.json'; m.write_private(p, capture())

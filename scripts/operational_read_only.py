@@ -76,7 +76,11 @@ def rpc_read(chain, method, params, *, opener=None, sleep=time.sleep):
                 raise ReadOnlyError('RPC_UPSTREAM_ERROR')
             if data.get('jsonrpc') != '2.0' or 'result' not in data or data['result'] is None:
                 raise ReadOnlyError('RPC_RESULT_MISSING')
-            return data['result']
+            result = data['result']
+            expected_type = dict if method == 'eth_getBlockByNumber' else list if method == 'eth_getLogs' else str
+            if not isinstance(result, expected_type):
+                raise ReadOnlyError('RPC_RESULT_SHAPE_INVALID')
+            return result
         except HTTPError as exc:
             retry = exc.code in (429, 500, 502, 503, 504)
             retry_after = exc.headers.get('Retry-After', '') if exc.headers else ''
@@ -378,7 +382,7 @@ def main(argv=None):
         write_private(args.output, report)
         print('READ_ONLY_REPORT_WRITTEN_PRIVATE; financial_operations=0; complete_net_worth=false')
         return 0
-    except (ValueError, KeyError, TypeError, OSError, OverflowError):
+    except (ValueError, KeyError, TypeError, OSError, ArithmeticError, AttributeError, RecursionError):
         # No traceback, request payload, path, balances, IDs or API messages in stdout/stderr.
         print('READ_ONLY_OBSERVATION_FAILED; no complete report produced')
         return 2

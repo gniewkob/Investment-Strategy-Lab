@@ -22,7 +22,7 @@ Odczyt salda nie jest uprawnieniem do jego przeniesienia.
 | Historia wpłat/wypłat Coinbase | PENDING: dostępny konektor nie wystawia tej operacji; fills nie zastępują historii transferów |
 | Uzgadnianie transferów | PASS offline dla syntetycznych par; PENDING live, brak autoryzowanej historii obu stron |
 | Coinbase publiczne OHLCV + NBP | PASS: rzeczywiste pobranie trzech zakresów 72h i datowanego USD/PLN przez istniejące moduły |
-| Testy | 376 offline testów PASS w Pythonie 3.12 z istniejącą zależnością psycopg; w tym 12 nowych testów, subprocess CLI i wspólna ścieżka CLI z kontrolowanym RPC |
+| Testy | 378 offline testów PASS w Pythonie 3.12 z istniejącą zależnością psycopg; w tym 14 nowych testów, subprocess CLI i wspólna ścieżka CLI z kontrolowanym RPC |
 | Pełna wycena majątku / P&L | UNKNOWN: brak pełnej enumeracji tokenów, DeFi/NFT, innych sieci i historycznych kosztów; nie wyliczamy pełnego USD total |
 
 Udany odczyt sald obu sieci użył sfinalizowanych bloków Ethereum **26239845**
