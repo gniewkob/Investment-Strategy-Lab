@@ -99,3 +99,18 @@ połączenie w ustawieniach portfela. Wycofanie kodu nie cofa wysłanej transakc
 
 Źródła: [Base account SDK](https://github.com/base/account-sdk),
 [Coinbase Wallet](https://docs.cdp.coinbase.com/coinbase-wallet/overview).
+
+## Wybór właściwego konta portfela
+
+Domyślna opcja Coinbase Wallet korzysta z osobnego SDK `@coinbase/wallet-sdk`
+4.4.0 z `options: eoaOnly`: połączenie z rozszerzeniem lub portfelem mobilnym
+przez QR, bez przekierowania do logowania Base Account. Relay wymaga
+HTTPS/WSS `www.walletlink.org`, dopuszczonych w CSP. Sesja QR jest zarządzana
+przez SDK i może pozostać w jego storage. Base Account z passkey pozostaje
+osobną, jawnie opisaną opcją. Są to różne ścieżki połączenia, które mogą zwracać
+różne adresy. Panel nie rozwiązuje nazw `.base.id` ani nie poświadcza ich
+powiązania; sprawdza adres względem prywatnej listy. Wybierz właściwe konto
+w aplikacji portfela przed zatwierdzeniem połączenia. Po błędzie niewłaściwego
+konta można zmienić sposób połączenia; żadna blokada adresu nie jest pomijana.
+Wbudowana przeglądarka może nie mieć rozszerzeń: użyj QR albo zwykłej przeglądarki
+z rozszerzeniem. Nie importuj frazy odzyskiwania do panelu.
