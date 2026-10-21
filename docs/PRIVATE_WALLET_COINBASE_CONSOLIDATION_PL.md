@@ -52,6 +52,51 @@ python3 -m scripts.read_only_portfolio_monitor \
   --wallet-watchlist /PRIVATE/PATH/wallet-watch.private.json
 ```
 
+### Offline fallback, when the public blockchain explorer is unavailable
+
+A neutral-address Blockscout integration smoke test in [GitHub Actions #39559863580](https://github.com/gniewkob/Investment-Strategy-Lab/actions/runs/39559863580) **FAILED** on an explorer HTTPS request. It contained **no user address** and this does **not** prove any user's wallet is empty or inaccessible. Live reads of the user's wallet remain **UNVERIFIED**. Do not hide this negative source evidence, assume paid API keys, or retry in a tight loop.
+
+The monitor now supports a **private locally exported data snapshot** in the same read-only mode, containing `captured_at` and `address_response` plus `token_balances_response` for each configured address+chain pair. These are the bodies of the two corresponding Blockscout API responses, supplied independently by the operator. Example below is **ENTIRELY FABRICATED** and **NOT a real user's wallet or chain state**:
+
+```json
+{
+  "mode": "PRIVATE_WALLET_READ_ONLY",
+  "captured_at": "2026-10-21T07:00:00Z",
+  "watch": [{
+    "label": "primary",
+    "chain_id": 8453,
+    "address": "0x1111111111111111111111111111111111111111",
+    "verified_token_contracts": ["0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],
+    "address_response": {"coin_balance": "100000000000000000", "exchange_rate": "2000"},
+    "token_balances_response": [{
+      "value": "100000",
+      "token": {
+        "type": "ERC-20",
+        "address_hash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "symbol": "DEMO",
+        "decimals": "8",
+        "exchange_rate": "100000"
+      }
+    }]
+  }]
+}
+```
+
+```bash
+# Pure offline, no external network, all wallet data stay in the local file:
+python3 -m scripts.private_wallet_chain_monitor --snapshot-file /PRIVATE/PATH/wallet-export.private.json
+
+# Public market report + private historical wallet snapshot:
+python3 -m scripts.read_only_portfolio_monitor --wallet-snapshot-file /PRIVATE/PATH/wallet-export.private.json
+
+# Combine with a separately captured Coinbase Exchange account view:
+python3 -m scripts.read_only_portfolio_monitor \
+  --portfolio-file /PRIVATE/PATH/coinbase.portfolio-private.json \
+  --wallet-snapshot-file /PRIVATE/PATH/wallet-export.private.json
+```
+
+The snapshot is **not authenticated as having originated from Blockscout** and is not a live blockchain query. The CLI rejects captured times in the future and older than 30 days, and prominently warns when the wallet snapshot is older than 24 hours. Source schema is fail-closed: an absent token response, absent native coin balance, duplicate contract or unapproved token valuation cannot silently imply `0 USD` or a complete portfolio. Wallet addresses never appear in CLI output.
+
 The optional private Coinbase snapshot schema is described in [READ_ONLY_PORTFOLIO_MONITOR_PL.md](READ_ONLY_PORTFOLIO_MONITOR_PL.md). It uses a captured-at UTC timestamp, balance reconciliation and staking categorization, and contains **no** brokerage signing credentials.
 
 The combined report labels separately:
