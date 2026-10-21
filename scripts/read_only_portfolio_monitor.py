@@ -259,7 +259,8 @@ def analyze_portfolio(payload, report_at):
     }
 
 
-def build_report(now, market, usdpln, private_snapshot=None, wallet_report=None):
+def build_report(now, market, usdpln, private_snapshot=None, wallet_report=None,
+                 flow_audit=None):
     if isinstance(now, str):
         now = _when(now)
     if now.tzinfo is None or now.utcoffset() != timedelta(0):
@@ -287,6 +288,7 @@ def build_report(now, market, usdpln, private_snapshot=None, wallet_report=None)
         "portfolio": portfolio,
         "onchain_wallets": wallet_report,
         "combined_known_holdings": combined,
+        "read_only_flow_audit": flow_audit,
         "portfolio_data": "NOT_CONNECTED_TO_CLI" if portfolio is None else "USER_SUPPLIED_PRIVATE_SNAPSHOT",
         "research_assessment": "OBSERVATIONAL_NO_BUY_SELL_SIGNALS",
         "profitability_proven": False,
@@ -346,6 +348,12 @@ def render_markdown(report):
                          " USD — NIE jest to kompletna wartość wszystkich aktywów.")
         lines.append("Brak potwierdzenia cen możliwych do wykonania, pozycji DeFi/NFT "
                      "oraz dostępności środków do handlu.")
+    flows = report.get("read_only_flow_audit")
+    if flows is not None:
+        from scripts.private_multi_source_flow_audit import render_markdown as render_flow_audit
+        lines.extend(["", "## Przepływy kapitału (osobny prywatny rejestr)",
+            render_flow_audit(flows),
+            "Przepływy są zapisem odczytowym i NIE są instrukcją wykonania transferu."])
     lines.extend(["", "## Granice interpretacji",
         "Dane rynkowe i salda służą wyłącznie monitoringowi. Brak wskazań kupna/sprzedaży i zleceń.",
         "Ostatnie zamknięcie świecy nie jest notowaniem bid/ask ani gwarantowaną ceną transakcji.",
@@ -362,6 +370,8 @@ def main(argv=None):
                               help="PRIVATE LOCAL Ethereum/Base addresses for live explorer GETs")
     wallet_input.add_argument("--wallet-snapshot-file", type=Path,
                               help="PRIVATE LOCAL archived explorer-shaped JSON; OFFLINE")
+    parser.add_argument("--flow-audit-file", type=Path,
+                        help="PRIVATE offline history: snapshots & already observed movements")
     parser.add_argument("--format", choices=("markdown", "json"), default="markdown")
     args = parser.parse_args(argv)
     now = datetime.now(timezone.utc)
@@ -383,7 +393,15 @@ def main(argv=None):
         config = json.loads(local_wallet.read_text(encoding="utf-8"))
         wallet = (inspect_wallet_watchlist(config, now)
                   if args.wallet_watchlist else inspect_local_wallet_snapshot(config, now))
-    report = build_report(now, markets, fx, private, wallet)
+    flow_audit = None
+    if args.flow_audit_file:
+        from scripts.private_multi_source_flow_audit import (
+            MAX_FILE as MAX_FLOW_FILE, audit_flows)
+        if args.flow_audit_file.stat().st_size > MAX_FLOW_FILE:
+            raise MonitoringError("Private flow audit input too large")
+        journal = json.loads(args.flow_audit_file.read_text(encoding="utf-8"))
+        flow_audit = audit_flows(journal, now)
+    report = build_report(now, markets, fx, private, wallet, flow_audit)
     print(json.dumps(report, sort_keys=True, ensure_ascii=False) if args.format == "json"
           else render_markdown(report))
 
