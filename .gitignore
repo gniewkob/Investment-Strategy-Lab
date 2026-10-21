@@ -1,0 +1,12 @@
+# Never commit private account or wallet watchlists/snapshots.
+# These are local read-only research inputs, not GitHub CI artifacts.
+private/
+.local/
+*.wallet-private.json
+*.portfolio-private.json
+*.private-wallet.json
+*.secret.json
+.env
+.env.*
+__pycache__/
+*.pyc
