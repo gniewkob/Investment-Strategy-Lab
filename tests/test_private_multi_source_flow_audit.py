@@ -192,3 +192,12 @@ class PrivateFlowAuditTests(TestCase):
         self.assertEqual(report["executed_orders"],0)
         self.assertIn("Przepływy kapitału",render_markdown(report))
         self.assertIn("transferu",render_markdown(report))
+
+    def test_change_of_unknown_wallet_population_suppresses_residual(self):
+        v=journal()
+        v["snapshots"][1]["wallet_unpriced_count"]=2
+        r=audit_flows(v,AT)
+        self.assertIsNone(r["unexplained_reference_change_after_recorded_flows_usd"])
+        self.assertIn("UNPRICED_WALLET_ASSET_COUNT_CHANGED_NO_COMPARABLE_RESIDUAL",
+                      r["warnings"])
+        self.assertFalse(r["market_profitability_or_return_certified"])
