@@ -1,0 +1,32 @@
+name: Local wallet transfer connection
+on:
+  pull_request:
+    paths:
+      - 'wallet-portal/**'
+      - 'scripts/wallet_transfer_portal.py'
+      - 'tests/test_wallet_transfer_portal.py'
+      - 'docs/WALLET_TRANSFER_CONNECTION_PL.md'
+      - '.github/workflows/wallet-transfer-connection-ci.yml'
+permissions:
+  contents: read
+jobs:
+  offline-wallet:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: npm --prefix wallet-portal ci --ignore-scripts
+      - run: npm --prefix wallet-portal test
+      - run: npm --prefix wallet-portal run build
+      - run: cd wallet-portal && npx playwright install --with-deps chromium
+      - run: npm --prefix wallet-portal run test:e2e
+      - run: python -m pip install 'psycopg[binary]>=3.2,<4'
+      - run: python -m unittest discover -s tests

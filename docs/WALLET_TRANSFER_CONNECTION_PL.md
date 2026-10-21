@@ -1,0 +1,101 @@
+# Lokalny panel podłączenia i transferu portfela
+
+Opcjonalny moduł dodany na wyraźne żądanie użytkownika. Monitory oraz importer historii
+pozostają wyłącznie odczytowe. Ten panel może przekazać pojedynczy transfer ETH lub
+zatwierdzonego cbBTC do podpisania w portfelu użytkownika. Serwer nie podpisuje,
+nie pośredniczy w RPC i nie przechowuje kluczy. Brak zleceń, swapów, mostów,
+allowance/approve, session keys, automatycznych ponowień i uprawnień do wydawania.
+
+## Uruchomienie
+
+Wymagania: Node >=20, Python 3.12, lokalny prywatny watchlist zgodny z
+`PRIVATE_WALLET_READ_ONLY` (patrz runbook read-only). Nie umieszczaj konfiguracji
+osobistej w repozytorium. Pliki muszą należeć do operatora i mieć uprawnienia 0600;
+katalog prywatny 0700. Nie podawaj frazy odzyskiwania, klucza ani API secret.
+
+```sh
+npm --prefix wallet-portal ci --ignore-scripts
+npm --prefix wallet-portal run build
+python -m scripts.wallet_transfer_portal --watchlist /PRIVATE/watch.json
+```
+
+Otwórz `http://127.0.0.1:8766` w przeglądarce obsługującej Twój portfel. Domyślnie
+można jedynie podłączyć jedno z kont watchlist. Brak konfiguracji transferu blokuje
+przygotowanie i podpis. SDK Coinbase/Base jest przypięty w lockfile, bundlowany
+lokalnie, telemetria wyłączona, tworzenie i finansowanie subkont ustawione ręcznie.
+Rozszerzenie EIP-1193 jest alternatywą. Panel nie wysyła żądania portfela na starcie.
+SDK może utrzymywać własną sesję; panel nie zapisuje adresów i transferów do storage.
+
+## Włączenie pojedynczej sesji transferu
+
+Najpierw operator musi w Coinbase sprawdzić aktualny adres **Receive**, obsługiwany
+asset i sieć. Adres własnego portfela nie jest adresem wpłaty giełdy. Panel nie
+potrafi pozyskać ani poświadczyć adresu Coinbase — jawna deklaracja operatora jest
+warunkiem uruchomienia, a nie dowodem pochodzenia adresu.
+
+Prywatny plik polityki ma dokładnie poniższe pola (wartości przykładowe należy
+zastąpić własnymi; placeholder nie przejdzie walidacji):
+
+```json
+{
+  "mode": "USER_CONFIRMED_WALLET_TRANSFER",
+  "chain_id": 8453,
+  "from_label": "base",
+  "destination": "[CONFIRMED_COINBASE_RECEIVE_ADDRESS]",
+  "asset": "cbBTC",
+  "max_amount": "0.00000001",
+  "max_execution_fee_wei": "1000000000000000",
+  "destination_confirmed_in_coinbase": true,
+  "confirmed_at": "[CURRENT_UTC_ISO8601]",
+  "expires_at": "[UTC_ISO8601_WITHIN_24_HOURS_OF_CONFIRMATION]"
+}
+```
+
+`from_label` i chain muszą jednoznacznie wskazać watchlist. cbBTC wymaga kanonicznego
+kontraktu w `verified_token_contracts`. Tylko chain 1 i 8453, ETH lub cbBTC.
+Konfiguracja starsza niż 24h, pusty limit, źle sformatowany adres, adres własny,
+zerowy lub kontrakt tokena są odrzucane. Dodaj opcję:
+
+```sh
+python -m scripts.wallet_transfer_portal --watchlist /PRIVATE/watch.json --transfer-policy /PRIVATE/transfer.json
+```
+
+1. Podłącz właściwe konto, sprawdź sieć w portfelu.
+2. Podaj kwotę w jednostkach tokena. Podgląd sprawdza konto, chain, saldo i gas.
+3. Porównaj pełny adres i sieć z Coinbase. Zaznacz potwierdzenie.
+4. Otwórz osobnym przyciskiem okno portfela, sprawdź pełne koszty i dopiero tam podpisz.
+5. Sprawdź receipt i osobno uznanie wpłaty w Coinbase. Wpłata nie tworzy `fills`.
+
+Limit kwoty jest w tokenach, nie USD. **Nie ma automatycznej gwarancji 10 USD
+łącznie z opłatami.** Koszt wykonania ma bufor gas 20% i gasPrice 2x; polityka
+ogranicza ich iloczyn. Na Base nie obejmuje to całego kosztu L1 ani ewentualnej
+zmiany parametrów przez portfel. Pełny koszt musi sprawdzić użytkownik w portfelu.
+Brak ETH na Base blokuje transfer cbBTC. Panel nie uzupełnia gas ani nie mostkuje.
+
+Po nieznanym wyniku wysyłki panel blokuje ponowienie. Nie otwieraj nowej sesji,
+zanim nie sprawdzisz historii portfela. Odmowa podpisu (4001) czyści podgląd.
+Podgląd ważny 60s; zmiana konta/sieci go unieważnia. Receipt wymaga właściwego
+transferu, statusu success, hash bloku i finalizacji. Nie jest dowodem uznania wpłaty.
+Nie odtwarzamy identyfikatora po przeładowaniu strony: historia pozostaje w portfelu.
+
+## Granice, testy i wycofanie
+
+HTTP: wyłącznie loopback, dokładny Host, same-origin `/session`, brak CORS, no-store,
+CSP, brak logów żądań, tylko statyczne zasoby i konfiguracja w pamięci. Brak POST/RPC.
+To nie chroni przed złośliwym oprogramowaniem ani rozszerzeniami lokalnego komputera.
+Nie publikować serwera w sieci, nie używać reverse proxy lub tunelu.
+
+```sh
+npm --prefix wallet-portal test
+npm --prefix wallet-portal run test:e2e
+python -m unittest discover -s tests
+```
+
+Testy portfela używają syntetycznego EIP-1193 bez połączenia z siecią. Testy nie
+potwierdzają działania rzeczywistego popupu SDK, podpisu, wysłania lub wpłaty.
+Prywatny adres docelowy, aktywna polityka i podpis użytkownika pozostają osobnymi
+warunkami rzeczywistego użycia. Zatrzymaj Ctrl+C, usuń prywatną politykę, odłącz
+połączenie w ustawieniach portfela. Wycofanie kodu nie cofa wysłanej transakcji.
+
+Źródła: [Base account SDK](https://github.com/base/account-sdk),
+[Coinbase Wallet](https://docs.cdp.coinbase.com/coinbase-wallet/overview).

@@ -12,3 +12,9 @@ private/
 .env.*
 __pycache__/
 *.pyc
+
+# Local optional wallet UI build dependencies/output
+wallet-portal/node_modules/
+wallet-portal/dist/
+wallet-portal/test-results/
+wallet-portal/playwright-report/

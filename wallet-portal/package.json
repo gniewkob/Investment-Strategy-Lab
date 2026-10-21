@@ -1,0 +1,17 @@
+{
+  "name": "isl-local-wallet-connection",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "esbuild app.mjs --bundle --format=esm --platform=browser --outfile=dist/app.js",
+    "test": "node --test test-transfer.mjs",
+    "test:e2e": "playwright test portal.spec.mjs --workers=1"
+  },
+  "dependencies": {
+    "@base-org/account": "2.5.13"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.1",
+    "esbuild": "0.28.2"
+  }
+}
