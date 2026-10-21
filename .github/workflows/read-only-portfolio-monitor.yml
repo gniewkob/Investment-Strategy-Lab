@@ -6,6 +6,10 @@ on:
     paths:
       - scripts/read_only_portfolio_monitor.py
       - tests/test_read_only_portfolio_monitor.py
+      - scripts/private_wallet_chain_monitor.py
+      - tests/test_private_wallet_chain_monitor.py
+      - docs/PRIVATE_WALLET_COINBASE_CONSOLIDATION_PL.md
+      - .gitignore
       - docs/READ_ONLY_PORTFOLIO_MONITOR_PL.md
       - .github/workflows/read-only-portfolio-monitor.yml
   workflow_dispatch:
@@ -59,3 +63,4 @@ jobs:
           python-version: '3.12'
       - name: Fetch public BTC ETH ATOM market bars and NBP only; NO holdings or secrets
         run: python -m scripts.read_only_portfolio_monitor --format markdown
+
