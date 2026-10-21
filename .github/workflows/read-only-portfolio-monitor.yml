@@ -4,6 +4,9 @@ on:
   pull_request:
     types: [opened, reopened, synchronize]
     paths:
+      - scripts/operational_read_only.py
+      - tests/test_operational_read_only.py
+      - docs/OPERATIONAL_READ_ONLY_RUNBOOK_PL.md
       - scripts/read_only_portfolio_monitor.py
       - tests/test_read_only_portfolio_monitor.py
       - scripts/private_wallet_chain_monitor.py
