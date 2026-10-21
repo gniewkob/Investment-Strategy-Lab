@@ -140,3 +140,17 @@ test('mobile review fits the viewport and amount edits invalidate approval',asyn
  await page.fill('#amount','0.00000002');await expect(page.locator('#review')).toBeHidden();
  await expect(page.locator('#send')).toBeDisabled();await expect(page.locator('#confirm')).not.toBeChecked();
 });
+
+test('small live fee movement reaches wallet with unchanged reviewed fee limits',async({page})=>{
+ await setup(page);let prices=0;
+ await page.route('https://mainnet.base.org/**',route=>{
+  const r=route.request().postDataJSON();if(r.method!=='eth_gasPrice')return route.fallback();
+  return route.fulfill({contentType:'application/json',body:JSON.stringify({jsonrpc:'2.0',id:r.id,result:++prices===1?'0x3b9aca00':'0x4190ab00'})});
+ });
+ await page.fill('#amount','0.00000001');await page.click('#preview');
+ await expect(page.locator('#review')).toContainText('0.00024 ETH');
+ await page.check('#confirm');await page.click('#send');
+ await expect(page.locator('#status')).toContainText('Podpis anulowany');
+ await expect(page.locator('#attempt')).toContainText('odmowę');
+ expect(await page.evaluate(()=>window.walletCalls.filter(x=>x==='eth_sendTransaction').length)).toBe(1);
+});

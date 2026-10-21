@@ -95,6 +95,14 @@ ogranicza ich iloczyn. Na Base nie obejmuje to całego kosztu L1 ani ewentualnej
 zmiany parametrów przez portfel. Pełny koszt musi sprawdzić użytkownik w portfelu.
 Brak ETH na Base blokuje transfer cbBTC. Panel nie uzupełnia gas ani nie mostkuje.
 
+Przed otwarciem portfela odczyty są ponawiane. Bieżący szacunek gas i cena gas
+muszą mieścić się odpowiednio w zamrożonym gas i gasPrice z zaakceptowanego podglądu.
+Nie wymagamy identyczności kolejnych wycen: zmiana mieszcząca się w zatwierdzonym
+zapasie nie podnosi limitu. Do portfela trafiają dokładnie pierwotne parametry,
+bez automatycznego podbijania opłaty. Przekroczenie któregokolwiek z nich nadal
+wymaga nowego podglądu. Niezależne limity polityki, salda i tożsamość są sprawdzane
+także przy drugim odczycie.
+
 Po nieznanym wyniku wysyłki panel blokuje ponowienie. Nie otwieraj nowej sesji,
 zanim nie sprawdzisz historii portfela. Odmowa podpisu (4001) czyści podgląd.
 Podgląd ważny 60s; zmiana konta/sieci go unieważnia. Receipt wymaga właściwego

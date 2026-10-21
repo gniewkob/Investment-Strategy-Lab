@@ -77,6 +77,7 @@ export class TransferSession{
   check(native>=fee+(p.asset==='ETH'?units:0n),'INSUFFICIENT_GAS_BALANCE');
   return {transaction:{...tx,gas:hex(gas),gasPrice:hex(gasPrice)},amount,units:units.toString(),
    recipient:to,chainId:p.chainId,asset:p.asset,executionFeeUpperWei:fee.toString(),
+   estimatedGas:hex(estimated),observedGasPriceWei:hex(price),
    fullNetworkFeeVerified:false,reviewedAt:Date.now(),generation:this.generation};
  }
  async prepare(amount){
@@ -97,7 +98,9 @@ export class TransferSession{
   try{
    const current=await this.inspect(reviewed.amount);
    check(current.generation===reviewed.generation,'IDENTITY_CHANGED');
-   check(current.executionFeeUpperWei===reviewed.executionFeeUpperWei,'FEE_CHANGED_REVIEW_AGAIN');
+   // Keep the approved envelope unchanged; normal price movement inside it is safe.
+   check(quantity(current.estimatedGas)<=quantity(reviewed.transaction.gas)&&
+     quantity(current.observedGasPriceWei)<=quantity(reviewed.transaction.gasPrice),'FEE_CHANGED_REVIEW_AGAIN');
    await this.checkIdentity();
    check(this.generation===reviewed.generation,'IDENTITY_CHANGED');
    // Keep the reviewed fields, not a mutable form object. Wallet approval is final.

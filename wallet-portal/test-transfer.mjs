@@ -135,3 +135,26 @@ test('wallet transport failure records phase and keeps unknown send locked',asyn
  assert.equal(JSON.stringify(s.lastAttempt).includes('PRIVATE_'),false);
  await assert.rejects(s.submit(true));assert.equal(p.calls.filter(c=>c.method==='eth_sendTransaction').length,1);
 });
+
+test('fee movement inside reviewed gas and price limits keeps the exact reviewed transaction',async()=>{
+ for(const price of [900000000n,1000000001n,1999999999n,2000000000n]){
+  let observed=1000000000n,gas=100000n;
+  const p=provider({eth_gasPrice:()=> '0x'+observed.toString(16),eth_estimateGas:()=> '0x'+gas.toString(16)});
+  const s=new TransferSession(p,policy());await s.connect();const r=await s.prepare('0.00000001');
+  observed=price;gas=120000n;await s.submit(true);
+  const sent=p.calls.find(c=>c.method==='eth_sendTransaction').params[0];
+  assert.deepEqual(sent,r.transaction);assert.equal(sent.gas,'0x1d4c0');assert.equal(sent.gasPrice,'0x77359400');
+ }
+});
+
+test('requirements above either reviewed gas or price limit block before wallet request',async()=>{
+ for(const [price,gas] of [[2000000001n,100000n],[1000000000n,120001n]]){
+  let observed=1000000000n,estimate=100000n;
+  const p=provider({eth_gasPrice:()=> '0x'+observed.toString(16),eth_estimateGas:()=> '0x'+estimate.toString(16)});
+  const s=new TransferSession(p,policy());await s.connect();await s.prepare('0.00000001');
+  observed=price;estimate=gas;
+  await assert.rejects(s.submit(true),/FEE_CHANGED_REVIEW_AGAIN/);
+  assert.equal(p.calls.some(c=>c.method==='eth_sendTransaction'),false);
+  assert.equal(s.state,'connected');assert.equal(s.lastAttempt.sendAttempted,false);
+ }
+});
