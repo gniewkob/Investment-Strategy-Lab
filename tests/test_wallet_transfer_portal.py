@@ -61,6 +61,7 @@ class PortalTests(TestCase):
      self.assertEqual(r.status,200)
      self.assertEqual(r.headers['Cache-Control'],'no-store')
      self.assertIn("frame-ancestors 'none'",r.headers['Content-Security-Policy'])
+     self.assertIn("https://mainnet.base.org",r.headers['Content-Security-Policy'])
     with urlopen(Request(base,method='HEAD')) as r:
      self.assertEqual(r.status,200)
      self.assertEqual(r.headers['Cross-Origin-Opener-Policy'],'same-origin-allow-popups')

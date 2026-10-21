@@ -10,6 +10,10 @@ test.beforeAll(async()=>{
 test.afterAll(()=>server?.kill());
 async function setup(page,enabled=true,sendError='reject',fromAccount=FROM,providerChoice='injected',initialChain='0x2105'){
  await page.route('**/session',route=>route.fulfill({contentType:'application/json',body:JSON.stringify({accounts:[FROM],policy:enabled?policy:null})}));
+ await page.route('https://mainnet.base.org/**',route=>{
+  const r=route.request().postDataJSON();const result=({eth_chainId:'0x2105',eth_getBalance:'0x38d7ea4c68000',eth_call:'0xf4240',eth_estimateGas:'0x186a0',eth_gasPrice:'0x3b9aca00'})[r.method];
+  return route.fulfill({contentType:'application/json',body:JSON.stringify({jsonrpc:'2.0',id:r.id,result})});
+ });
  await page.addInitScript(({from,sendError,providerChoice,initialChain})=>{
   let activeChain=initialChain;
   window.walletCalls=[];const listeners={};window.emitWallet=(event,value)=>listeners[event]?.forEach(fn=>fn(value));

@@ -121,3 +121,14 @@ kliknięcie wywołuje `wallet_switchEthereumChain`; nie podpisuje transakcji,
 nie tworzy sieci i nie wysyła środków. Konto źródłowe jest sprawdzane przed
 przełączeniem i po nim, poprzedni podgląd zostaje usunięty. Niepowodzenie
 przełączenia pozostawia przygotowanie transferu zablokowane.
+
+Odczyty i podpis mają niezależne ścieżki: `wallet-portal/read-rpc.mjs` używa
+stałych publicznych RPC Base/Ethereum, sprawdza chain ID przed każdym odczytem,
+ogranicza metody do odczytu/symulacji, a `eth_call` wyłącznie do kanonicznego
+cbBTC `balanceOf`. Żądania mają limit czasu, rozmiaru, brak cookies, przekierowań
+i automatycznych ponowień. RPC nie ma metody wysłania lub podpisania transakcji.
+Adres źródłowy i dane symulacji trafiają do wybranego publicznego RPC; serwer
+lokalny nie jest proxy. Portfel nadal niezależnie potwierdza konto i sieć oraz
+jest jedyną ścieżką podpisu użytkownika. Błąd odczytu ETH/tokena/estymacji/ceny gas
+ma osobny stały komunikat, bez prywatnych szczegółów błędu dostawcy. Niedostępność
+źródła nie pozwala pominąć sprawdzenia i odblokować podpisu.

@@ -13,8 +13,8 @@ export function parseAmount(value,decimals){
  check(result>0n&&result<2n**256n,'INVALID_AMOUNT');return result;
 }
 export class TransferSession{
- constructor(provider,policy,expectedAccounts=[]){
-  this.provider=provider;this.policy=policy?Object.freeze({...policy}):null;
+ constructor(provider,policy,expectedAccounts=[],readProvider=provider){
+  this.provider=provider;this.readProvider=readProvider;this.policy=policy?Object.freeze({...policy}):null;
   this.expectedAccounts=(policy?[policy.from]:expectedAccounts).map(address);
   this.state='disconnected';this.prepared=null;this.hash=null;this.generation=0;this.busy=false;
   this.invalidate=()=>{this.generation++;this.prepared=null;if(!['submitted','unknown','submitting'].includes(this.state))this.state='disconnected';};
@@ -47,6 +47,10 @@ export class TransferSession{
   const chain=quantity(await this.provider.request({method:'eth_chainId'}));
   check(chain===BigInt(this.policy.chainId),'WRONG_CHAIN');
  }
+ async readQuantity(method,params,errorCode){
+  try{return quantity(await this.readProvider.request({method,params}));}
+  catch(e){const error=new Error(errorCode);if(/no rpc url/i.test(String(e?.message)))error.safeReason='RPC_URL_MISSING';throw error;}
+ }
  async inspect(amount){
   const p=this.policy;check(p,'POLICY_REQUIRED');
   check(Number.isSafeInteger(p.expiresAt)&&Date.now()<p.expiresAt,'POLICY_EXPIRED');
@@ -57,16 +61,16 @@ export class TransferSession{
   check(units<=parseAmount(p.maxAmount,p.asset==='cbBTC'?8:18),'AMOUNT_CAP_EXCEEDED');
   check(typeof p.maxExecutionFeeWei==='string'&&/^[1-9][0-9]{0,29}$/.test(p.maxExecutionFeeWei),'FEE_CAP_REQUIRED');
   await this.checkIdentity();
-  const native=quantity(await this.provider.request({method:'eth_getBalance',params:[this.account,'latest']}));
+  const native=await this.readQuantity('eth_getBalance',[this.account,'latest'],'BALANCE_RPC_UNAVAILABLE');
   check(native>0n,'NO_GAS');
   const tx={from:this.account,to:p.asset==='cbBTC'?TOKEN:to,value:p.asset==='ETH'?hex(units):'0x0',
     data:p.asset==='cbBTC'?'0xa9059cbb'+to.slice(2).padStart(64,'0')+units.toString(16).padStart(64,'0'):'0x',chainId:hex(BigInt(p.chainId))};
   if(p.asset==='cbBTC'){
-   const balance=quantity(await this.provider.request({method:'eth_call',params:[{to:TOKEN,data:'0x70a08231'+this.account.slice(2).padStart(64,'0')},'latest']}));
+   const balance=await this.readQuantity('eth_call',[{to:TOKEN,data:'0x70a08231'+this.account.slice(2).padStart(64,'0')},'latest'],'TOKEN_RPC_UNAVAILABLE');
    check(balance>=units,'INSUFFICIENT_TOKEN_BALANCE');
   }
-  const estimated=quantity(await this.provider.request({method:'eth_estimateGas',params:[tx]}));
-  const price=quantity(await this.provider.request({method:'eth_gasPrice'}));
+  const estimated=await this.readQuantity('eth_estimateGas',[tx],'GAS_ESTIMATE_UNAVAILABLE');
+  const price=await this.readQuantity('eth_gasPrice',[],'GAS_PRICE_UNAVAILABLE');
   check(estimated>0n&&price>0n,'GAS_ESTIMATE_MISSING');
   const gas=(estimated*120n+99n)/100n,gasPrice=price*2n,fee=gas*gasPrice;
   check(fee<=BigInt(p.maxExecutionFeeWei),'EXECUTION_FEE_CAP_EXCEEDED');
@@ -100,7 +104,8 @@ export class TransferSession{
   }catch(e){
    if(e?.code===4001){this.state='connected';this.prepared=null;throw new Error('USER_REJECTED');}
    if(!sendAttempted&&['POLICY_EXPIRED','WRONG_CHAIN','ACCOUNT_CHANGED','IDENTITY_CHANGED','FEE_CHANGED_REVIEW_AGAIN','NO_GAS',
-       'INSUFFICIENT_TOKEN_BALANCE','INSUFFICIENT_GAS_BALANCE','EXECUTION_FEE_CAP_EXCEEDED'].includes(e?.message)){
+       'INSUFFICIENT_TOKEN_BALANCE','INSUFFICIENT_GAS_BALANCE','EXECUTION_FEE_CAP_EXCEEDED',
+       'BALANCE_RPC_UNAVAILABLE','TOKEN_RPC_UNAVAILABLE','GAS_ESTIMATE_UNAVAILABLE','GAS_PRICE_UNAVAILABLE'].includes(e?.message)){
     this.state='connected';this.prepared=null;throw new Error(e.message);
    }
    this.state='unknown';throw new Error('SEND_STATUS_UNKNOWN');
@@ -108,7 +113,7 @@ export class TransferSession{
  }
  async checkReceipt(){
   check(this.state==='submitted'&&HASH.test(this.hash),'NO_SUBMITTED_HASH');await this.checkIdentity();
-  const receipt=await this.provider.request({method:'eth_getTransactionReceipt',params:[this.hash]});
+  const receipt=await this.readProvider.request({method:'eth_getTransactionReceipt',params:[this.hash]});
   if(!receipt)return {status:'PENDING',exchangeCreditVerified:false};
   check(receipt.transactionHash?.toLowerCase()===this.hash.toLowerCase(),'RECEIPT_HASH_MISMATCH');
   if(receipt.status==='0x0')return {status:'REVERTED',exchangeCreditVerified:false};
@@ -120,13 +125,13 @@ export class TransferSession{
     l.topics[2]?.toLowerCase()==='0x'+r.recipient.slice(2).padStart(64,'0')&&quantity(l.data)===BigInt(r.units));
    check(matched.length===1,'RECEIPT_TRANSFER_NOT_PROVEN');
   }else{
-   const tx=await this.provider.request({method:'eth_getTransactionByHash',params:[this.hash]});
+   const tx=await this.readProvider.request({method:'eth_getTransactionByHash',params:[this.hash]});
    check(tx?.hash?.toLowerCase()===this.hash.toLowerCase()&&address(tx.from)===this.account&&
     address(tx.to)===r.recipient&&quantity(tx.value)===BigInt(r.units)&&quantity(tx.blockNumber)===quantity(receipt.blockNumber),'RECEIPT_TRANSFER_NOT_PROVEN');
   }
-  const finalized=await this.provider.request({method:'eth_getBlockByNumber',params:['finalized',false]});
+  const finalized=await this.readProvider.request({method:'eth_getBlockByNumber',params:['finalized',false]});
   if(quantity(finalized?.number)<quantity(receipt.blockNumber))return {status:'INCLUDED_NOT_FINALIZED',exchangeCreditVerified:false};
-  const block=await this.provider.request({method:'eth_getBlockByNumber',params:[receipt.blockNumber,false]});
+  const block=await this.readProvider.request({method:'eth_getBlockByNumber',params:[receipt.blockNumber,false]});
   check(HASH.test(block?.hash)&&HASH.test(receipt.blockHash)&&
    quantity(block.number)===quantity(receipt.blockNumber)&&
    block.hash.toLowerCase()===receipt.blockHash.toLowerCase(),'RECEIPT_BLOCK_CHANGED');

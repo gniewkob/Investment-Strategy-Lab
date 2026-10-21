@@ -93,3 +93,28 @@ test('explicit network switch checks watched identity and never submits funds',a
  await assert.rejects(wrong.connect());await assert.rejects(wrong.switchToPolicyChain());
  assert.equal(q.calls.some(c=>c.method==='wallet_switchEthereumChain'),false);
 });
+test('preflight read errors report fixed stage without leaking provider details',async()=>{
+ for(const [method,code] of [['eth_getBalance','BALANCE_RPC_UNAVAILABLE'],['eth_call','TOKEN_RPC_UNAVAILABLE'],['eth_estimateGas','GAS_ESTIMATE_UNAVAILABLE'],['eth_gasPrice','GAS_PRICE_UNAVAILABLE']]){
+  const p=provider({[method]:()=>{throw new Error('PRIVATE_PROVIDER_DETAILS');}}),s=new TransferSession(p,policy());await s.connect();
+  await assert.rejects(s.prepare('0.00000001'),new RegExp(code));
+  assert.equal(p.calls.some(c=>c.method==='eth_sendTransaction'),false);
+ }
+});
+test('independent read RPC rejects execution, bad chain and arbitrary calls',async()=>{
+ const {createReadOnlyRpc}=await import('./read-rpc.mjs');const calls=[];
+ const fetcher=async(url,options)=>{const r=JSON.parse(options.body);calls.push(r.method);return {ok:true,text:async()=>JSON.stringify({jsonrpc:'2.0',id:r.id,result:r.method==='eth_chainId'?'0x2105':'0x1'})};};
+ const reader=createReadOnlyRpc(8453,fetcher);
+ for(const method of ['eth_sendTransaction','eth_sendRawTransaction','eth_signTransaction','wallet_switchEthereumChain'])await assert.rejects(reader.request({method}));
+ assert.equal(calls.length,0);
+ await assert.rejects(reader.request({method:'eth_call',params:[{to:TOKEN,data:'0x095ea7b3'},'latest']}));
+ assert.equal(await reader.request({method:'eth_getBalance',params:[FROM,'latest']}),'0x1');
+ assert.deepEqual(calls,['eth_chainId','eth_getBalance']);
+ const bad=createReadOnlyRpc(1,fetcher);await assert.rejects(bad.request({method:'eth_getBalance',params:[FROM,'latest']}),/CHAIN_MISMATCH/);
+});
+test('wallet identity and signature stay separate from independent preflight reads',async()=>{
+ const p=provider({eth_getBalance:()=>{throw new Error('wallet read unavailable');}}),reads=provider();
+ const s=new TransferSession(p,policy(),[],reads);await s.connect();await s.prepare('0.00000001');
+ assert.equal(p.calls.some(c=>c.method==='eth_getBalance'),false);
+ assert.equal(reads.calls.some(c=>c.method==='eth_getBalance'),true);
+ assert.equal(reads.calls.some(c=>c.method==='eth_sendTransaction'),false);
+});

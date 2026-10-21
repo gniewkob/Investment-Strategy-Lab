@@ -74,7 +74,7 @@ def make_handler(config, asset_root):
             self.send_header('X-Content-Type-Options', 'nosniff')
             self.send_header('Referrer-Policy', 'no-referrer')
             self.send_header('Cross-Origin-Opener-Policy', 'same-origin-allow-popups')
-            self.send_header('Content-Security-Policy', "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://rpc.wallet.coinbase.com https://keys.coinbase.com https://www.walletlink.org wss://www.walletlink.org; frame-src https://keys.coinbase.com; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'")
+            self.send_header('Content-Security-Policy', "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://mainnet.base.org https://ethereum-rpc.publicnode.com https://rpc.wallet.coinbase.com https://keys.coinbase.com https://www.walletlink.org wss://www.walletlink.org; frame-src https://keys.coinbase.com; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'")
             self.end_headers()
             if self.command != 'HEAD':
                 self.wfile.write(body)
