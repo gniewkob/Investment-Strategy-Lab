@@ -160,6 +160,7 @@ def audit_flows(record, report_at=None):
     net_external=inflow-outflow
     # This is an arithmetic remainder, NOT market P&L. It mixes valuations,
     # absent activity, spread, taxes, fees not recorded, and source revisions.
+    unknown_asset_population_changed = first["unpriced"] != last["unpriced"]
     residual=delta-net_external+fee
     current=_time(report_at) if isinstance(report_at,str) else (
         report_at or datetime.now(timezone.utc))
@@ -177,6 +178,8 @@ def audit_flows(record, report_at=None):
     ]
     if first["unpriced"] or last["unpriced"]:
         warnings.append("UNPRICED_WALLET_ASSETS_EXCLUDED")
+    if unknown_asset_population_changed:
+        warnings.append("UNPRICED_WALLET_ASSET_COUNT_CHANGED_NO_COMPARABLE_RESIDUAL")
     if lag>timedelta(hours=24):
         warnings.append("LAST_BALANCE_SNAPSHOT_OLDER_THAN_24H")
     if pending:
@@ -203,7 +206,7 @@ def audit_flows(record, report_at=None):
             e["kind"]=="internal_movement" for e in confirmed),
         "recorded_event_fees_usd":_rounded(fee),
         "unexplained_reference_change_after_recorded_flows_usd": (
-            _rounded(residual) if not pending else None),
+            _rounded(residual) if not pending and not unknown_asset_population_changed else None),
         "pending_event_count":len(pending),
         "recorded_event_count":len(parsed),
         "current_holdings_complete":False,
