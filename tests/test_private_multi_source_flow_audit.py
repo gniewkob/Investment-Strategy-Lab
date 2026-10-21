@@ -177,3 +177,18 @@ class PrivateFlowAuditTests(TestCase):
         self.assertEqual(r["orders"],0)
         self.assertEqual(r["external_operations"],0)
         self.assertEqual(r["database_writes"],0)
+
+    def test_combined_public_market_can_include_private_flow_audit(self):
+        from scripts.read_only_portfolio_monitor import build_report, render_markdown
+        data={k:{"symbol":k,"verified_hourly_candles":72,
+                 "last_completed_candle_end_utc":"2026-10-21T08:00:00+00:00",
+                 "last_closed_price_usd":"100","price_change_24h_pct":"0",
+                 "observed_realized_volatility_24h_pct":"1"}
+              for k in ("BTC-USD","ETH-USD","ATOM-USD")}
+        fx={"usdpln_mid_reference":"3.80","nbp_effective_date":"2026-10-20"}
+        flows=audit_flows(journal(),AT)
+        report=build_report(AT,data,fx,flow_audit=flows)
+        self.assertEqual(report["read_only_flow_audit"]["confirmed_internal_movement_usd"],"40.00")
+        self.assertEqual(report["executed_orders"],0)
+        self.assertIn("Przepływy kapitału",render_markdown(report))
+        self.assertIn("transferu",render_markdown(report))
