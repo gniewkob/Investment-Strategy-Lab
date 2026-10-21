@@ -3,11 +3,13 @@ import {createBaseAccountSDK} from '@base-org/account';
 import {TransferSession} from './transfer.mjs';
 const $=id=>document.getElementById(id);
 let config,session,busy=false;
-const text={UNEXPECTED_ACCOUNT:'Wybrano inne konto niż zatwierdzone przez operatora.',WRONG_CHAIN:'Zmień sieć w portfelu na wskazaną w konfiguracji, a następnie podłącz ponownie.',NO_GAS:'Brak ETH na opłatę sieciową. Transfer zablokowany.',INSUFFICIENT_GAS_BALANCE:'Za mało ETH na kwotę i szacowaną opłatę.',INSUFFICIENT_TOKEN_BALANCE:'Za małe saldo tokena.',POLICY_REQUIRED:'Tryb podłączenia: brak konfiguracji transferu.',POLICY_EXPIRED:'Konfiguracja wygasła. Operator musi ponownie sprawdzić adres docelowy.',AMOUNT_CAP_EXCEEDED:'Kwota przekracza limit operatora.',EXECUTION_FEE_CAP_EXCEEDED:'Opłata wykonania przekracza limit.',USER_REJECTED:'Podpis anulowany. Niczego automatycznie nie ponawiamy.',SEND_STATUS_UNKNOWN:'Wynik wysyłki jest nieznany. Sprawdź historię w portfelu przed jakąkolwiek kolejną próbą. Panel jest zablokowany.',REVIEW_EXPIRED:'Podgląd wygasł. Przygotuj go ponownie.',FEE_CHANGED_REVIEW_AGAIN:'Zmieniła się opłata. Przygotuj nowy podgląd.',NO_PROVIDER:'Nie znaleziono rozszerzenia. Otwórz panel w przeglądarce z portfelem albo wybierz Coinbase Wallet (QR).',IDENTITY_CHANGED:'Konto lub sieć zmieniły się. Podłącz ponownie.',ACCOUNT_CHANGED:'Konto zmieniło się. Podłącz ponownie.',INVALID_AMOUNT:'Wpisz dodatnią kwotę dziesiętną bez notacji wykładniczej.',EXCESS_PRECISION:'Kwota ma zbyt wiele miejsc dziesiętnych.'};
+const text={NETWORK_SWITCH_FAILED:'Portfel nie przełączył sieci. Wybierz Base w aplikacji portfela i podłącz ponownie.',UNEXPECTED_ACCOUNT:'Wybrano inne konto niż zatwierdzone przez operatora.',WRONG_CHAIN:'Zmień sieć w portfelu na wskazaną w konfiguracji, a następnie podłącz ponownie.',NO_GAS:'Brak ETH na opłatę sieciową. Transfer zablokowany.',INSUFFICIENT_GAS_BALANCE:'Za mało ETH na kwotę i szacowaną opłatę.',INSUFFICIENT_TOKEN_BALANCE:'Za małe saldo tokena.',POLICY_REQUIRED:'Tryb podłączenia: brak konfiguracji transferu.',POLICY_EXPIRED:'Konfiguracja wygasła. Operator musi ponownie sprawdzić adres docelowy.',AMOUNT_CAP_EXCEEDED:'Kwota przekracza limit operatora.',EXECUTION_FEE_CAP_EXCEEDED:'Opłata wykonania przekracza limit.',USER_REJECTED:'Podpis anulowany. Niczego automatycznie nie ponawiamy.',SEND_STATUS_UNKNOWN:'Wynik wysyłki jest nieznany. Sprawdź historię w portfelu przed jakąkolwiek kolejną próbą. Panel jest zablokowany.',REVIEW_EXPIRED:'Podgląd wygasł. Przygotuj go ponownie.',FEE_CHANGED_REVIEW_AGAIN:'Zmieniła się opłata. Przygotuj nowy podgląd.',NO_PROVIDER:'Nie znaleziono rozszerzenia. Otwórz panel w przeglądarce z portfelem albo wybierz Coinbase Wallet (QR).',IDENTITY_CHANGED:'Konto lub sieć zmieniły się. Podłącz ponownie.',ACCOUNT_CHANGED:'Konto zmieniło się. Podłącz ponownie.',INVALID_AMOUNT:'Wpisz dodatnią kwotę dziesiętną bez notacji wykładniczej.',EXCESS_PRECISION:'Kwota ma zbyt wiele miejsc dziesiętnych.'};
 function status(message){$('status').textContent=message;}
 function render(){
  const state=session?.state,locked=['submitting','submitted','unknown'].includes(state);
  $('connect').disabled=busy||locked||!config;$('provider').disabled=busy||locked||['connected','prepared'].includes(state);
+ $('switch-network').hidden=!(config?.policy&&session?.account===config.policy.from.toLowerCase()&&state==='disconnected');
+ $('switch-network').disabled=busy||locked;
  $('amount').disabled=busy||!config?.policy||!['connected','prepared'].includes(state);
  $('preview').disabled=$('amount').disabled;
  $('confirm').disabled=busy||state!=='prepared';
@@ -27,6 +29,7 @@ $('connect').onclick=()=>action(async()=>{
  const account=await session.connect();$('account').textContent=`Połączono ${account.slice(0,6)}…${account.slice(-4)}`;
  status(config.policy?'Portfel podłączony. Wpisz kwotę i przygotuj podgląd.':'Portfel podłączony. Tryb wyłącznie podłączenia — transfer pozostaje zablokowany.');
 });
+$('switch-network').onclick=()=>action(async()=>{await session.switchToPolicyChain();status('Sieć zgodna z konfiguracją. Wpisz kwotę i przygotuj podgląd.');});
 $('preview').onclick=()=>action(async()=>{
  $('confirm').checked=false;const r=await session.prepare($('amount').value.trim());
  const rows=[['Sieć',r.chainId===8453?'Base (8453)':'Ethereum (1)'],['Odbiorca',r.recipient],['Kwota',`${r.amount} ${r.asset}`],['Limit kosztu wykonania',`${r.executionFeeUpperWei} wei`],['Ważność podglądu','60 sekund']];

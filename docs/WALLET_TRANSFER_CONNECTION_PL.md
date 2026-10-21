@@ -114,3 +114,10 @@ w aplikacji portfela przed zatwierdzeniem połączenia. Po błędzie niewłaści
 konta można zmienić sposób połączenia; żadna blokada adresu nie jest pomijana.
 Wbudowana przeglądarka może nie mieć rozszerzeń: użyj QR albo zwykłej przeglądarki
 z rozszerzeniem. Nie importuj frazy odzyskiwania do panelu.
+
+Jeżeli istniejąca sesja portfela zwraca Ethereum, a konfiguracja wymaga Base,
+panel pokazuje przycisk „Przełącz portfel na sieć z konfiguracji”. Tylko jawne
+kliknięcie wywołuje `wallet_switchEthereumChain`; nie podpisuje transakcji,
+nie tworzy sieci i nie wysyła środków. Konto źródłowe jest sprawdzane przed
+przełączeniem i po nim, poprzedni podgląd zostaje usunięty. Niepowodzenie
+przełączenia pozostawia przygotowanie transferu zablokowane.

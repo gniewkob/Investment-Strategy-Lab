@@ -28,6 +28,19 @@ export class TransferSession{
   if(this.policy)await this.checkIdentity();
   this.state='connected';return this.account;
  }
+ async switchToPolicyChain(){
+  check(this.policy,'POLICY_REQUIRED');
+  check(!this.busy&&!['submitting','submitted','unknown'].includes(this.state),'SESSION_LOCKED');
+  check(this.account===address(this.policy.from),'UNEXPECTED_ACCOUNT');
+  this.busy=true;this.prepared=null;this.generation++;this.state='disconnected';
+  try{
+   const accounts=await this.provider.request({method:'eth_accounts'});
+   check(Array.isArray(accounts)&&accounts.length>0&&address(accounts[0])===this.account,'ACCOUNT_CHANGED');
+   await this.provider.request({method:'wallet_switchEthereumChain',params:[{chainId:hex(BigInt(this.policy.chainId))}]});
+   await this.checkIdentity();this.state='connected';
+  }catch(e){throw new Error(e?.code===4001?'USER_REJECTED':'NETWORK_SWITCH_FAILED');}
+  finally{this.busy=false;}
+ }
  async checkIdentity(){
   const accounts=await this.provider.request({method:'eth_accounts'});
   check(Array.isArray(accounts)&&accounts.length>0&&address(accounts[0])===this.account,'ACCOUNT_CHANGED');

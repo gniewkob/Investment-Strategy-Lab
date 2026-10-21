@@ -82,3 +82,14 @@ test('identity change at last preflight check prevents submission',async()=>{
  const s=new TransferSession(p,policy());await s.connect();await s.prepare('0.00000001');
  await assert.rejects(s.submit(true),/ACCOUNT_CHANGED/);assert.equal(p.calls.some(x=>x.method==='eth_sendTransaction'),false);
 });
+test('explicit network switch checks watched identity and never submits funds',async()=>{
+ let chain='0x1';
+ const p=provider({eth_chainId:()=>chain,wallet_switchEthereumChain:([target])=>{chain=target.chainId;return null;}});
+ const s=new TransferSession(p,policy());await assert.rejects(s.connect(),/WRONG_CHAIN/);
+ await s.switchToPolicyChain();assert.equal(s.state,'connected');
+ assert.equal(p.calls.filter(c=>c.method==='wallet_switchEthereumChain').length,1);
+ assert.equal(p.calls.some(c=>c.method==='eth_sendTransaction'),false);
+ const q=provider({eth_requestAccounts:()=>[TO]}),wrong=new TransferSession(q,policy());
+ await assert.rejects(wrong.connect());await assert.rejects(wrong.switchToPolicyChain());
+ assert.equal(q.calls.some(c=>c.method==='wallet_switchEthereumChain'),false);
+});
