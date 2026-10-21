@@ -4,6 +4,8 @@ private/
 .local/
 *.wallet-private.json
 *.portfolio-private.json
+*.flow-private.json
+*.cashflow-private.json
 *.private-wallet.json
 *.secret.json
 .env
