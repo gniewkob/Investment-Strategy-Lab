@@ -22,7 +22,7 @@ Odczyt salda nie jest uprawnieniem do jego przeniesienia.
 | Historia wpłat/wypłat Coinbase | PENDING: dostępny konektor nie wystawia tej operacji; fills nie zastępują historii transferów |
 | Uzgadnianie transferów | PASS offline dla syntetycznych par; PENDING live, brak autoryzowanej historii obu stron |
 | Coinbase publiczne OHLCV + NBP | PASS: rzeczywiste pobranie trzech zakresów 72h i datowanego USD/PLN przez istniejące moduły |
-| Testy | 384 offline testów PASS w Pythonie 3.12 z istniejącą zależnością psycopg; w tym 20 nowych testów, subprocess CLI i wspólna ścieżka CLI z kontrolowanym RPC |
+| Testy | 393 offline testów PASS w Pythonie 3.12 z istniejącą zależnością psycopg; w tym 20 testów monitora + 9 testów adaptera historii, subprocess CLI i wspólna ścieżka CLI z kontrolowanym RPC |
 | Pełna wycena majątku / P&L | UNKNOWN: brak pełnej enumeracji tokenów, DeFi/NFT, innych sieci i historycznych kosztów; nie wyliczamy pełnego USD total |
 
 Udany odczyt sald obu sieci użył sfinalizowanych bloków Ethereum **26239845**
@@ -207,3 +207,88 @@ Orbit search/integrate dał tylko częściowe pokrycie i wskazał inne produkty
 Coinbase (International/Prime); tych endpointów nie użyto jako zamiennika
 Advanced Trade. Użyto kontraktu faktycznie dostępnego konektora i istniejących
 walidowanych źródeł publicznych.
+
+
+## Rozbudowa odczytowej historii Coinbase
+
+Nowy `scripts/coinbase_read_only_history.py` udostępnia:
+
+- `collect_fills(reader, portfolio_ids, start, end, now)` — wywołuje wyłącznie
+  `coinbase_orders_fills` przez istniejący autoryzowany callback hosta; zamraża
+  filtr portfela i czasu, przechodzi kursory, odrzuca pętle i przekroczenie budżetu.
+- `normalize_fills(capture, now)` — sprawdza pełny łańcuch stron, zakres portfeli,
+  unikalność realizacji, czas, liczby i jednostkę `size_in_quote`.
+- `parse_statement(raw_bytes, now)` / `read_statement(path, now)` — prywatny import
+  rozpoznanego wariantu CSV z kontrolą ID, dat, liczb i uprawnień pliku.
+
+Callback zwraca JSON odpowiedzi `{fills:[...],cursor:...}`, a nie otoczkę MCP.
+Nie jest to samodzielne uwierzytelnienie lokalnego CLI i nie rozszerza uprawnień
+hostowanego konektora. Limit: 50 stron na portfel, 100 rekordów na stronę,
+5000 rekordów całej próby. Wyjątki callbacka nie ujawniają danych źródłowych.
+Obsługa transportowych limitów/rate limit pozostaje po stronie autoryzowanego
+hosta; importer nie ponawia niejednoznacznych błędów ani nie zmienia dostępu.
+
+**Wynik live tego rozszerzenia:** istniejący konektor zwrócił `{}` na odczyt
+`fills`, bez listy i kursora. To stan UNKNOWN, nie potwierdzenie pustej historii.
+Drugi dostępny interfejs nie umożliwił odczytu. Parser i CLI odrzucają taki brak
+koperty. Nie deklarujemy udanego live importu realizacji. Testy jednostkowe i
+subprocess E2E przeszły na jawnie syntetycznych zdarzeniach. Użytkownik nie
+udostępnił realnego CSV; jego format i zawartość pozostają niezweryfikowane live.
+
+Koperta capture realizacji:
+
+```json
+{
+  "mode": "PRIVATE_COINBASE_FILLS_CAPTURE",
+  "captured_at": "[UTC_RETRIEVAL_TIME]",
+  "start": "[UTC_INTERVAL_START]",
+  "end": "[UTC_INTERVAL_END]",
+  "portfolio_ids": ["[PORTFOLIO_ID]"],
+  "reads": [{
+    "portfolio_id": "[PORTFOLIO_ID]",
+    "pages": [{"request_cursor": null, "response": {"fills": [], "cursor": ""}}]
+  }]
+}
+```
+
+Pusta lista `fills` w poprawnej odpowiedzi może być potwierdzonym pustym wynikiem
+w zadanym zakresie; brak pola `fills` nim nie jest. Wszystkie portfele wymienione
+w capture muszą mieć komplet stron; samo capture nadal jest deklaracją operatora.
+Ze względu na właściwości paginacji API `snapshot_completeness_certified=false`;
+przejście kursora nie dowodzi historycznej kompletności konta.
+
+Jednostka `size_in_quote=true` oznacza rozmiar w walucie kwotowanej. Wówczas
+`base_quantity_reported=null`; dzielenie przez cenę daje tylko oznaczoną estymację.
+Brak flagi oznacza `reported_size_unit=UNKNOWN`, bez wyliczenia ilości aktywa.
+Waluta prowizji, której konektor nie podaje, pozostaje UNKNOWN; nie agregujemy
+opłat w domniemanym USD. ID portfela/zlecenia/transakcji nie są kopiowane do wyjścia.
+
+Importer CSV rozpoznaje nagłówek w pierwszych 25 wierszach. Wymagane kolumny:
+`ID`, `Timestamp` (UTC), `Transaction Type`, `Asset`, `Quantity Transacted`.
+To jawnie wspierany wariant wejścia, nie gwarancja zgodności wszystkich raportów
+Coinbase. Nieznany wariant lub brak stabilnego ID wymaga dopasowania adaptera do
+rzeczywistego pliku przez operatora; nie zgadujemy ID z pozycji wiersza.
+Nieznane typy zdarzeń pozostają `unclassified`, nie są pomijane.
+Preambuła, `Notes`, dane osobowe i surowe ID są odrzucane z wyjścia.
+Skrót pliku w raporcie nadal jest prywatną referencją audytu, nie anonimizacją.
+
+```bash
+python -m scripts.operational_read_only \
+  --fills-capture /PRIVATE_DIR/fills.portfolio-private.json \
+  --coinbase-history-csv /PRIVATE_DIR/statement.csv \
+  --output /PRIVATE_DIR/history-NEW.portfolio-private.json
+```
+
+Można podać jedno z tych wejść, albo dołączyć je do istniejącego raportu sald.
+Oba źródła zachowane są osobno w `coinbase_history`; mogą opisywać te same operacje
+i nie są sumowane. Importowane zdarzenia nie zmieniają aktualnych sald.
+`Receive`/`Send` opisują kierunek zgłoszony w CSV; bez sieci, hash i potwierdzenia
+nie są dowodem transferu wewnętrznego ani nowego zewnętrznego zasilenia.
+`onchain_reconciliation_eligible=false`, pełny funding/P&L nadal UNKNOWN.
+Nie ma nowych zleceń, transferów, kluczy, OAuth scopes ani zmian w koncie.
+
+Kontrakty źródłowe:
+[Coinbase List Fills](https://docs.cdp.coinbase.com/api-reference/advanced-trade-api/rest-api/orders/list-fills),
+[Coinbase statements](https://help.coinbase.com/en/coinbase/taxes/tools/statements).
+Orbit search/integrate potwierdził endpoint list-fills; faktycznie używane pola
+konektora sprawdzono niezależnie. Żadnych tokenów uwierzytelnienia nie pobierano.

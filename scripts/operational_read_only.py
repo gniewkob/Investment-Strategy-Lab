@@ -383,6 +383,8 @@ def main(argv=None):
     p = argparse.ArgumentParser(description='One-shot PRIVATE read-only portfolio observer; no execution')
     p.add_argument('--exchange-capture', type=Path)
     p.add_argument('--wallet-watchlist', type=Path)
+    p.add_argument('--fills-capture', type=Path, help='PRIVATE paginated authorized Coinbase fills capture')
+    p.add_argument('--coinbase-history-csv', type=Path, help='PRIVATE Coinbase statement CSV; offline, not authenticated by CLI')
     p.add_argument('--exchange-events', type=Path, help='Private observed history export; never transaction instructions')
     p.add_argument('--history-blocks', type=int, default=0, help='0 disables; max 1000 finalized blocks, registered ERC20 only')
     p.add_argument('--allow-partial-history', action='store_true', help='Keep verified balances on history failure; partial report exits 3')
@@ -390,7 +392,8 @@ def main(argv=None):
     p.add_argument('--at', help='UTC clock for offline capture validation only; not permitted for live wallet reads')
     p.add_argument('--output', type=Path, required=True)
     args = p.parse_args(argv)
-    if not args.exchange_capture and not args.wallet_watchlist: p.error('At least one source required')
+    if not any((args.exchange_capture,args.wallet_watchlist,args.fills_capture,args.coinbase_history_csv)):
+        p.error('At least one source required')
     if not 0 <= args.history_blocks <= 1000: p.error('--history-blocks must be 0..1000')
     if args.allow_partial_history and not (args.wallet_watchlist and args.history_blocks):
         p.error('--allow-partial-history requires live wallet history')
@@ -410,6 +413,14 @@ def main(argv=None):
         partial_history = wallet is not None and wallet['history_complete_for_requested_range'] is False
         audit['wallet_history_coverage'] = ('PARTIAL' if partial_history else
             'COMPLETE_REQUESTED_TOKEN_RANGE' if wallet and args.history_blocks else 'NOT_REQUESTED')
+        coinbase_history = None
+        if args.fills_capture or args.coinbase_history_csv:
+            from scripts.coinbase_read_only_history import normalize_fills, read_statement
+            coinbase_history = {
+                'fills': normalize_fills(read_private(args.fills_capture),now) if args.fills_capture else None,
+                'statement': read_statement(args.coinbase_history_csv,now) if args.coinbase_history_csv else None,
+                'sources_summed':False,'used_to_adjust_balances':False,
+                'full_pnl_or_funding_history_certified':False}
         market_sources = None
         if args.public_markets:
             from scripts.read_only_portfolio_monitor import fetch_markets, fetch_usdpln
@@ -417,7 +428,7 @@ def main(argv=None):
                               'retrieved_at_utc': datetime.now(timezone.utc).isoformat()}
         report = {'status': 'PRIVATE_READ_ONLY_PARTIAL_OBSERVATION' if partial_history else 'PRIVATE_READ_ONLY_OBSERVATION', 'generated_at_utc': now.isoformat(),
             'clock_mode': 'OFFLINE_REPLAY' if args.at else 'LIVE_RETRIEVAL',
-            'exchange': exchange, 'onchain': wallet, 'public_market_sources': market_sources, 'transfer_reconciliation': audit,
+            'exchange': exchange, 'onchain': wallet, 'coinbase_history':coinbase_history, 'public_market_sources': market_sources, 'transfer_reconciliation': audit,
             'consolidation': {'exchange_usd': exchange['reported_total_usd'] if exchange else None,
                  'wallet_usd': None, 'combined_total_usd': None,
                  'reason': 'ONCHAIN_PRICES_UNVERIFIED_KEEP_CUSTODY_AND_CHAIN_LEDGERS_SEPARATE',
