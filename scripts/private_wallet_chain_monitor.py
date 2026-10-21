@@ -100,13 +100,20 @@ def _fetch_json(chain, addr, path, opener=urlopen):
     name, host = CHAINS[chain]
     expected = "/api/v2/addresses/" + addr + path
     url = "https://" + host + expected
-    with opener(Request(url, headers={"User-Agent": "ISL-Private-ReadOnly-Wallet/1.0",
-                                      "Accept": "application/json"}), timeout=35) as response:
-        loc = urlparse(response.geturl())
-        if (response.status != 200 or loc.scheme != "https" or loc.hostname != host
-                or loc.path.lower() != expected.lower() or loc.query or loc.fragment):
-            raise WalletSourceError("Unexpected explorer redirect/HTTP response")
-        raw = response.read(MAX_RESPONSE + 1)
+    try:
+        with opener(Request(url, headers={"User-Agent": "ISL-Private-ReadOnly-Wallet/1.0",
+                                          "Accept": "application/json"}), timeout=35) as response:
+            loc = urlparse(response.geturl())
+            if (response.status != 200 or loc.scheme != "https" or loc.hostname != host
+                    or loc.path.lower() != expected.lower() or loc.query or loc.fragment):
+                raise WalletSourceError("Unexpected explorer redirect/HTTP response")
+            raw = response.read(MAX_RESPONSE + 1)
+    except WalletSourceError:
+        raise
+    except Exception:
+        # urllib HTTPError typically embeds the full URL (wallet address).
+        # Do not expose personal wallet identifiers in CLI traceback/logs.
+        raise WalletSourceError("Explorer request failed (wallet address redacted)") from None
     if not raw or len(raw) > MAX_RESPONSE:
         raise WalletSourceError("Unbounded explorer response")
     try:
