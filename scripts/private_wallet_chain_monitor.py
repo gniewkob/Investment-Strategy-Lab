@@ -271,16 +271,76 @@ def reconcile_custodial_and_wallet(cex, wallet):
     }
 
 
+
+def inspect_local_wallet_snapshot(bundle, now=None):
+    """Process private USER-PROVIDED Blockscout-shaped source JSON OFFLINE.
+
+    This cannot establish live chain balances or source authenticity. It does
+    permit reproducible exchange+wallet consolidated reviews when public
+    explorer services are inaccessible. No network, filesystem, or signing.
+    """
+    accounts = _private_config(bundle)
+    now = _utc(now) if isinstance(now, str) else (now or datetime.now(timezone.utc))
+    if now.tzinfo is None or now.utcoffset() != timedelta(0):
+        raise WalletSourceError("UTC report clock required")
+    captured = _utc(bundle.get("captured_at"))
+    age = now - captured
+    if age < timedelta(seconds=-5) or age > timedelta(days=30):
+        raise WalletSourceError("Future or stale wallet snapshot")
+    result = []
+    total, unpriced = Decimal(0), 0
+    for (chain, addr, label, approved), item in zip(accounts, bundle["watch"]):
+        response = item.get("address_response")
+        tokens = item.get("token_balances_response")
+        positions, subtotal, unknown = _parse_chain(response, tokens, approved)
+        total += subtotal
+        unpriced += unknown
+        canonical = json.dumps([response, tokens], sort_keys=True,
+                               separators=(",",":"), allow_nan=False).encode()
+        result.append({
+            "wallet_label":label, "network":CHAINS[chain][0], "chain_id":chain,
+            "account_address_redacted":True, "contract_identity_allowlisted":True,
+            "positions":positions, "priced_subtotal_usd":str(subtotal),
+            "unpriced_or_unreviewed_position_count":unknown,
+            "source_snapshot_sha256":sha256(canonical).hexdigest(),
+            "complete_fungible_valuation":unknown == 0,
+            "NFT_positions_not_included":True
+        })
+    return {
+        "status":"LOCAL_PRIVATE_WALLET_OBSERVATION",
+        "observed_at_utc":captured.isoformat(),
+        "wallet_account_chain_count":len(result),
+        "wallets":result, "priced_subtotal_usd":str(total),
+        "unpriced_or_unreviewed_position_count":unpriced,
+        "complete_fungible_valuation":unpriced == 0,
+        "complete_all_assets_valuation":False,
+        "staking_liquidity_unknown":True,
+        "source":"USER_SUPPLIED_LOCAL_EXPORT_NOT_AUTHENTICATED",
+        "historical_chain_state_oracle_verified":False,
+        "wallet_balance_available_to_trade_verified":False,
+        "addresses_or_secrets_persisted":False,
+        "snapshot_age_hours":str((Decimal(str(age.total_seconds()))/3600).quantize(Decimal(".1"))),
+        "stale_snapshot_warning":age > timedelta(hours=24),
+        "financial_operations":0
+    }
+
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Local private EVM wallet balance observer only")
-    parser.add_argument("--watchlist", type=Path, required=True,
-                        help="LOCAL PRIVATE JSON with addresses and reviewed contracts, never commit")
+    source = parser.add_mutually_exclusive_group(required=True)
+    source.add_argument("--watchlist", type=Path,
+                        help="PRIVATE local address list, live public explorer GETs")
+    source.add_argument("--snapshot-file", type=Path,
+                        help="PRIVATE local archived Blockscout-shaped JSON; OFFLINE, potentially stale")
     parser.add_argument("--format", choices=("json", "markdown"), default="markdown")
     args = parser.parse_args(argv)
-    if args.watchlist.stat().st_size > MAX_CONFIG:
-        raise WalletSourceError("Wallet local watchlist too large")
-    data = json.loads(args.watchlist.read_text(encoding="utf-8"))
-    result = inspect_wallet_watchlist(data)
+    source_file = args.watchlist if args.watchlist else args.snapshot_file
+    if source_file.stat().st_size > MAX_CONFIG:
+        raise WalletSourceError("Wallet local input too large")
+    data = json.loads(source_file.read_text(encoding="utf-8"))
+    result = (inspect_wallet_watchlist(data) if args.watchlist
+              else inspect_local_wallet_snapshot(data))
     if args.format == "json":
         print(json.dumps(result, sort_keys=True))
         return
