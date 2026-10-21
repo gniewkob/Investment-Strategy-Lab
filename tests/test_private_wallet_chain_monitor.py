@@ -5,7 +5,8 @@ import json
 
 from scripts.private_wallet_chain_monitor import (
     WalletSourceError, _private_config, _parse_chain,
-    inspect_wallet_watchlist, reconcile_custodial_and_wallet, _fetch_json
+    inspect_wallet_watchlist, inspect_local_wallet_snapshot,
+    reconcile_custodial_and_wallet, _fetch_json
 )
 from scripts.read_only_portfolio_monitor import build_report, render_markdown
 
@@ -157,3 +158,38 @@ class WalletEvidenceTests(TestCase):
         self.assertNotIn(FAKE_A.lower(),json.dumps(report).lower())
         self.assertEqual(report["executed_orders"],0)
         self.assertEqual(report["scheduled_runs_created"],0)
+
+    def test_offline_wallet_snapshot_with_realistic_age_not_claimed_live(self):
+        bundle=watch()
+        bundle["captured_at"]="2026-10-19T07:00:00Z"
+        for item in bundle["watch"]:
+            item["address_response"]=blockscout_records(item["chain_id"],FAKE_A,"")[0]
+            item["token_balances_response"]=blockscout_records(item["chain_id"],FAKE_A,
+                                                                 "/token-balances")[0]
+        result=inspect_local_wallet_snapshot(bundle,NOW)
+        self.assertEqual(result["priced_subtotal_usd"],"300.000")
+        self.assertTrue(result["stale_snapshot_warning"])
+        self.assertEqual(result["snapshot_age_hours"],"48.0")
+        self.assertEqual(result["source"],"USER_SUPPLIED_LOCAL_EXPORT_NOT_AUTHENTICATED")
+        self.assertFalse(result["historical_chain_state_oracle_verified"])
+        self.assertEqual(result["financial_operations"],0)
+        self.assertNotIn(FAKE_A.lower(),json.dumps(result).lower())
+        report=build_report(NOW,minimal_market(),
+                            {"usdpln_mid_reference":"3.7","nbp_effective_date":"2026-10-20"},
+                            wallet_report=result)
+        self.assertIn("starszy niż 24 godziny",render_markdown(report))
+
+    def test_offline_snapshot_without_source_data_rejected(self):
+        bundle=watch()
+        bundle["captured_at"]=NOW.isoformat()
+        with self.assertRaises(WalletSourceError):
+            inspect_local_wallet_snapshot(bundle,NOW)
+
+    def test_offline_snapshot_too_old_and_future_rejected(self):
+        bundle=watch()
+        bundle["captured_at"]="2026-08-01T00:00:00Z"
+        with self.assertRaises(WalletSourceError):
+            inspect_local_wallet_snapshot(bundle,NOW)
+        bundle["captured_at"]="2026-11-01T00:00:00Z"
+        with self.assertRaises(WalletSourceError):
+            inspect_local_wallet_snapshot(bundle,NOW)
