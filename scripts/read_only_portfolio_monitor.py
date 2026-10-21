@@ -202,6 +202,13 @@ def analyze_portfolio(payload, report_at):
         if not isinstance(asset, str) or not re.fullmatch(r"[A-Z0-9]{2,12}", asset):
             raise MonitoringError("Unrecognized asset identifier")
         if value is None:
+            # Coinbase may expose an empty fiat account placeholder without
+            # quantity or USD valuation; never interpret it as a positive holding.
+            if (item.get("account_type") == "ACCOUNT_TYPE_FIAT"
+                    and item.get("is_cash") is True
+                    and item.get("total_balance_crypto") is None
+                    and item.get("total_balance_equity") is None):
+                continue
             raise MonitoringError("Position has no USD valuation; refuse silent omission")
         v = _number(value, "asset valuation")
         if v == 0:
