@@ -1,0 +1,61 @@
+name: Read-only Market and Portfolio Intelligence
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+    paths:
+      - scripts/read_only_portfolio_monitor.py
+      - tests/test_read_only_portfolio_monitor.py
+      - docs/READ_ONLY_PORTFOLIO_MONITOR_PL.md
+      - .github/workflows/read-only-portfolio-monitor.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-quality:
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install existing offline test adapter (no credentials)
+        run: python -m pip install 'psycopg[binary]>=3.2,<4'
+      - name: Full offline suite
+        run: python -m unittest discover -s tests -v
+      - name: Monitor has no account or order capability
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          s=Path('scripts/read_only_portfolio_monitor.py').read_text()
+          forbidden=('psycopg', 'sqlalchemy', 'coinbase_orders_create',
+                     'mcp__Coinbase__', 'Authorization:', 'NEON_DATABASE_URL',
+                     'os.environ', 'os.getenv', 'subprocess.', 'INSERT INTO',
+                     'UPDATE investment_lab.', 'DELETE FROM')
+          assert not any(x in s for x in forbidden), 'read-only boundary violation'
+          print('PUBLIC_READ_ONLY_ACCOUNT_FREE_SOURCE_BOUNDARY_OK')
+          PY
+
+  public-market-brief:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' &&
+       github.event.pull_request.number == 56 &&
+       github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Fetch public BTC ETH ATOM market bars and NBP only; NO holdings or secrets
+        run: python -m scripts.read_only_portfolio_monitor --format markdown
