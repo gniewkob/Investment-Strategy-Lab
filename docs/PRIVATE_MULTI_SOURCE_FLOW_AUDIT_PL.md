@@ -107,7 +107,7 @@ Recorded External Net = Inflows - Outflows
 Unexplained Reference Change = Delta - Recorded External Net + Recorded Fees
 ```
 
-**`Unexplained Reference Change` nie oznacza P&L.** Obejmuje potencjalne zmiany cen, zignorowane prowizje, brakujące zdarzenia, różnice kursowe i niekompletność źródeł. Gdy jakiś przepływ jest niepotwierdzony, różnica nie jest raportowana. Jeśli zakres wyceny walleta zmienił się pomiędzy snapshotami, porównanie jest odrzucane. Raport nie certyfikuje pełnej wartości majątku ani płynności, bo środki stakowane, DeFi, NFT i niektóre sieci mogą być poza zakresem.
+**`Unexplained Reference Change` nie oznacza P&L.** Obejmuje potencjalne zmiany cen, zignorowane prowizje, brakujące zdarzenia, różnice kursowe i niekompletność źródeł. Gdy jakiś przepływ jest niepotwierdzony, różnica nie jest raportowana. Jeśli zakres wyceny walleta zmienił się pomiędzy snapshotami, porównanie jest odrzucane. Jeżeli liczba niewycenionych pozycji walleta zmieniła się między snapshotami, różnica referencyjna również nie jest wyliczana. Raport nie certyfikuje pełnej wartości majątku ani płynności, bo środki stakowane, DeFi, NFT i niektóre sieci mogą być poza zakresem.
 
 Nie ma integracji do składania zleceń, transferowania środków, podpisywania transakcji, zarządzania walletowymi uprawnieniami ani zapisywania danych w Neon. GitHub Actions uruchamia wyłącznie testy na fikcyjnych danych i publiczny raport rynku; nie ma dostępu do prywatnego rejestru.
 
