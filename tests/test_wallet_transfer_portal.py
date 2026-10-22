@@ -37,6 +37,15 @@ class PortalTests(TestCase):
    self.assertEqual(c['policy']['from'],ADDR)
    self.assertEqual(c['policy']['to'],TO)
    self.assertEqual(c['policy']['maxAmount'],'0.0001')
+ def test_portal_accepts_one_identity_only(self):
+  with tempfile.TemporaryDirectory() as d:
+   root=Path(d);w=watch();w['watch'].append({**w['watch'][0], 'label':'other', 'address':TO})
+   write_private(root/'mixed',w)
+   with self.assertRaises(PortalError):load_config(root/'mixed')
+   write_private(root/'single',watch())
+   c=load_config(root/'single')
+   self.assertEqual(c['connection'],{'account':ADDR,'label':'base','provider':'base','chainIds':[8453]})
+   with self.assertRaises(PortalError):load_config(root/'single',connector='coinbase')
  def test_policy_requires_fresh_destination_known_account_and_caps(self):
   with tempfile.TemporaryDirectory() as d:
    root=Path(d);write_private(root/'watch',watch())

@@ -19,10 +19,13 @@ def require(ok):
     if not ok:
         raise PortalError('PORTAL_CONFIGURATION_REJECTED')
 
-def load_config(watch_path, policy_path=None):
+def load_config(watch_path, policy_path=None, connector="base"):
     try:
         watch = _private_config(read_private(watch_path))
         result = {'accounts': sorted(set(w[1] for w in watch)), 'policy': None}
+        require(len(result['accounts']) == 1 and connector in ('base', 'injected'))
+        result['connection'] = {'account': result['accounts'][0], 'label': watch[0][2],
+                                'provider': connector, 'chainIds': sorted(set(w[0] for w in watch))}
         if policy_path is None:
             return result
         p = read_private(policy_path)
@@ -74,7 +77,7 @@ def make_handler(config, asset_root):
             self.send_header('X-Content-Type-Options', 'nosniff')
             self.send_header('Referrer-Policy', 'no-referrer')
             self.send_header('Cross-Origin-Opener-Policy', 'same-origin-allow-popups')
-            self.send_header('Content-Security-Policy', "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://mainnet.base.org https://ethereum-rpc.publicnode.com https://rpc.wallet.coinbase.com https://keys.coinbase.com https://www.walletlink.org wss://www.walletlink.org; frame-src https://keys.coinbase.com; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'")
+            self.send_header('Content-Security-Policy', "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://mainnet.base.org https://ethereum-rpc.publicnode.com https://rpc.wallet.coinbase.com https://keys.coinbase.com; frame-src https://keys.coinbase.com; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'")
             self.end_headers()
             if self.command != 'HEAD':
                 self.wfile.write(body)
@@ -115,10 +118,12 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--watchlist', type=Path, required=True)
     parser.add_argument('--transfer-policy', type=Path)
+    parser.add_argument('--connector', choices=('base', 'injected'), default='base',
+                        help='One explicit connector; no automatic provider fallback')
     parser.add_argument('--port', type=int, default=8766)
     args = parser.parse_args()
     try:
-        config = load_config(args.watchlist, args.transfer_policy)
+        config = load_config(args.watchlist, args.transfer_policy, args.connector)
         root = Path(__file__).resolve().parents[1] / 'wallet-portal'
         require((root / 'dist/app.js').is_file())
         server = ThreadingHTTPServer(('127.0.0.1', args.port), make_handler(config, root))

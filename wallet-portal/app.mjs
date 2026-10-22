@@ -1,10 +1,9 @@
-import {createCoinbaseWalletSDK} from '@coinbase/wallet-sdk';
 import {createBaseAccountSDK} from '@base-org/account';
 import {TransferSession} from './transfer.mjs';
 import {createReadOnlyRpc} from './read-rpc.mjs';
 const $=id=>document.getElementById(id);
-let config,session,busy=false,receiptTimer,receiptChecks=0,receiptState;
-const text={PREFLIGHT_FAILED:'Sprawdzenie przed podpisem nie powiodło się. Żądanie wysyłki nie zostało przekazane do portfela. Przygotuj nowy podgląd.',BALANCE_RPC_UNAVAILABLE:'Portfel nie udostępnił odczytu ETH w wybranej sieci. Podpis zablokowany.',TOKEN_RPC_UNAVAILABLE:'Portfel nie udostępnił odczytu cbBTC. Podpis zablokowany.',GAS_ESTIMATE_UNAVAILABLE:'Nie udało się oszacować gas dla transferu. Podpis zablokowany.',GAS_PRICE_UNAVAILABLE:'Nie udało się odczytać ceny gas. Podpis zablokowany.',NETWORK_SWITCH_FAILED:'Portfel nie przełączył sieci. Wybierz Base w aplikacji portfela i podłącz ponownie.',UNEXPECTED_ACCOUNT:'Wybrano inne konto niż zatwierdzone przez operatora.',WRONG_CHAIN:'Zmień sieć w portfelu na wskazaną w konfiguracji, a następnie podłącz ponownie.',NO_GAS:'Brak ETH na opłatę sieciową. Transfer zablokowany.',INSUFFICIENT_GAS_BALANCE:'Za mało ETH na kwotę i szacowaną opłatę.',INSUFFICIENT_TOKEN_BALANCE:'Za małe saldo tokena.',POLICY_REQUIRED:'Tryb podłączenia: brak konfiguracji transferu.',POLICY_EXPIRED:'Konfiguracja wygasła. Operator musi ponownie sprawdzić adres docelowy.',AMOUNT_CAP_EXCEEDED:'Kwota przekracza limit operatora.',EXECUTION_FEE_CAP_EXCEEDED:'Opłata wykonania przekracza limit.',USER_REJECTED:'Podpis anulowany. Niczego automatycznie nie ponawiamy.',SEND_STATUS_UNKNOWN:'Wynik wysyłki jest nieznany. Sprawdź historię w portfelu przed jakąkolwiek kolejną próbą. Panel jest zablokowany.',REVIEW_EXPIRED:'Podgląd wygasł. Przygotuj go ponownie.',FEE_CHANGED_REVIEW_AGAIN:'Aktualne wymagania opłaty przekraczają limit podglądu. Przygotuj nowy podgląd. Prośba nie trafiła do portfela.',NO_PROVIDER:'Nie znaleziono rozszerzenia. Otwórz panel w przeglądarce z portfelem albo wybierz Coinbase Wallet (QR).',IDENTITY_CHANGED:'Konto lub sieć zmieniły się. Podłącz ponownie.',ACCOUNT_CHANGED:'Konto zmieniło się. Podłącz ponownie.',INVALID_AMOUNT:'Wpisz dodatnią kwotę dziesiętną bez notacji wykładniczej.',EXCESS_PRECISION:'Kwota ma zbyt wiele miejsc dziesiętnych.'};
+let config,session,provider,connecting=false,busy=false,receiptTimer,receiptChecks=0,receiptState;
+const text={PREFLIGHT_FAILED:'Sprawdzenie przed podpisem nie powiodło się. Żądanie wysyłki nie zostało przekazane do portfela. Przygotuj nowy podgląd.',BALANCE_RPC_UNAVAILABLE:'Portfel nie udostępnił odczytu ETH w wybranej sieci. Podpis zablokowany.',TOKEN_RPC_UNAVAILABLE:'Portfel nie udostępnił odczytu cbBTC. Podpis zablokowany.',GAS_ESTIMATE_UNAVAILABLE:'Nie udało się oszacować gas dla transferu. Podpis zablokowany.',GAS_PRICE_UNAVAILABLE:'Nie udało się odczytać ceny gas. Podpis zablokowany.',NETWORK_SWITCH_FAILED:'Portfel nie przełączył sieci. Wybierz Base w aplikacji portfela i podłącz ponownie.',UNEXPECTED_ACCOUNT:'Wybrano inne konto niż zatwierdzone przez operatora.',WRONG_CHAIN:'Zmień sieć w portfelu na wskazaną w konfiguracji, a następnie podłącz ponownie.',NO_GAS:'Brak ETH na opłatę sieciową. Transfer zablokowany.',INSUFFICIENT_GAS_BALANCE:'Za mało ETH na kwotę i szacowaną opłatę.',INSUFFICIENT_TOKEN_BALANCE:'Za małe saldo tokena.',POLICY_REQUIRED:'Tryb podłączenia: brak konfiguracji transferu.',POLICY_EXPIRED:'Konfiguracja wygasła. Operator musi ponownie sprawdzić adres docelowy.',AMOUNT_CAP_EXCEEDED:'Kwota przekracza limit operatora.',EXECUTION_FEE_CAP_EXCEEDED:'Opłata wykonania przekracza limit.',USER_REJECTED:'Podpis anulowany. Niczego automatycznie nie ponawiamy.',SEND_STATUS_UNKNOWN:'Wynik wysyłki jest nieznany. Sprawdź historię w portfelu przed jakąkolwiek kolejną próbą. Panel jest zablokowany.',REVIEW_EXPIRED:'Podgląd wygasł. Przygotuj go ponownie.',FEE_CHANGED_REVIEW_AGAIN:'Aktualne wymagania opłaty przekraczają limit podglądu. Przygotuj nowy podgląd. Prośba nie trafiła do portfela.',NO_PROVIDER:'Nie znaleziono rozszerzenia portfela. Otwórz panel w przeglądarce z właściwym portfelem.',IDENTITY_CHANGED:'Konto lub sieć zmieniły się. Podłącz ponownie.',ACCOUNT_CHANGED:'Konto zmieniło się. Podłącz ponownie.',INVALID_AMOUNT:'Wpisz dodatnią kwotę dziesiętną bez notacji wykładniczej.',EXCESS_PRECISION:'Kwota ma zbyt wiele miejsc dziesiętnych.'};
 function status(message){$('status').textContent=message;}
 function eth(wei){const n=BigInt(wei),fraction=(n%10n**18n).toString().padStart(18,'0').replace(/0+$/,'');return `${n/10n**18n}${fraction?'.'+fraction:''} ETH`;}
 function render(){
@@ -12,7 +11,8 @@ function render(){
  if(state==='disconnected')$('connection').open=true;
  const expired=state==='prepared'&&Date.now()-session.prepared.reviewedAt>=60000;
  const policyExpired=config?.policy&&Date.now()>=config.policy.expiresAt;
- $('connect').disabled=busy||locked||!config;$('provider').disabled=busy||locked||['connected','prepared'].includes(state);
+ $('connect').disabled=busy||locked||!config;
+ $('reset').disabled=!provider||locked||(busy&&!connecting);
  $('switch-network').hidden=!(config?.policy&&session?.account===config.policy.from.toLowerCase()&&state==='disconnected');
  $('switch-network').disabled=busy||locked;
  $('amount').disabled=busy||!config?.policy||!['connected','prepared'].includes(state);
@@ -35,13 +35,16 @@ function render(){
 }
 async function action(fn){if(busy)return;busy=true;render();try{await fn();}catch(e){status((text[e?.message]||'Operacja przerwana. Sprawdź stan portfela; szczegóły prywatne nie są zapisywane w logach.')+(e?.safeReason==='RPC_URL_MISSING'?' Sesja portfela nie przekazała adresu RPC dla tej sieci.':''));}finally{busy=false;render();}}
 $('connect').onclick=()=>action(async()=>{
- clearTimeout(receiptTimer);receiptState=null;receiptChecks=0;$('attempt').textContent='';
+ clearTimeout(receiptTimer);receiptState=null;receiptChecks=0;$('attempt').textContent='';$('account').textContent='Oczekuje na podłączenie.';
  status('Oczekiwanie na odpowiedź portfela. Sprawdź aplikację na telefonie.');
  if(session)session.disconnect();
- let provider;
- if($('provider').value==='injected'){provider=window.ethereum;if(!provider)throw new Error('NO_PROVIDER');}
- else if($('provider').value==='coinbase')provider=createCoinbaseWalletSDK({appName:'Investment Strategy Lab',appChainIds:[1,8453],preference:{options:'eoaOnly'}}).getProvider();
- else provider=createBaseAccountSDK({appName:'Investment Strategy Lab',appChainIds:[1,8453],preference:{telemetry:false},subAccounts:{creation:'manual',defaultAccount:'universal',funding:'manual'}}).getProvider();
+ if(!provider){
+  if(config.connection.provider==='injected'){provider=window.ethereum;if(!provider)throw new Error('NO_PROVIDER');}
+  else provider=createBaseAccountSDK({appName:'Investment Strategy Lab',appChainIds:config.connection.chainIds,preference:{telemetry:false},subAccounts:{creation:'manual',defaultAccount:'universal',funding:'manual'}}).getProvider();
+ }
+ // Clear this SDK's persisted account before every explicit connection attempt.
+ // Never clear unrelated browser storage, wallet accounts or on-chain permissions.
+ await provider.disconnect?.();
  session=new TransferSession(provider,config.policy,config.accounts,config.policy?createReadOnlyRpc(config.policy.chainId):provider);
  session.onAttempt=attempt=>{
   const labels={preflight:'Sprawdzanie przed podpisem — żądanie wysyłki jeszcze niewysłane.',wallet_confirmation:'Żądanie przekazane do portfela — sprawdź potwierdzenie w telefonie.',broadcast_hash_received:'Portfel zwrócił identyfikator — pozostaje sprawdzić potwierdzenie w sieci.',preflight_failed:'Błąd przed podpisem — nie przekazano żądania wysyłki.',wallet_rejected:'Portfel zgłosił odmowę potwierdzenia.',outcome_unknown:'Brak potwierdzonego wyniku żądania portfela — ponowienie zablokowane.'};
@@ -50,10 +53,23 @@ $('connect').onclick=()=>action(async()=>{
   if(attempt.phase==='wallet_confirmation')status('Otwórz aplikację portfela na telefonie. Oczekiwanie na Twoją decyzję; nie ponawiaj żądania.');
  };
  for(const event of ['accountsChanged','chainChanged','disconnect'])provider.on?.(event,()=>{render();status('Zmieniło się konto lub połączenie. Podgląd został unieważniony.');});
- const account=await session.connect();$('account').textContent=`Połączono ${account.slice(0,6)}…${account.slice(-4)}`;
+ connecting=true;render();
+ let account;
+ try{account=await session.connect();}
+ catch(e){
+  if(e?.message==='UNEXPECTED_ACCOUNT')$('account').textContent=`Odrzucone konto: ${session.account}. Oczekiwane: ${config.connection.account}.`;
+  throw e;
+ }finally{connecting=false;}
+ $('account').textContent=`Połączono ${config.connection.label}: ${account}`;
  $('connection').open=false;
  status(config.policy&&Date.now()>=config.policy.expiresAt?text.POLICY_EXPIRED:config.policy?'Portfel podłączony. Wpisz kwotę i przygotuj podgląd.':'Portfel podłączony. Tryb wyłącznie podłączenia — transfer pozostaje zablokowany.');
 });
+$('reset').onclick=async()=>{
+ if(!provider||['submitting','submitted','unknown'].includes(session?.state)||(busy&&!connecting))return;
+ $('reset').disabled=true;
+ try{await provider.disconnect?.();location.reload();}
+ catch{status('Nie udało się wyczyścić sesji. Zamknij okno logowania i odśwież panel.');}
+};
 $('switch-network').onclick=()=>action(async()=>{status('Oczekiwanie na potwierdzenie zmiany sieci w aplikacji portfela.');await session.switchToPolicyChain();$('account').textContent=`Połączono ${session.account.slice(0,6)}…${session.account.slice(-4)}`;status('Sieć zgodna z konfiguracją. Wpisz kwotę i przygotuj podgląd.');});
 $('preview').onclick=()=>action(async()=>{
  status('Sprawdzanie sald i opłaty w wybranej sieci…');
@@ -81,4 +97,4 @@ async function checkReceipt(){
 }
 $('receipt').onclick=()=>{receiptChecks=5;return checkReceipt();};
 setInterval(render,1000);
-try{const response=await fetch('/session',{credentials:'same-origin',cache:'no-store'});if(!response.ok)throw new Error();config=await response.json();$('mode').textContent=config.policy?'Transfer z potwierdzeniem użytkownika':'Tylko podłączenie';if(config.policy){$('asset').textContent=config.policy.asset;$('limits').textContent=`Sieć ${config.policy.chainId===8453?'Base':'Ethereum'} · maksymalnie ${config.policy.maxAmount} ${config.policy.asset}`;}status(config.policy&&Date.now()>=config.policy.expiresAt?text.POLICY_EXPIRED:config.policy?'Konfiguracja dostępna. Podłącz zatwierdzone konto portfela.':'Tryb podłączenia. Transfer wymaga potwierdzonego adresu wpłaty Coinbase i prywatnej konfiguracji limitów.');render();}catch{status('Nie można wczytać lokalnej konfiguracji. Uruchom panel przez lokalny serwer.');}
+try{const response=await fetch('/session',{credentials:'same-origin',cache:'no-store'});if(!response.ok)throw new Error();config=await response.json();if(!config.connection||config.accounts.length!==1||config.accounts[0]!==config.connection.account||!['base','injected'].includes(config.connection.provider))throw new Error();$('expected-label').textContent=config.connection.label;$('expected-account').textContent=config.connection.account;$('connector-name').textContent=config.connection.provider==='base'?'Połączenie: Base Account':'Połączenie: rozszerzenie portfela';if(!config.policy){$('portal-title').textContent='Połącz jeden właściwy portfel.';$('portal-intro').textContent='Sprawdzimy adres zwrócony przez portfel. Inne konto zostanie odrzucone. Transfery są na razie wyłączone.';$('transfer-panel').hidden=true;$('progress').hidden=true;$('portal-grid').classList.add('connection-only');}$('mode').textContent=config.policy?'Transfer z potwierdzeniem użytkownika':'Tylko podłączenie';if(config.policy){$('asset').textContent=config.policy.asset;$('limits').textContent=`Sieć ${config.policy.chainId===8453?'Base':'Ethereum'} · maksymalnie ${config.policy.maxAmount} ${config.policy.asset}`;}status(config.policy&&Date.now()>=config.policy.expiresAt?text.POLICY_EXPIRED:config.policy?'Konfiguracja dostępna. Podłącz zatwierdzone konto portfela.':'Tryb podłączenia. Transfer wymaga potwierdzonego adresu wpłaty Coinbase i prywatnej konfiguracji limitów.');render();}catch{config=null;render();status('Nie można wczytać lokalnej konfiguracji. Uruchom panel przez lokalny serwer.');}

@@ -20,11 +20,32 @@ python -m scripts.wallet_transfer_portal --watchlist /PRIVATE/watch.json
 ```
 
 Otwórz `http://127.0.0.1:8766` w przeglądarce obsługującej Twój portfel. Domyślnie
-można jedynie podłączyć jedno z kont watchlist. Brak konfiguracji transferu blokuje
-przygotowanie i podpis. SDK Coinbase/Base jest przypięty w lockfile, bundlowany
+można jedynie podłączyć jeden adres z prywatnej watchlist. Portal odrzuca watchlist z kilkoma różnymi adresami (monitory odczytowe nadal mogą obserwować wiele kont). Brak konfiguracji transferu blokuje
+przygotowanie i podpis. SDK Base Account jest przypięty w lockfile, bundlowany
 lokalnie, telemetria wyłączona, tworzenie i finansowanie subkont ustawione ręcznie.
-Rozszerzenie EIP-1193 jest alternatywą. Panel nie wysyła żądania portfela na starcie.
+Operator może jawnie uruchomić `--connector injected`, jeżeli właściwy portfel jest dostępny jako rozszerzenie EIP-1193. W interfejsie nie ma wyboru dostawców ani automatycznego fallbacku do mobilnego Coinbase Wallet / starego QR. Panel nie wysyła żądania portfela na starcie.
 SDK może utrzymywać własną sesję; panel nie zapisuje adresów i transferów do storage.
+
+## Jedna tożsamość połączenia
+
+`GET /session` zwraca `accounts` z dokładnie jednym adresem oraz `connection`:
+`account`, `label` (z prywatnej watchlist), `provider` (`base` domyślnie lub jawny
+`injected`) i `chainIds`. Polityka transferu musi wskazywać tę samą tożsamość.
+Pełny oczekiwany adres jest widoczny lokalnie przed połączeniem. W trybie podłączenia formularz transferu i jego kroki są ukryte. Nazwa jest tylko
+etykietą, nie wynikiem rozwiązywania ENS. Liczy się adres zwrócony przez portfel.
+
+Przed każdym jawnym połączeniem SDK czyści własną zapamiętaną sesję przez
+`provider.disconnect()`. „Wyczyść sesję tego panelu” wykonuje to samo i przeładowuje
+stronę, również podczas oczekiwania na logowanie. Nie usuwa całego localStorage,
+kont portfela ani uprawnień on-chain; nie wylogowuje z witryny Coinbase. Reset jest
+zablokowany po wysłaniu żądania transferu, gdy wynik jest nieznany lub istnieje hash.
+
+SDK nie udostępnia wymuszenia adresu w QR ani wyboru konta w aplikacji mobilnej.
+Jeżeli logowanie zwraca inny adres, panel pokazuje otrzymany i oczekiwany adres,
+blokuje transfer i nie przechodzi do innego dostawcy. Wybór właściwego istniejącego
+konta należy wykonać w samym portfelu / oknie logowania. Nie twórz nowego konta,
+aby „dopasować” adres. Automatyczne testy nie poświadczają logowania do prywatnego
+konta w telefonie.
 
 ## Włączenie pojedynczej sesji transferu
 

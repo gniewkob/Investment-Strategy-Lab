@@ -8,8 +8,7 @@
     "test:e2e": "playwright test portal.spec.mjs --workers=1"
   },
   "dependencies": {
-    "@base-org/account": "2.5.13",
-    "@coinbase/wallet-sdk": "4.4.0"
+    "@base-org/account": "2.5.13"
   },
   "devDependencies": {
     "@playwright/test": "1.64.1",
