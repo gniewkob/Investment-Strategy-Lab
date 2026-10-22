@@ -34,10 +34,10 @@ async function setup(page,enabled=true,sendError='reject',fromAccount=FROM,provi
  await expect.poll(()=>page.evaluate(()=>window.walletCalls.length)).toBe(0);
  await page.click('#connect');if(fromAccount===FROM&&initialChain==='0x2105')await expect(page.locator('#account')).toContainText('0x1111');
 }
-test('connection-only never permits preview or signature',async({page})=>{
+test('existing wallet approval is not cleared and connection-only never permits preview or signature',async({page})=>{
  await setup(page,false);await expect(page.locator('#preview')).toBeDisabled();await expect(page.locator('#send')).toBeDisabled();
  await page.screenshot({path:'/tmp/isl-wallet-portal.png',fullPage:true});
- expect(await page.evaluate(()=>window.walletCalls)).toEqual(['disconnect','eth_requestAccounts']);
+ expect(await page.evaluate(()=>window.walletCalls)).toEqual(['eth_requestAccounts']);
 });
 test('review is explicit; rejected wallet signature clears approval',async({page})=>{
  await setup(page);await page.fill('#amount','0.00000001');await page.click('#preview');
@@ -62,7 +62,7 @@ test('wrong account is rejected with both identities visible and no provider fal
  await expect(page.locator('#provider')).toHaveCount(0);
  await expect(page.locator('#send')).toBeDisabled();
  await expect(page.locator('#reset')).toBeEnabled();
- expect(await page.evaluate(()=>window.walletCalls)).toEqual(['disconnect','eth_requestAccounts']);
+ expect(await page.evaluate(()=>window.walletCalls)).toEqual(['eth_requestAccounts']);
 });
 
 test('reset clears only the active provider and returns to disconnected state',async({page})=>{
@@ -73,7 +73,7 @@ test('reset clears only the active provider and returns to disconnected state',a
  await expect(page.locator('#account')).toHaveText('Oczekuje na podłączenie.');
  await expect(page.locator('#connect')).toBeEnabled();
  expect(await page.evaluate(()=>localStorage.getItem('unrelated'))).toBe('preserve');
- expect(await page.evaluate(()=>sessionStorage.getItem('resetCount'))).toBe('2');
+ expect(await page.evaluate(()=>sessionStorage.getItem('resetCount'))).toBe('1');
  expect(await page.evaluate(()=>window.walletCalls)).toEqual([]);
 });
 
@@ -83,7 +83,7 @@ test('pending connection can be reset without sending or touching unrelated stor
  await expect(page.locator('#reset')).toBeEnabled();
  await page.click('#reset');
  await expect(page.locator('#connect')).toBeEnabled();
- expect(await page.evaluate(()=>sessionStorage.getItem('resetCount'))).toBe('2');
+ expect(await page.evaluate(()=>sessionStorage.getItem('resetCount'))).toBe('1');
  expect(await page.evaluate(()=>window.walletCalls)).toEqual([]);
 });
 

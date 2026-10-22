@@ -34,9 +34,10 @@ SDK może utrzymywać własną sesję; panel nie zapisuje adresów i transferów
 Pełny oczekiwany adres jest widoczny lokalnie przed połączeniem. W trybie podłączenia formularz transferu i jego kroki są ukryte. Nazwa jest tylko
 etykietą, nie wynikiem rozwiązywania ENS. Liczy się adres zwrócony przez portfel.
 
-Przed każdym jawnym połączeniem SDK czyści własną zapamiętaną sesję przez
-`provider.disconnect()`. „Wyczyść sesję tego panelu” wykonuje to samo i przeładowuje
-stronę, również podczas oczekiwania na logowanie. Nie usuwa całego localStorage,
+Połączenie zachowuje istniejącą zgodę portfela, a zwrócony adres i sieć nadal
+podlegają weryfikacji. Dzięki temu ponowne wczytanie polityki nie wymusza nowego
+logowania. „Wyczyść sesję tego panelu” jawnie wywołuje `provider.disconnect()`
+i przeładowuje stronę, również podczas oczekiwania na logowanie. Nie usuwa całego localStorage,
 kont portfela ani uprawnień on-chain; nie wylogowuje z witryny Coinbase. Reset jest
 zablokowany po wysłaniu żądania transferu, gdy wynik jest nieznany lub istnieje hash.
 

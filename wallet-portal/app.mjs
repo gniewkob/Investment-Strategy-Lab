@@ -42,9 +42,8 @@ $('connect').onclick=()=>action(async()=>{
   if(config.connection.provider==='injected'){provider=window.ethereum;if(!provider)throw new Error('NO_PROVIDER');}
   else provider=createBaseAccountSDK({appName:'Investment Strategy Lab',appChainIds:config.connection.chainIds,preference:{telemetry:false},subAccounts:{creation:'manual',defaultAccount:'universal',funding:'manual'}}).getProvider();
  }
- // Clear this SDK's persisted account before every explicit connection attempt.
- // Never clear unrelated browser storage, wallet accounts or on-chain permissions.
- await provider.disconnect?.();
+ // Reuse the wallet's existing approval; connect still verifies its actual address.
+ // Clearing this app session is an explicit reset action, never a side effect of reconnecting.
  session=new TransferSession(provider,config.policy,config.accounts,config.policy?createReadOnlyRpc(config.policy.chainId):provider);
  session.onAttempt=attempt=>{
   const labels={preflight:'Sprawdzanie przed podpisem — żądanie wysyłki jeszcze niewysłane.',wallet_confirmation:'Żądanie przekazane do portfela — sprawdź potwierdzenie w telefonie.',broadcast_hash_received:'Portfel zwrócił identyfikator — pozostaje sprawdzić potwierdzenie w sieci.',preflight_failed:'Błąd przed podpisem — nie przekazano żądania wysyłki.',wallet_rejected:'Portfel zgłosił odmowę potwierdzenia.',outcome_unknown:'Brak potwierdzonego wyniku żądania portfela — ponowienie zablokowane.'};
