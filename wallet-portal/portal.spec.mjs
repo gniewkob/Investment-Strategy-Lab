@@ -163,6 +163,7 @@ test('expired policy is visible and blocks preview and approval',async({page})=>
 
 test('mobile review fits the viewport and amount edits invalidate approval',async({page})=>{
  await page.setViewportSize({width:390,height:844});await setup(page);
+ await page.addStyleTag({content:'#account{font-family:monospace;font-size:18px}'});
  await page.fill('#amount','0.00000001');await page.click('#preview');await page.check('#confirm');
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
  await page.fill('#amount','0.00000002');await expect(page.locator('#review')).toBeHidden();
