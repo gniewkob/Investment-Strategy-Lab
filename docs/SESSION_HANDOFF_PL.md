@@ -1,3 +1,25 @@
+## 2026-10-23 — Deposit reconciliation reviewed; private history import
+
+[PR #63](https://github.com/gniewkob/Investment-Strategy-Lab/pull/63) merged as
+`bb3cce78b28a655ad6ea5b00933ebd8ab3e9cffd` after input-validation fixes,
+**420/420 local offline tests** and [full PR CI success](https://github.com/gniewkob/Investment-Strategy-Lab/actions/runs/39925195281)
+on head b94e452; GitGuardian passed. Initial local run without psycopg failed;
+the successful rerun used a temporary environment with the existing CI dependency.
+No live DB or Coinbase check is implied by that result.
+
+The follow-up adds `scripts/coinbase_deposit_history.py`: private **offline**
+Coinbase App List Transactions capture validation, receive-only minimized output
+and a separate operator-evidence reconciliation section. See
+[contract, private CLI and limitations](DEPOSIT_EVIDENCE_RECONCILIATION_PL.md).
+Current connector catalog lacks deposit-history reads. Provider docs do not
+guarantee network hash/name for receive; no address/network/symbol mapping is
+invented. Automated authenticated history access and receive-to-chain linkage
+remain **PENDING**, with provenance always unverified. Do not substitute balances,
+fills, Coinbase Exchange APIs or operator assertions for authenticated credit proof.
+No account calls, financial operations, Neon writes, secret/ACL changes or schedules.
+Private source captures/reports must never enter this public repository or Actions.
+Rollback: revert the follow-up; PR #63 comparator remains independent.
+
 ## 2026-10-20 — HANDOFF PERSISTED TO OPENBRAIN_REMOTE + AGENT RESUME DOC
 
 User explicitly requested durable state both in GitHub and **OpenBrain_remote** (not the local OpenBrain connector). OpenBrain_remote domain `build` memory **`5a8bd21b-f2a6-4bda-9349-2ccb11bdb86f`** titled **Investment Strategy Lab — verified STEO source provenance & agent handoff (2026-10-20)** was written successfully. When resuming, use OpenBrain_remote `brain_get` ID above or `brain_search` domain build. It covers confirmed prior 58 EIA STEO historical editions, 316 retrospective WTI/Brent forecast-reference pairs, 104 as-of walkforward, and most recent **36/36 byte-identical original XLSX** 2022–24 in independent May-2025 Catalyst Cooperative Zenodo archive compared with Oct-2026 EIA, plus strict no historical first-publication-day PIT certification.

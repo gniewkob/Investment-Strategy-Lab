@@ -4,6 +4,9 @@ on:
     paths:
       - 'scripts/deposit_evidence_reconciliation.py'
       - 'tests/test_deposit_evidence_reconciliation.py'
+      - 'scripts/coinbase_deposit_history.py'
+      - 'tests/test_coinbase_deposit_history.py'
+      - 'docs/DEPOSIT_EVIDENCE_RECONCILIATION_PL.md'
       - '.github/workflows/deposit-evidence-reconciliation.yml'
   workflow_dispatch:
 permissions:
