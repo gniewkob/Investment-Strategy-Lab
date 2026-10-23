@@ -4,6 +4,11 @@ on:
   pull_request:
     types: [opened, reopened, synchronize]
     paths:
+      - scripts/coinbase_read_only_history.py
+      - tests/test_coinbase_read_only_history.py
+      - scripts/operational_read_only.py
+      - tests/test_operational_read_only.py
+      - docs/OPERATIONAL_READ_ONLY_RUNBOOK_PL.md
       - scripts/read_only_portfolio_monitor.py
       - tests/test_read_only_portfolio_monitor.py
       - scripts/private_wallet_chain_monitor.py
