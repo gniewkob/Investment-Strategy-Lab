@@ -30,6 +30,10 @@ class FrozenDateTime(datetime):
  def now(cls,tz=None):return NOW
 
 class PanelObservationTests(unittest.TestCase):
+ def test_exact_units_do_not_round_at_decimal_context_boundary(self):
+  self.assertEqual(m.units('123456789012345678901234567890.12345678',8),12345678901234567890123456789012345678)
+  for value in ('0','0.000000001',str(2**256)):
+   with self.assertRaises(m.ObservationError):m.units(value,8)
  def setUp(self):
   patcher=patch('scripts.operational_read_only.datetime',FrozenDateTime)
   patcher.start();self.addCleanup(patcher.stop)

@@ -136,6 +136,9 @@ class OperationalTests(unittest.TestCase):
             def geturl(self):return m.RPC_URLS[8453]
         def pending(*a,**k):return Response(b'{"jsonrpc":"2.0","id":1,"result":null}')
         self.assertIsNone(m.rpc_read(8453,'eth_getTransactionReceipt',[HASH],opener=pending))
+        def found(*a,**k):return Response(b'{"jsonrpc":"2.0","id":1,"result":{"status":"0x1"}}')
+        self.assertEqual(m.rpc_read(8453,'eth_getTransactionReceipt',[HASH],opener=found),{'status':'0x1'})
+        self.assertEqual(m.rpc_read(8453,'eth_getTransactionByHash',[HASH],opener=found),{'status':'0x1'})
         with self.assertRaises(m.ReadOnlyError):m.rpc_read(8453,'eth_getTransactionByHash',[HASH],opener=pending,sleep=lambda _:None)
 
     def test_rate_limit_retry_after_and_jsonrpc_error(self):

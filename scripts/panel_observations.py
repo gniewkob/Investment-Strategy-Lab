@@ -41,6 +41,14 @@ def integer(value):
     require(type(value) is int and 0<=value<2**64)
     return value
 
+def units(value,precision):
+    whole,_,fraction=number(value).partition('.')
+    fraction=fraction.rstrip('0')
+    require(len(fraction)<=precision)
+    result=int(whole+fraction.ljust(precision,'0'))
+    require(0<result<2**256)
+    return result
+
 def registered_cases(data,entries,now):
     require(isinstance(data,dict) and set(data)=={'mode','cases'} and data['mode']=='PRIVATE_REGISTERED_TRANSFERS_V1')
     rows=data['cases'];require(isinstance(rows,list) and len(rows)<=20)
@@ -53,7 +61,7 @@ def registered_cases(data,entries,now):
         require(row['asset'] in ('ETH','cbBTC') and type(row['operator_credit_link']) is bool)
         require(row['asset']!='cbBTC' or TOKEN in next(e[3] for e in entries if e[0]==row['chain_id']))
         precision=8 if row['asset']=='cbBTC' else 18
-        amount=Decimal(number(row['amount']));require(amount>0 and amount*10**precision==int(amount*10**precision) and amount*10**precision<2**256)
+        units(row['amount'],precision)
         to=row['recipient'];require(isinstance(to,str) and ADDRESS.fullmatch(to))
         require(to.lower() not in (entries[0][1],TOKEN,'0x'+'0'*40))
         stamp(row['operator_asserted_at_utc'],now)
@@ -75,16 +83,16 @@ def verify_case(row,sender,rpc,now):
         out.update(block_number=block,block_time_utc=at.isoformat(),verified_at_utc=now.isoformat())
         if r['status']=='0x0':return {**out,'network':'REVERTED'}
         require(r['status']=='0x1')
-        units=int(Decimal(row['amount'])*10**(8 if row['asset']=='cbBTC' else 18))
+        quantity=units(row['amount'],8 if row['asset']=='cbBTC' else 18)
         if row['asset']=='cbBTC':
             matches=[l for l in r['logs'] if l.get('address','').lower()==TOKEN and len(l.get('topics',[]))==3
                 and l['topics'][0].lower()==TRANSFER_TOPIC and l['topics'][1].lower()=='0x'+sender[2:].zfill(64)
-                and l['topics'][2].lower()=='0x'+out['recipient'][2:].zfill(64) and int(l['data'],16)==units]
+                and l['topics'][2].lower()=='0x'+out['recipient'][2:].zfill(64) and int(l['data'],16)==quantity]
             require(len(matches)==1)
         else:
             tx=rpc(c,'eth_getTransactionByHash',[h])
             require(tx['hash'].lower()==h and tx['from'].lower()==sender and tx['to'].lower()==out['recipient']
-                and int(tx['value'],16)==units and int(tx['blockNumber'],16)==block)
+                and int(tx['value'],16)==quantity and int(tx['blockNumber'],16)==block)
         f=rpc(c,'eth_getBlockByNumber',['finalized',False])
         require(HASH.fullmatch(f['hash']))
         return {**out,'network':'FINALIZED' if int(f['number'],16)>=block else 'INCLUDED'}
@@ -132,7 +140,10 @@ def _project(s,expected,now):
     for row in e['balances']:
         require(set(row)=={'asset','available','hold'} and ASSET.fullmatch(row['asset']) and row['asset'] not in seen);seen.add(row['asset'])
         number(row['available']);number(row['hold'])
-    if e['holdings_usd'] is not None:number(e['holdings_usd']);number(e['staked_usd']);integer(e['portfolio_count'])
+    if e['captured_at_utc'] is not None:
+        number(e['holdings_usd']);number(e['staked_usd']);integer(e['portfolio_count'])
+    else:
+        require(e['balances']==[] and all(e[k] is None for k in ('holdings_usd','staked_usd','portfolio_count')))
     efresh=e['captured_at_utc'] is not None and now-stamp(e['captured_at_utc'],now)<=timedelta(minutes=15)
     exchange={**e,'status':'FRESH' if efresh else 'STALE' if e['captured_at_utc'] else 'UNAVAILABLE',
         'balances':e['balances'] if efresh else [],'holdings_usd':e['holdings_usd'] if efresh else None,
@@ -153,6 +164,8 @@ def _project(s,expected,now):
         if w['retrieved_at_utc'] is not None:
             integer(w['block_number'])
             fresh=now-stamp(w['retrieved_at_utc'],now)<=timedelta(minutes=15) and now-stamp(w['block_time_utc'],now)<=timedelta(minutes=30)
+        else:
+            require(w['positions']==[] and w['block_number'] is None and w['block_time_utc'] is None)
         wallets.append({**w,'status':'FRESH' if fresh else 'STALE' if w['retrieved_at_utc'] else 'UNAVAILABLE',
                         'positions':w['positions'] if fresh else []})
     require(isinstance(s['transfers'],list) and len(s['transfers'])<=20)
@@ -163,7 +176,7 @@ def _project(s,expected,now):
         registered_cases({'mode':'PRIVATE_REGISTERED_TRANSFERS_V1','cases':[{k:v for k,v in t.items() if k in
              {'chain_id','tx_hash','asset','amount','recipient','operator_credit_link','operator_asserted_at_utc'}}]},
              [(c,s['expected_account'],'source',{TOKEN}) for c in chains],now)
-        key=(t['chain_id'],t['tx_hash']);require(key not in seen);seen.add(key)
+        key=(t['chain_id'],t['tx_hash'].lower());require(key not in seen);seen.add(key)
         require(t['network'] in ('FINALIZED','INCLUDED','PENDING','REVERTED','UNAVAILABLE'))
         if t['network'] in ('FINALIZED','INCLUDED','REVERTED'):
             require(t['verified_at_utc'] is not None and t['block_number'] is not None and t['block_time_utc'] is not None)
