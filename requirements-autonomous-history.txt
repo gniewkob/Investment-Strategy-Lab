@@ -1,0 +1,2 @@
+# Optional local polling runtime; no credentials belong in this repository.
+coinbase-advanced-py==1.8.4
