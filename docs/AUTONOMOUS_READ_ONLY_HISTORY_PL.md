@@ -1,5 +1,42 @@
 # Autonomiczny odczyt Coinbase App — gotowy runtime, aktywacja live osobno
 
+## Potwierdzony pierwszy live i przegląd nadzoru — 23.10.2026
+
+Po wyraźnej zgodzie użytkownik wybrał lokalnie klucz i konto BTC. Setup zakończył
+się sukcesem, a pierwszy rzeczywisty cykl GET zwrócił `HISTORY_READ_OK`.
+Konfiguracja, checkpoint i health mają 0600. W konsoli sprawdzono wyłącznie
+statusy, daty i uprawnienia plików, bez klucza, identyfikatorów i historii konta.
+To potwierdza dostęp do historii wybranego konta, nie kompletność finansowania
+ani powiązania blockchain. Poniższe wcześniejsze sekcje opisują etapy przygotowania.
+
+Przegląd przed uruchomieniem nadzorowanym:
+
+- Zakres: jedno konto wybrane lokalnie przez operatora; co 300 sekund; GET i
+  preflight view-only w każdym cyklu. Brak operacji finansowych i nowych uprawnień.
+- Proces macOS LaunchAgent: RunAtLoad + KeepAlive, minimalny odstęp restartów
+  60 sekund, osobny katalog stanu i blokada procesu. Stały checkout ze scalonego,
+  sprawdzonego commita. Plist nie zawiera kluczy ani wartości kont.
+- Osobny LaunchAgent kontroluje health co 300 sekund. Watchdog nie czyta
+  credentials, config ani checkpointu. Odczytuje wyłącznie health i własny marker.
+- Wygasłe/brakujące/błędne health i jawna niedostępność są rozróżniane od zdrowego
+  odczytu. Pierwszy zdrowy wynik jest cichy. Awaria/zmiana stanu i odzyskanie
+  wywołują lokalne powiadomienie macOS; bez powtarzania identycznego stanu.
+- Treść powiadomienia jest stała, bez kont, kwot i błędów dostawcy. Potwierdzenie
+  wykonania notyfikatora nie dowodzi wyświetlenia przez macOS/Focus. Nieudany
+  notyfikator nie zapisuje markera dostarczenia; następna kontrola ponawia próbę.
+- Standardowe strumienie usług kierowane do `/dev/null`; nie powstają rosnące
+  logi ani archiwa prywatnych capture. Pozostają ostatni checkpoint/health/marker.
+- 469 testów offline PASS lokalnie, w tym pięć testów watchdoga: świeżość,
+  wygaśnięcie, błędne metadane, cisza w stanie stabilnym, awaria/odzyskanie,
+  restart, brak odczytu checkpointu i ponowienie nieudanego powiadomienia.
+
+Aktywację agentów potwierdzać dopiero po ich rzeczywistym zainstalowaniu:
+`launchctl print` (tylko stan/PID), świeży health i odczyt trwałego checkpointu
+wyłącznie w lokalnym procesie. Zapis w tym dokumencie nie zastępuje tej kontroli.
+Przykładowe etykiety: `pl.gniewkob.isl.coinbase-history` i
+`pl.gniewkob.isl.coinbase-history-health`. Wycofanie: `launchctl bootout` każdego
+agenta, usunięcie wyłącznie jego plist po weryfikacji ścieżki; prywatne dane zachować.
+
 ## Lokalny konfigurator po zgodzie użytkownika
 
 23.10.2026 użytkownik zatwierdził lokalne podłączenie klucza wyłącznie `view`.
