@@ -10,6 +10,8 @@ on:
       - 'tests/test_autonomous_coinbase_history.py'
       - 'scripts/setup_autonomous_history.py'
       - 'tests/test_setup_autonomous_history.py'
+      - 'scripts/autonomous_history_watchdog.py'
+      - 'tests/test_autonomous_history_watchdog.py'
       - 'docs/AUTONOMOUS_READ_ONLY_HISTORY_PL.md'
       - 'requirements-autonomous-history.txt'
       - 'docs/DEPOSIT_EVIDENCE_RECONCILIATION_PL.md'

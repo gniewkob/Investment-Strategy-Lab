@@ -1,3 +1,23 @@
+## 2026-10-23 — First BTC history live canary PASS; health supervision prepared
+
+User completed native private setup and selected the BTC account. The waiting
+controller returned `PRIVATE_SETUP_COMPLETED_RUNNING_LIVE_CANARY` and
+`LIVE_CANARY_PASS`. Sanitized inspection confirms private config/checkpoint/health
+files (0600) and `HISTORY_READ_OK`. Zero financial operations. No secret, account
+ID or transaction data entered chat, logs or GitHub. Do not request connection
+authorization or key provisioning again; they are complete.
+
+Next step under the user's autonomous-system goal is supervised 300-second
+history polling and an independent freshness watchdog. A separate evidence and
+alerting review is recorded in the runbook before LaunchAgent activation.
+Watchdog detects failed/stale/invalid health, is quiet for stable health and
+notifies locally on meaningful change/recovery. It never reads config,
+credentials or checkpoint. 469 offline tests PASS locally (five new watchdog
+tests). Final CI and actual service status must be checked before claiming
+installation/autostart. Runbook: [autonomous reader](AUTONOMOUS_READ_ONLY_HISTORY_PL.md).
+Scope remains the single selected BTC account. Blockchain evidence is
+NOT_CONFIGURED; full autonomous blockchain/exchange reconciliation remains false.
+
 ## 2026-10-23 — Live read-only activation authorized; local secret provisioning required
 
 User explicitly answered YES to local Coinbase connection with view only,
