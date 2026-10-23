@@ -92,7 +92,8 @@ def verify_case(row,sender,rpc,now):
         else:
             tx=rpc(c,'eth_getTransactionByHash',[h])
             require(tx['hash'].lower()==h and tx['from'].lower()==sender and tx['to'].lower()==out['recipient']
-                and int(tx['value'],16)==quantity and int(tx['blockNumber'],16)==block)
+                and int(tx['value'],16)==quantity and int(tx['blockNumber'],16)==block
+                and tx['blockHash'].lower()==r['blockHash'].lower())
         f=rpc(c,'eth_getBlockByNumber',['finalized',False])
         require(HASH.fullmatch(f['hash']))
         return {**out,'network':'FINALIZED' if int(f['number'],16)>=block else 'INCLUDED'}
