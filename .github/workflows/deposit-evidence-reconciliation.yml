@@ -14,8 +14,12 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Verify synthetic-only reconciliation
-        run: python -m unittest -v tests.test_deposit_evidence_reconciliation
+      - name: Install existing offline test adapter (no credentials)
+        run: python -m pip install 'psycopg[binary]>=3.2,<4'
+      - name: Verify full offline regression suite
+        run: python -m unittest discover -s tests -v

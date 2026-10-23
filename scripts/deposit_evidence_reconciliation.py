@@ -20,7 +20,7 @@ def _require(condition):
         raise DepositEvidenceError("DEPOSIT_EVIDENCE_REJECTED")
 
 def _amount(value, asset):
-    _require(isinstance(value, str) and bool(re.fullmatch(r"(0|[1-9][0-9]*)(\.[0-9]+)?", value)))
+    _require(isinstance(value, str) and len(value) <= 80 and bool(re.fullmatch(r"(0|[1-9][0-9]*)(\.[0-9]+)?", value)))
     scale = 8 if asset == "cbBTC" else 18
     fractional = value.partition(".")[2].rstrip("0")
     _require(len(fractional) <= scale)
@@ -50,7 +50,7 @@ def reconcile(network_transfers, deposit_records):
         ids.add(d["deposit_id"])
         _require(type(d["chain_id"]) is int and d["chain_id"] in NETWORKS)
         _require(isinstance(d["tx_hash"], str) and bool(HASH.fullmatch(d["tx_hash"])))
-        _require(d["asset"] in ASSETS and isinstance(d["recipient"], str) and bool(ADDRESS.fullmatch(d["recipient"])))
+        _require(isinstance(d["asset"], str) and d["asset"] in ASSETS and isinstance(d["recipient"], str) and bool(ADDRESS.fullmatch(d["recipient"])))
         _require(isinstance(d["status"], str) and d["status"] in {"COMPLETED", "PENDING", "FAILED"})
         amt = _amount(d["amount"], d["asset"])
         key = (d["chain_id"], d["tx_hash"].lower())
@@ -62,8 +62,8 @@ def reconcile(network_transfers, deposit_records):
         _require(isinstance(t, dict) and set(t) == {"chain_id", "tx_hash", "asset", "amount", "recipient", "network"})
         _require(type(t["chain_id"]) is int and t["chain_id"] in NETWORKS)
         _require(isinstance(t["tx_hash"], str) and bool(HASH.fullmatch(t["tx_hash"])))
-        _require(t["asset"] in ASSETS and isinstance(t["recipient"], str) and bool(ADDRESS.fullmatch(t["recipient"])))
-        _require(t["network"] in {"FINALIZED", "INCLUDED", "PENDING", "REVERTED", "UNAVAILABLE"})
+        _require(isinstance(t["asset"], str) and t["asset"] in ASSETS and isinstance(t["recipient"], str) and bool(ADDRESS.fullmatch(t["recipient"])))
+        _require(isinstance(t["network"], str) and t["network"] in {"FINALIZED", "INCLUDED", "PENDING", "REVERTED", "UNAVAILABLE"})
         amount = _amount(t["amount"], t["asset"])
         key = (t["chain_id"], t["tx_hash"].lower())
         _require(key not in seen)

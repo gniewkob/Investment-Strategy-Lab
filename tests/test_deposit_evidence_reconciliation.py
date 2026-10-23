@@ -42,5 +42,28 @@ class EvidenceTests(unittest.TestCase):
         d=deposit();d["chain_id"]=1
         self.assertEqual(reconcile([chain()],[d])[0]["classification"],"NO_MATCHING_DEPOSIT_RECORD")
 
+    def test_malformed_values_fail_with_fixed_error_without_echoing_input(self):
+        for factory, field in ((deposit, "asset"), (chain, "asset"), (chain, "network")):
+            for value in ([], {}, None, True):
+                with self.subTest(field=field, value=value):
+                    row = factory(); row[field] = value
+                    with self.assertRaisesRegex(DepositEvidenceError, "^DEPOSIT_EVIDENCE_REJECTED$"):
+                        reconcile([row], []) if factory is chain else reconcile([], [row])
+
+    def test_amounts_are_bounded_exact_and_not_exponents_or_nonfinite(self):
+        for value in ("1" * 81, "1e-8", "NaN", "Infinity", "0", "-1", "0.000000001", 1, True):
+            with self.subTest(value=value):
+                with self.assertRaises(DepositEvidenceError):
+                    reconcile([chain()], [{**deposit(), "amount": value}])
+
+    def test_duplicate_chain_claims_are_ambiguous_and_inputs_unchanged(self):
+        from copy import deepcopy
+        t, d = chain(), deposit()
+        before = deepcopy((t, d))
+        reconcile([t], [d])
+        self.assertEqual((t, d), before)
+        with self.assertRaises(DepositEvidenceError):
+            reconcile([t, t], [d])
+
 if __name__ == "__main__":
     unittest.main()

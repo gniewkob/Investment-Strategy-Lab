@@ -9,3 +9,7 @@ Result categories: `NO_MATCHING_DEPOSIT_RECORD`, `CONFLICTING_DEPOSIT_RECORD`, `
 This does not connect to Coinbase or enrich the local portal. The next integration must establish actual authorized Coinbase deposit-history access and validate the provider's real response schema and provenance before any stronger classification is introduced. Neither a Coinbase balance nor manual assertion proves a credited deposit. Never use this output to automatically retry, transfer, invest or book newly contributed capital.
 
 Run `python -m unittest tests.test_deposit_evidence_reconciliation` from the repository root. All fixtures are synthetic and no wallet address, credential, request or trading operation is used.
+
+## Review and regression gate (23 October 2026)
+
+PR #63 review added an 80-character quantity bound and explicit string checks so malformed JSON collections fail with a fixed error instead of an incidental TypeError. Nine focused synthetic tests cover these controls, exact decimal validation, ambiguity and input immutability. The PR workflow now installs the existing psycopg test dependency and runs the entire offline suite without account credentials. Initial local full-suite execution was blocked by missing psycopg; this environment failure is not a successful regression result. Merge requires successful rerun on the reviewed head, including CI. Existing panel observations contain additional provenance/time fields; this comparator accepts an explicit six-field transfer projection, not the raw panel snapshot. It does not authenticate that projection.
