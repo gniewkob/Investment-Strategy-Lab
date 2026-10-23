@@ -249,8 +249,34 @@ udowodnienia wpłat ani wszystkich aktywów. Stan PENDING/REVERTED jest prawidł
 wynikiem odczytu sieci, nie zapewnieniem powodzenia transferu.
 
 Przycisk odświeżenia i odczyt co 30 sekund wczytują lokalny plik. Nie odnawiają
-sesji Coinbase, capture ani danych RPC. Operator musi pozyskać nowy autoryzowany
-odczyt i ponownie uruchomić CLI. Czas pobrania jest jawny; źródłowy czas danych
+sesji Coinbase, capture ani danych RPC. Nowy capture i uruchomienie CLI zapewnia
+operator albo opisany poniżej cykl aplikacji Codex. Czas pobrania jest jawny; źródłowy czas danych
 Coinbase pozostaje nieznany. Uruchomienie bez polityki transferowej daje panel
 wyłącznie odczytowy. Wycofanie: uruchom serwer bez `--observations`; zachowaj
 prywatne migawki audytowe według własnych zasad retencji.
+
+## Automatyczne odświeżanie przez istniejący konektor
+
+W aplikacji Codex skonfigurowano cykl tego zadania „Investment Lab — odświeżanie
+odczytów”, co 5 minut. Używa wyłącznie portfolios_list, portfolios_get (USD)
+i balance z istniejącego autoryzowanego połączenia Coinbase, dla wszystkich
+aktywnych zwróconych portfeli, z pełną paginacją i odrzuceniem powtórzonych
+kursorów. Nowy prywatny capture otrzymuje rzeczywisty czas rozpoczęcia pobrania;
+CLI panel_observations następnie odświeża salda sieci i zarejestrowane przypadki.
+Nie kopiuje tokenów do lokalnego serwera, nie odnawia polityki transferowej,
+nie otwiera podpisu i nie wykonuje operacji finansowych. Nowe dane są publikowane
+atomowo; błędy lub niekompletna odpowiedź nie odmładzają poprzednich danych.
+
+Ten cykl wymaga działającej aplikacji Codex, aktywnego konektora, lokalnego
+repozytorium, Pythona oraz prywatnej konfiguracji operatora. Nie jest usługą
+Coinbase działającą niezależnie od aplikacji ani gwarancją odczytu co dokładnie
+5 minut: uśpienie komputera, aktywne zadanie, awaria lub utrata logowania mogą
+opóźnić przebieg. Limit świeżości panelu pozostaje 15 minut. Samo ustawienie
+harmonogramu nie dowodzi wykonania przyszłych przebiegów; sprawdzaj czas capture
+i wynik ostatniego cyklu. Zwykły serwer uruchomiony bez tego cyklu nadal czyta
+tylko pliki i nie uwierzytelnia Coinbase.
+
+Wyłączenie: w aplikacji Codex wstrzymaj ten cykl. Nie wymaga zmiany kluczy ani
+odłączenia portfela. Nie publikuj prywatnego promptu/konfiguracji ani capture
+w GitHub. Powiadomienia ograniczono do nieudanych przebiegów. Starsze prywatne
+migawki pozostają audytem; operator zarządza ich retencją.
