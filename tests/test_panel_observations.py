@@ -142,9 +142,14 @@ with patch('scripts.panel_observations.datetime',FrozenDateTime), patch('scripts
   self.assertEqual(m.verify_case(row,ADDR,reverted,NOW)['network'],'REVERTED')
   native={**row,'asset':'ETH'}
   def direct(c,method,params):
-   if method=='eth_getTransactionByHash':return {'hash':TX,'from':ADDR,'to':TO,'value':hex(50000000000000),'blockNumber':'0x64'}
+   if method=='eth_getTransactionByHash':return {'hash':TX,'from':ADDR,'to':TO,'value':hex(50000000000000),'blockNumber':'0x64','blockHash':HASH}
    return rpc(c,method,params)
   self.assertEqual(m.verify_case(native,ADDR,direct,NOW)['network'],'FINALIZED')
+  def inconsistent_block(c,method,params):
+   result=direct(c,method,params)
+   if method=='eth_getTransactionByHash':result['blockHash']='0x'+'c'*64
+   return result
+  self.assertEqual(m.verify_case(native,ADDR,inconsistent_block,NOW)['network'],'UNAVAILABLE')
   def bundled(c,method,params):
    if method=='eth_getTransactionByHash':return {'hash':TX,'from':TO,'to':TOKEN,'value':'0x0','blockNumber':'0x64'}
    return rpc(c,method,params)
