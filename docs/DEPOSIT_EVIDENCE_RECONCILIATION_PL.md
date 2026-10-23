@@ -1,5 +1,44 @@
 # Offline deposit evidence reconciliation (23 October 2026)
 
+## Udokumentowany ogólny typ Coinbase `tx`
+
+Coinbase [opisuje `tx`](https://docs.cdp.coinbase.com/coinbase-app/track-apis/transactions)
+jako typ domyślny/niesklasyfikowany. Importer zachowuje takie rekordy w osobnym
+`unclassified_account_events`, zamiast pomijać je przy filtrowaniu receive.
+Wystąpienie dodatniej kwoty oznacza tylko `ACCOUNT_CREDIT`, ujemnej
+`ACCOUNT_DEBIT`, a zera `ZERO_REPORTED`. Zawsze:
+`classification=UNCLASSIFIED_ACCOUNT_EVENT`, `external_funding_certified=false`,
+`onchain_reconciliation_eligible=false`. Nie odgaduje się wpłaty, zakupu,
+sprzedaży, transferu wewnętrznego ani powiązania blockchain na podstawie znaku.
+Opcjonalny hash w takim rekordzie również nie podnosi wiarygodności.
+
+Pierwotne `events`/`event_count` nadal odnoszą się wyłącznie do receive.
+`excluded_non_receive_count` zachowuje wcześniejsze znaczenie (wszystkie inne
+typy, także tx); `excluded_other_event_count` wyklucza z tego licznika zachowane tx.
+Nie sumować obu liczników z liczbą tx. Brak receive nie stanowi dowodu braku
+finansowania: `absence_of_receive_proves_no_funding=false`.
+
+Poprzedni runtime pomijał kwoty nie-receive w zminimalizowanym capture.
+Przy odczycie takiego checkpointu tx bez pola amount zachowuje
+`quantity_reported=null`, `asset=null`, `direction=UNKNOWN`,
+`amount_status=NOT_CAPTURED_UNKNOWN`. Nie wstawia się zera ani nie odtwarza
+starej kwoty z obecnego salda. Jawnie obecne, niepoprawne amount nadal jest
+odrzucane. Nowy kolektor wymaga i zachowuje poprawne amount/currency dla tx.
+
+Porównanie kolejnych capture pozostaje celowo ograniczone do receive:
+`records_compared=RECEIVE_ONLY`, `unclassified_account_events_compared=false`.
+Tx są widoczne osobno w aktualnym raporcie; nie powstaje ledger nowych wpłat.
+Runtime dodaje `source_schema_status` do raportu/health. Nie zmienia to statusu
+uwierzytelnienia plików ani braków dowodowych blockchain.
+
+Walidacja: 476 testów offline PASS lokalnie, w tym siedem nowych testów
+znaku/zera, braków legacy, błędnych kwot, prywatności, izolacji dowodów i
+przejścia ze starego checkpointu. Wszystkie fixture są syntetyczne. Rzeczywista
+sonda źródła wykonywana lokalnie wypisuje wyłącznie metadane schematu; żadnych
+wartości kont, kwot, ID, hashy ani rekordów nie publikować w GitHub.
+Rollback: wycofać zmianę kolektora/importera i ponownie uruchomić czytnik,
+zachowując checkpoint. Starszy runtime nadal odczyta capture z dodatkowym amount.
+
 `scripts/deposit_evidence_reconciliation.py` implements a standalone, side-effect-free comparison of finalized Ethereum/Base transactions against operator-supplied Coinbase deposit records.
 
 The eight required deposit fields are `source`, `deposit_id`, `chain_id`, `tx_hash`, `asset`, `amount`, `recipient`, `status`. The explicitly claimed source is `COINBASE_DEPOSIT_RECORD_OPERATOR_SUPPLIED`, **not** authenticated Coinbase API provenance. Expected assets: ETH or cbBTC; networks: Ethereum (1), Base (8453). Quantities are checked using decimal arithmetic, with exact token precision. Record IDs must be unique. A single chain/hash may not have conflicting evidence rows.

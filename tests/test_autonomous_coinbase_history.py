@@ -175,6 +175,30 @@ class AutonomousHistoryTests(unittest.TestCase):
         self.assertEqual(run.stdout.strip(), "AUTONOMOUS_HISTORY_LIVE_ACCESS_NOT_ENABLED")
         self.assertEqual(run.stderr, "")
 
+    def test_generic_tx_amount_survives_collection_and_legacy_checkpoint_upgrade(self):
+        from tests.test_coinbase_deposit_history import capture
+        class GenericProvider(Provider):
+            def open(self, request, timeout):
+                response = super().open(request, timeout)
+                if not request.full_url.endswith(a.PERMISSIONS):
+                    response.data["data"][0]["type"] = "tx"
+                    response.data["data"][0]["amount"]["private_extra"] = "[PRIVATE_NOTE]"
+                return response
+        p = GenericProvider()
+        legacy = capture(); legacy["captured_at"] = (NOW - timedelta(minutes=5)).isoformat()
+        legacy["pages"][0]["response"]["data"][0]["type"] = "tx"
+        legacy["pages"][0]["response"]["data"][0].pop("amount")
+        with tempfile.TemporaryDirectory() as directory, redirect_stdout(StringIO()):
+            a.atomic_private(Path(directory) / "checkpoint.json", {"mode": a.STATE_MODE, "capture": legacy, "report": {}})
+            self.assertEqual(a.run_service(p.client(), directory, cycles=1, clock=lambda: NOW), 0)
+            saved = read_private(Path(directory) / "checkpoint.json")
+            self.assertIn("amount", saved["capture"]["pages"][0]["response"]["data"][0])
+            self.assertNotIn("[PRIVATE_NOTE]", json.dumps(saved))
+            history = saved["report"]["history"]
+            self.assertEqual(history["unclassified_account_events"][0]["quantity_reported"], "0.00005000")
+            self.assertEqual(saved["report"]["source_schema_status"], "UNCLASSIFIED_ACCOUNT_EVENTS_PRESENT")
+            self.assertFalse(history["unclassified_account_events"][0]["external_funding_certified"])
+
     @unittest.skipUnless(importlib.util.find_spec("coinbase"), "optional signing SDK not installed")
     def test_real_sdk_signs_get_uri_with_ephemeral_test_key_and_rejects_eddsa(self):
         import jwt

@@ -1,6 +1,6 @@
 """Offline Coinbase App List Transactions capture import. No HTTP or credentials.
 
-Only receive events are retained. Network identifiers from receive records are
+Receive and generic tx events are retained in separate lists. Network identifiers from receive records are
 deliberately not promoted to reconciliation evidence: the current provider
 contract documents hash/network_name only for sends. All captures are untrusted.
 """
@@ -81,6 +81,7 @@ def normalize_receives(capture, now):
     cursor = None
     seen = set()
     events = []
+    unclassified = []
     count = 0
     for index, page in enumerate(pages):
         _require(isinstance(page, dict) and set(page) == {"request_cursor", "response"}
@@ -111,21 +112,36 @@ def normalize_receives(capture, now):
                      and isinstance(status, str) and bool(re.fullmatch(r"[a-z_]{1,64}", status)))
             created = _provider_time(row.get("created_at"))
             _require(created <= captured + timedelta(seconds=5))
-            if kind != "receive":
+            if kind not in {"receive", "tx"}:
                 continue
-            money = row.get("amount")
-            _require(isinstance(money, dict))
-            amount, asset = money.get("amount"), money.get("currency")
-            _require(isinstance(amount, str) and len(amount) <= 80
-                     and bool(re.fullmatch(r"(0|[1-9][0-9]*)(\.[0-9]+)?", amount))
-                     and Decimal(amount) > 0 and isinstance(asset, str)
-                     and bool(re.fullmatch(r"[A-Za-z0-9]{2,12}", asset)))
-            events.append({"event_id": sha256(f"{account}:{ident}".encode()).hexdigest(),
+            # Prior runtime versions intentionally omitted amounts for non-receive
+            # records. Preserve these legacy tx observations as UNKNOWN, never zero.
+            amount = asset = None
+            if not (kind == "tx" and "amount" not in row):
+                money = row.get("amount")
+                _require(isinstance(money, dict))
+                amount, asset = money.get("amount"), money.get("currency")
+                pattern = r"-?(0|[1-9][0-9]*)(\.[0-9]+)?" if kind == "tx" else r"(0|[1-9][0-9]*)(\.[0-9]+)?"
+                _require(isinstance(amount, str) and len(amount) <= 80
+                         and bool(re.fullmatch(pattern, amount))
+                         and (kind == "tx" or Decimal(amount) > 0) and isinstance(asset, str)
+                         and bool(re.fullmatch(r"[A-Za-z0-9]{2,12}", asset)))
+            event = {"event_id": sha256(f"{account}:{ident}".encode()).hexdigest(),
                 "source_event_timestamp_utc": created.isoformat(), "asset": asset,
                 "quantity_reported": amount,
                 "status": status.upper() if status in {"completed", "pending", "failed", "canceled"} else "UNKNOWN",
-                "onchain_reconciliation_eligible": False,
-                "blockchain_linkage": "NOT_GUARANTEED_FOR_RECEIVE_BY_PROVIDER_CONTRACT"})
+                "onchain_reconciliation_eligible": False}
+            if kind == "receive":
+                event["blockchain_linkage"] = "NOT_GUARANTEED_FOR_RECEIVE_BY_PROVIDER_CONTRACT"
+                events.append(event)
+            else:
+                value = Decimal(amount) if amount is not None else None
+                event.update({"source_transaction_type": "tx", "classification": "UNCLASSIFIED_ACCOUNT_EVENT",
+                    "amount_status": "REPORTED" if amount is not None else "NOT_CAPTURED_UNKNOWN",
+                    "direction": "UNKNOWN" if value is None else "ACCOUNT_CREDIT" if value > 0 else "ACCOUNT_DEBIT" if value < 0 else "ZERO_REPORTED",
+                    "external_funding_certified": False,
+                    "blockchain_linkage": "NOT_ESTABLISHED_BY_SOURCE_SCHEMA"})
+                unclassified.append(event)
         if next_cursor is not None:
             _require(last_id is not None and next_cursor == last_id and next_cursor != cursor)
         cursor = next_cursor
@@ -133,6 +149,9 @@ def normalize_receives(capture, now):
         "captured_at_utc": captured.isoformat(), "page_count": len(pages),
         "observed_record_count": count, "excluded_non_receive_count": count - len(events),
         "event_count": len(events), "events": events, "pagination_chain_complete": True,
+        "unclassified_account_events": unclassified, "unclassified_account_event_count": len(unclassified),
+        "excluded_other_event_count": count - len(events) - len(unclassified),
+        "absence_of_receive_proves_no_funding": False,
         "snapshot_completeness_certified": False, "complete_funding_history_certified": False,
         "coinbase_provenance_verified": False, "balances_adjusted": False}
 
@@ -176,6 +195,7 @@ def compare_receive_captures(previous, current, now):
             "previous_status": earlier["status"] if earlier else None,
             "current_status": later["status"] if later else None})
     return {"scope": "SAME_OPERATOR_ACCOUNT_CAPTURES_ONLY",
+        "records_compared": "RECEIVE_ONLY", "unclassified_account_events_compared": False,
         "previous_captured_at_utc": before["captured_at_utc"],
         "current_captured_at_utc": after["captured_at_utc"],
         "previous_receive_count": len(old), "current_receive_count": len(new),

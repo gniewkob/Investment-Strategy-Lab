@@ -104,7 +104,7 @@ def collect_capture(client, clock):
             require(isinstance(row, dict))
             item = {k: row[k] for k in (
                 "id", "type", "status", "created_at", "resource", "resource_path") if k in row}
-            if row.get("type") == "receive":
+            if row.get("type") in {"receive", "tx"}:
                 money = row.get("amount")
                 require(isinstance(money, dict))
                 item["amount"] = {k: money[k] for k in ("amount", "currency") if k in money}
@@ -192,9 +192,12 @@ def run_cycle(client, directory, clock, evidence=None):
                            previous_history=previous)
     report["source_connection"] = "LOCAL_AUTHENTICATED_GET_VIEW_ONLY_PREFLIGHT"
     report["blockchain_evidence_status"] = evidence_status
+    report["source_schema_status"] = ("UNCLASSIFIED_ACCOUNT_EVENTS_PRESENT"
+        if report["history"]["unclassified_account_event_count"] else "NO_UNCLASSIFIED_ACCOUNT_EVENTS_OBSERVED")
     atomic_private(checkpoint, {"mode": STATE_MODE, "capture": capture, "report": report})
     atomic_private(directory / "health.json", {"status": "HISTORY_READ_OK",
         "checked_at_utc": now.isoformat(), "blockchain_evidence_status": evidence_status,
+        "source_schema_status": report["source_schema_status"],
         "expires_at_utc": (now + timedelta(minutes=15)).isoformat(),
         "full_autonomous_reconciliation_ready": False, "financial_operations": 0})
     return report
