@@ -188,6 +188,70 @@ class DepositHistoryTests(unittest.TestCase):
         self.assertEqual(h.review_bundle(b, NOW)["operator_evidence_coverage"], coverage)
 
 
+class UnclassifiedAccountEventTests(unittest.TestCase):
+    def test_generic_credit_debit_and_zero_remain_unknown_source(self):
+        for amount, direction in (("0.5", "ACCOUNT_CREDIT"), ("-0.5", "ACCOUNT_DEBIT"), ("0", "ZERO_REPORTED")):
+            c = capture(); row = c["pages"][0]["response"]["data"][0]
+            row.update(type="tx", amount={"amount": amount, "currency": "BTC"})
+            result = h.normalize_receives(c, NOW)
+            self.assertEqual(result["event_count"], 0)
+            self.assertEqual(result["unclassified_account_event_count"], 1)
+            self.assertEqual(result["excluded_other_event_count"], 0)
+            self.assertEqual(result["excluded_non_receive_count"], 1)
+            event = result["unclassified_account_events"][0]
+            self.assertEqual(event["quantity_reported"], amount)
+            self.assertEqual(event["direction"], direction)
+            self.assertEqual(event["classification"], "UNCLASSIFIED_ACCOUNT_EVENT")
+            self.assertFalse(event["external_funding_certified"])
+            self.assertFalse(event["onchain_reconciliation_eligible"])
+            self.assertFalse(result["absence_of_receive_proves_no_funding"])
+
+    def test_legacy_generic_record_without_amount_stays_unknown_not_zero(self):
+        c = capture(); row = c["pages"][0]["response"]["data"][0]
+        row["type"] = "tx"; row.pop("amount")
+        event = h.normalize_receives(c, NOW)["unclassified_account_events"][0]
+        self.assertIsNone(event["quantity_reported"])
+        self.assertIsNone(event["asset"])
+        self.assertEqual(event["direction"], "UNKNOWN")
+        self.assertEqual(event["amount_status"], "NOT_CAPTURED_UNKNOWN")
+
+    def test_malformed_generic_money_rejected_when_field_is_present(self):
+        for money in (None, {}, {"amount": "NaN", "currency": "BTC"},
+                      {"amount": "1e3", "currency": "BTC"}, {"amount": True, "currency": "BTC"},
+                      {"amount": "1" * 81, "currency": "BTC"}):
+            c = capture(); c["pages"][0]["response"]["data"][0].update(type="tx", amount=money)
+            with self.subTest(money=money), self.assertRaises(HistoryError): h.normalize_receives(c, NOW)
+
+    def test_generic_event_privacy_and_no_optional_hash_promotion(self):
+        c = capture(); c["pages"][0]["response"]["data"][0].update(type="tx",
+            network={"hash": "0x" + "a" * 64, "status": "confirmed"})
+        before = deepcopy(c)
+        result = h.normalize_receives(c, NOW)
+        self.assertEqual(c, before)
+        for sensitive in (ACCOUNT, IDENT, "[PRIVATE_NOTE]", "[PRIVATE_EMAIL]", "0x" + "a" * 64):
+            self.assertNotIn(sensitive, json.dumps(result))
+        self.assertFalse(result["unclassified_account_events"][0]["onchain_reconciliation_eligible"])
+
+    def test_generic_record_does_not_fill_deposit_evidence_gap(self):
+        b = bundle(); b["history"]["pages"][0]["response"]["data"][0]["type"] = "tx"
+        b["deposit_records"] = []
+        result = h.review_bundle(b, NOW)
+        self.assertEqual(result["operator_evidence_reconciliation"][0]["classification"], "NO_MATCHING_DEPOSIT_RECORD")
+        self.assertEqual(result["history"]["unclassified_account_event_count"], 1)
+        self.assertFalse(result["sources_summed"])
+
+    def test_comparison_is_explicitly_receive_only_and_accepts_legacy_baseline(self):
+        old, new = capture(), capture()
+        old["captured_at"] = "2026-10-23T09:00:00Z"
+        old["pages"][0]["response"]["data"][0]["type"] = "tx"
+        old["pages"][0]["response"]["data"][0].pop("amount")
+        new["pages"][0]["response"]["data"][0]["type"] = "tx"
+        diff = h.compare_receive_captures(old, new, NOW)
+        self.assertEqual(diff["records_compared"], "RECEIVE_ONLY")
+        self.assertFalse(diff["unclassified_account_events_compared"])
+        self.assertFalse(diff["new_external_funding_certified"])
+
+
 class ReceiveComparisonTests(unittest.TestCase):
     def captures(self):
         previous, current = capture(), capture()
