@@ -1,3 +1,31 @@
+## 2026-10-23 — Autonomous read-only polling prepared; live activation pending
+
+[PR #66](https://github.com/gniewkob/Investment-Strategy-Lab/pull/66) merged as
+`9234e6c77bc348869499eaa20ca7c15162f8f0dd` after 446 local offline tests and
+[CI success](https://github.com/gniewkob/Investment-Strategy-Lab/actions/runs/39927574920).
+
+User clarified the goal is a working autonomous system. Official docs confirm
+Coinbase App GET transactions with view permission; the chat connector lacks
+that operation. A new local polling runtime is prepared with exact GET-path
+allowlisting, view-only/expected-portfolio preflight before every cycle,
+bounded pagination, local ECDSA P-256 SDK signing, atomic private checkpoint,
+health expiry, process lock, restart comparison and recovery after failed reads.
+No actual account credentials have been connected or created. Live access is
+disabled unless the explicit runtime flag and private operator config are supplied.
+
+**457/457 offline tests PASS locally**, including 11 new runtime tests and real
+SDK signing with an ephemeral test key. Separate synthetic 3-cycle canary PASS:
+success/outage/recovery, state preserved, zero real HTTP/financial operations.
+No claim of live Coinbase verification, deployed daemon/autostart or authenticated
+blockchain-to-exchange linkage. `full_autonomous_reconciliation_ready=false`.
+See [deployment gate, contracts and rollback](AUTONOMOUS_READ_ONLY_HISTORY_PL.md).
+
+Next: pass final PR CI, approve the concrete live read-only activation separately
+under AGENTS.md's credential/network boundary, configure a restricted key privately,
+verify one live cycle, then supervise polling and stale-health alerting. Do not
+ask for secrets in chat or reuse connector credentials. No trades/transfers,
+database changes, role changes or system schedule were performed.
+
 ## 2026-10-23 — Bidirectional coverage merged; compare private receive captures
 
 [PR #65](https://github.com/gniewkob/Investment-Strategy-Lab/pull/65) merged as
