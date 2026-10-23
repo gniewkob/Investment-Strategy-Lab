@@ -1,3 +1,25 @@
+## 2026-10-23 — Bidirectional coverage merged; compare private receive captures
+
+[PR #65](https://github.com/gniewkob/Investment-Strategy-Lab/pull/65) merged as
+`57cedf61c986ec4dbdeb3f7a5f795ab5b6680dff` after **439/439 tests passed locally**
+and [CI succeeded on head 3e2a34d](https://github.com/gniewkob/Investment-Strategy-Lab/actions/runs/39926731774).
+GitGuardian passed; no review comments were present at the merge check.
+
+Follow-up adds optional `--previous-history` to the private offline review CLI.
+Both captures validate independently and must belong to the same account with
+strictly increasing capture times. Stable receive IDs distinguish unchanged
+records, newly observed records, records absent from the newer capture, status
+changes and conflicts in amount/asset/event time. Decimal/time formatting alone
+does not create changes. Newly observed never means new external funding;
+missing never means deleted; no balance adjustments or ledger entries occur.
+The old report is unchanged without the optional argument.
+
+**446/446 local offline tests passed**, including seven new comparison/CLI tests.
+The follow-up CI must pass on its own head before merging. Contract, privacy,
+limitations and rollback: [deposit evidence runbook](DEPOSIT_EVIDENCE_RECONCILIATION_PL.md).
+Authenticated live history and receive-to-chain linkage remain **PENDING**.
+No account calls, transfers/trades, DB writes, secrets/ACL changes or schedules.
+
 ## 2026-10-23 — Coinbase history review fixed; bidirectional evidence coverage
 
 [PR #64](https://github.com/gniewkob/Investment-Strategy-Lab/pull/64) merged as

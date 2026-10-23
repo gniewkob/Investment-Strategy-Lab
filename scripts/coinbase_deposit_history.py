@@ -137,17 +137,68 @@ def normalize_receives(capture, now):
         "coinbase_provenance_verified": False, "balances_adjusted": False}
 
 
-def review_bundle(bundle, now):
+def compare_receive_captures(previous, current, now):
+    """Compare observations, never infer new funding or deletion from visibility.
+
+    Both untrusted page chains must validate independently for the same account.
+    Amount/asset/time mutations outrank status changes and remain evidence conflicts.
+    """
+    before = normalize_receives(previous, now)
+    after = normalize_receives(current, now)
+    _require(previous["account_id"] == current["account_id"]
+             and _time(previous["captured_at"]) < _time(current["captured_at"]))
+    old = {e["event_id"]: e for e in before["events"]}
+    new = {e["event_id"]: e for e in after["events"]}
+    changes = []
+    unchanged = 0
+    for ident in sorted(old.keys() | new.keys()):
+        earlier, later = old.get(ident), new.get(ident)
+        changed_fields = []
+        if earlier is None:
+            classification = "NEWLY_OBSERVED_NOT_NEW_FUNDING"
+        elif later is None:
+            classification = "NOT_OBSERVED_IN_CURRENT_CAPTURE"
+        else:
+            for field in ("asset", "quantity_reported", "source_event_timestamp_utc"):
+                equal = (Decimal(earlier[field]) == Decimal(later[field])
+                         if field == "quantity_reported" else earlier[field] == later[field])
+                if not equal:
+                    changed_fields.append(field)
+            if changed_fields:
+                classification = "CONFLICTING_RECEIVE_RECORD"
+            elif earlier["status"] != later["status"]:
+                classification = "STATUS_CHANGED_NOT_NEW_FUNDING"
+            else:
+                unchanged += 1
+                continue
+        changes.append({"event_id": ident, "classification": classification,
+            "changed_fields": changed_fields,
+            "previous_status": earlier["status"] if earlier else None,
+            "current_status": later["status"] if later else None})
+    return {"scope": "SAME_OPERATOR_ACCOUNT_CAPTURES_ONLY",
+        "previous_captured_at_utc": before["captured_at_utc"],
+        "current_captured_at_utc": after["captured_at_utc"],
+        "previous_receive_count": len(old), "current_receive_count": len(new),
+        "unchanged_receive_count": unchanged, "changes": changes,
+        "new_external_funding_certified": False, "missing_means_deleted": False,
+        "coinbase_provenance_verified": False, "balances_adjusted": False}
+
+
+def review_bundle(bundle, now, *, previous_history=None):
     """Keep observed receives separate from operator-supplied chain/deposit claims."""
     _require(isinstance(bundle, dict) and set(bundle) == {
         "mode", "history", "network_transfers", "deposit_records"} and bundle["mode"] == BUNDLE_MODE)
     history = normalize_receives(bundle["history"], now)
     inventory = reconcile_inventory(bundle["network_transfers"], bundle["deposit_records"])
-    return {"mode": "PRIVATE_OFFLINE_DEPOSIT_REVIEW", "history": history,
+    report = {"mode": "PRIVATE_OFFLINE_DEPOSIT_REVIEW", "history": history,
         "operator_evidence_reconciliation": inventory["network_results"],
         "operator_evidence_coverage": {k: v for k, v in inventory.items() if k != "network_results"},
         "receive_events_linked_to_chain": False, "sources_summed": False,
         "financial_operations": 0, "balances_adjusted": False}
+    if previous_history is not None:
+        report["receive_history_comparison"] = compare_receive_captures(
+            previous_history, bundle["history"], now)
+    return report
 
 
 def main(argv=None):
@@ -156,10 +207,12 @@ def main(argv=None):
     parser.add_argument("--input", required=True)
     parser.add_argument("--output", required=True)
     parser.add_argument("--at", help="UTC validation time; defaults to now")
+    parser.add_argument("--previous-history", help="Private earlier capture for the same account")
     args = parser.parse_args(argv)
     try:
         now = _time(args.at) if args.at else datetime.now(timezone.utc)
-        report = review_bundle(read_private(args.input), now)
+        previous = read_private(args.previous_history) if args.previous_history else None
+        report = review_bundle(read_private(args.input), now, previous_history=previous)
         write_private(args.output, report)
     except (ValueError, OSError, TypeError, OverflowError):
         print("DEPOSIT_HISTORY_PRIVATE_REVIEW_REJECTED")
