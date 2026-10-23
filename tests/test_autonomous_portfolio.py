@@ -1,0 +1,253 @@
+"""Offline contracts, fault isolation and private-state tests; no real HTTP/key."""
+from copy import deepcopy
+from datetime import timedelta
+import json
+from pathlib import Path
+import tempfile
+import unittest
+from unittest.mock import patch
+
+from scripts import autonomous_portfolio as m
+from scripts.operational_read_only import read_private, write_private
+from tests.test_autonomous_coinbase_history import PORTFOLIO, Response, Provider
+from tests.test_coinbase_deposit_history import ACCOUNT, NOW, transaction, page
+from tests.test_operational_read_only import fake_rpc, watch
+
+ADDRESS = "0x" + "1"*40
+
+
+def balances(network="base"):
+    return {"balances": [{"amount": {"amount": "1230000000000000000", "decimals": 18},
+        "token": {"network": network, "symbol": "PRIVATE_UNTRUSTED_NAME", "name": "[PRIVATE]",
+                  "contractAddress": m.NATIVE}}]}
+
+
+class CdpTests(unittest.TestCase):
+    def test_read_only_path_units_identity_and_redaction(self):
+        calls, signed = [], []
+        def open_(req, timeout):
+            calls.append(req)
+            return Response(req.full_url, balances())
+        c = m.CdpBalances(lambda path: signed.append(path) or "synthetic", open_)
+        r = c.collect(8453, ADDRESS)
+        self.assertEqual(r["positions"][0]["quantity"], "1.23")
+        self.assertEqual(r["positions"][0]["asset"], "ETH")
+        self.assertEqual(calls[0].get_method(), "GET")
+        self.assertIsNone(calls[0].data)
+        self.assertEqual(len(signed), 1)
+        self.assertNotIn("?", signed[0])
+        self.assertNotIn(ADDRESS, json.dumps(r))
+        self.assertNotIn("PRIVATE", json.dumps(r))
+
+    def test_reject_unsupported_network_and_address_before_request(self):
+        c = m.CdpBalances(lambda path: self.fail("must not sign"))
+        for chain, address in ((True, ADDRESS), (137, ADDRESS), (8453, ADDRESS+"/orders"),
+                               (8453, "https://example.invalid")):
+            with self.assertRaises(ValueError): c.collect(chain, address)
+
+    def test_schema_wrong_network_bad_precision_duplicates_and_error(self):
+        cases = []
+        b = balances(); b["balances"][0]["token"]["network"] = "ethereum"; cases.append(b)
+        b = balances(); b["balances"][0]["amount"]["decimals"] = 6; cases.append(b)
+        b = balances(); b["balances"][0]["amount"]["amount"] = "NaN"; cases.append(b)
+        b = balances(); b["balances"] *= 2; cases.append(b)
+        cases += [{"errorMessage": "[PRIVATE]"}, {"balances": None}]
+        for body in cases:
+            c = m.CdpBalances(lambda p: "token", lambda req, timeout: Response(req.full_url, body))
+            with self.assertRaisesRegex(ValueError, "^CDP_BALANCE_READ_REJECTED$"):
+                c.collect(8453, ADDRESS)
+
+    def test_pagination_loop_not_silently_truncated(self):
+        body = {"balances": [], "nextPageToken": "repeat"}
+        c = m.CdpBalances(lambda p: "token", lambda req, timeout: Response(req.full_url, body))
+        with self.assertRaises(ValueError): c.collect(8453, ADDRESS)
+
+    def test_pagination_and_unknown_token_never_symbol_trusted(self):
+        b = balances(); b["nextPageToken"] = "cursor/with?query"
+        other = balances(); other["balances"][0]["token"]["contractAddress"] = "0x"+"2"*40
+        calls = []
+        def open_(req, timeout):
+            calls.append(req.full_url)
+            return Response(req.full_url, b if len(calls) == 1 else other)
+        result = m.CdpBalances(lambda p: "token", open_).collect(8453, ADDRESS)
+        self.assertEqual(len(result["positions"]), 2)
+        self.assertIn("pageToken=cursor%2Fwith%3Fquery", calls[-1])
+        self.assertFalse(result["positions"][1]["identity_verified"])
+        self.assertEqual(result["positions"][1]["asset"], "UNREVIEWED_TOKEN")
+
+    def test_redirect_rejected_and_token_not_printed(self):
+        c = m.CdpBalances(lambda p: "token", lambda req, timeout:
+                          Response("https://example.invalid", balances()))
+        with self.assertRaises(ValueError): c.collect(8453, ADDRESS)
+        c = m.CdpBalances(lambda p: "bad\nheader")
+        with self.assertRaises(ValueError): c.collect(8453, ADDRESS)
+
+
+class AccountsTests(unittest.TestCase):
+    def test_accounts_minimize_private_fields_and_validate_balance(self):
+        class Source:
+            path = "/v2/accounts"
+            def check_permissions(self): pass
+            def get(self, path, cursor):
+                return {"data": [{"id": ACCOUNT, "currency": {"code": "ETH"},
+                    "name": "[PRIVATE]", "balance": {"currency": "ETH", "amount": "0.1"}}],
+                    "pagination": {"next_uri": None}}
+        self.assertEqual(m.exchange_accounts(Source()), [{"id": ACCOUNT, "asset": "ETH", "quantity": "0.1"}])
+        src = Source()
+        original = src.get
+        def wrong(path, cursor):
+            b = original(path, cursor); b["data"][0]["balance"]["currency"] = "BTC"; return b
+        src.get = wrong
+        with self.assertRaises(ValueError): m.exchange_accounts(src)
+
+    def test_number_bounds(self):
+        for value in (True, None, "NaN", "Infinity", "1e9", "-1", "9"*81):
+            with self.assertRaises(ValueError): m.quantity(value)
+
+
+class RuntimeTests(unittest.TestCase):
+    def test_source_failure_redacts_error_and_preserves_unknown(self):
+        def failed(): raise RuntimeError("[PRIVATE_ACCOUNT_JWT]")
+        r = m.source_read(failed, lambda: NOW)
+        self.assertEqual(r["status"], "UNAVAILABLE")
+        self.assertIsNone(r["data"])
+        self.assertNotIn("PRIVATE", json.dumps(r))
+
+    def test_atomic_setup_and_permissions_no_secret_or_wallet_key(self):
+        with tempfile.TemporaryDirectory() as root:
+            root = Path(root)
+            write_private(root/"reader.json", {"credentials_file": str(root/"existing-key.json"),
+                "portfolio_id": PORTFOLIO})
+            config = m.setup_wallet(root/"reader.json", lambda: ADDRESS)
+            self.assertEqual(config.stat().st_mode & 0o777, 0o600)
+            watchlist = read_private(root/"wallet-watch.json")
+            self.assertEqual({r["chain_id"] for r in watchlist["watch"]}, {1, 8453})
+            with self.assertRaises(ValueError): m.setup_wallet(root/"reader.json", lambda: ADDRESS)
+
+    def test_cycle_separates_indexer_balances_and_finalized_holdings(self):
+        with tempfile.TemporaryDirectory() as root:
+            root = Path(root)
+            write_private(root/"watch.json", watch())
+            config = {"credentials_file": "unused", "portfolio_id": PORTFOLIO,
+                      "watchlist_file": str(root/"watch.json")}
+            class Source:
+                def __init__(self, account, portfolio, signer):
+                    self.account = account
+                    self.path = "/v2/accounts" if account is None else f"/v2/accounts/{account}/transactions"
+                def check_permissions(self): pass
+                def get(self, path, cursor=None):
+                    if self.account is None:
+                        return {"data": [{"id": ACCOUNT, "currency": "ETH", "balance": {
+                            "currency": "ETH", "amount": "2"}}], "pagination": {"next_uri": None}}
+                    return page([transaction()])["response"]
+            def wallet(conf, now, **kwargs):
+                def rpc(chain, method, params):
+                    result = fake_rpc(chain, method, params)
+                    if method == "eth_getBlockByNumber":
+                        result["timestamp"] = hex(int(now.timestamp())-30)
+                    return result
+                return m.observe_wallets(conf, now, rpc=rpc, **kwargs)
+            with patch.object(m.CdpBalances, "collect", return_value={"positions": [{"quantity": "99999"}]}):
+                report = m.cycle(config, root, lambda: NOW, signer_factory=lambda p: None,
+                    client_factory=Source, cdp_factory=lambda p: None, wallet_reader=wallet,
+                    market_reader=lambda now: {asset+"-USD": {"last_closed_price_usd": "1000",
+                        "last_completed_candle_end_utc": now.replace(minute=0,second=0,microsecond=0).isoformat()} for asset in ("BTC","ETH")})
+            eth = [r for r in report["holdings"] if r["asset"] == "ETH"]
+            self.assertEqual({r["quantity"] for r in eth}, {"2", "0.1"})
+            self.assertEqual(report["known_priced_subtotal_usd"], "2100.0")
+            self.assertEqual(report["financial_operations"], 0)
+            self.assertEqual(report["status"], "OBSERVATION_OK")
+            self.assertEqual(report["paper_simulation"]["status"], "OK")
+            self.assertEqual(report["known_priced_concentration_pct"], {"ETH": "100.00"})
+            self.assertFalse(report["complete_net_worth_certified"])
+            self.assertFalse(report["reconciliation"]["full_autonomous_reconciliation_ready"])
+            self.assertEqual((root/"portfolio.json").stat().st_mode & 0o777, 0o600)
+            self.assertNotIn(ADDRESS, m.render(report))
+
+    def test_dashboard_escapes_external_content_and_has_expiry(self):
+        report = {"checked_at_utc": NOW.isoformat(), "expires_at_utc": NOW.isoformat(),
+            "status": "PARTIAL", "known_priced_subtotal_usd": "0",
+            "sources": {"<script>": {"status": "UNAVAILABLE"}},
+            "holdings": [{"asset": "<img src=x onerror=alert(1)>"}]}
+        html = m.render(report)
+        self.assertNotIn("<script>", html)
+        self.assertNotIn("<img", html)
+        self.assertIn("ważne do", html)
+        self.assertIn("default-src 'none'", html)
+
+    def test_html_symlink_target_never_overwritten(self):
+        with tempfile.TemporaryDirectory() as root:
+            path = Path(root)/"dashboard.html"
+            path.symlink_to(Path(root)/"other")
+            with self.assertRaises(ValueError): m.private_html(path, "private")
+            self.assertFalse((Path(root)/"other").exists())
+
+    def test_live_opt_in(self):
+        self.assertEqual(m.main(["--config", "/missing"]), 2)
+
+
+class PaperAndHealthTests(unittest.TestCase):
+    def market(self, now=NOW):
+        at = now.replace(minute=0, second=0, microsecond=0).isoformat()
+        return {asset+"-USD": {"last_closed_price_usd": "1000", "last_completed_candle_end_utc": at}
+                for asset in ("BTC", "ETH")}
+
+    def test_paper_initial_cost_and_same_candle_idempotency(self):
+        r = m.paper_snapshot(None, self.market(), NOW)
+        self.assertLess(m.quantity(r["reference_value_usd"]), m.Decimal("10000"))
+        self.assertEqual(m.paper_snapshot(r, self.market(), NOW), r)
+        self.assertFalse(r["real_holdings_used"])
+        self.assertFalse(r["profitability_proven"])
+
+    def test_paper_next_candle_no_reentry_cost_or_units_change(self):
+        r = m.paper_snapshot(None, self.market(), NOW)
+        now = NOW + timedelta(hours=1)
+        result = m.paper_snapshot(r, self.market(now), now)
+        self.assertEqual(result["units"], r["units"])
+        self.assertEqual(result["reference_value_usd"], r["reference_value_usd"])
+
+    def test_paper_stale_future_missing_price_and_backward_rejected(self):
+        r = m.paper_snapshot(None, self.market(), NOW)
+        for market in ({}, self.market(NOW+timedelta(hours=1)), self.market(NOW-timedelta(hours=3))):
+            with self.assertRaises((ValueError, KeyError)): m.paper_snapshot(r, market, NOW)
+
+    def test_watchdog_quiet_healthy_and_unchanged_then_stale_recovery(self):
+        with tempfile.TemporaryDirectory() as root:
+            root = Path(root); notifications = []
+            health = {"status": "OBSERVATION_OK", "financial_operations": 0, "alerts": [],
+                "checked_at_utc": NOW.isoformat(), "expires_at_utc": (NOW+timedelta(minutes=30)).isoformat()}
+            write_private(root/"health.json", health)
+            self.assertEqual(m.check_health(root, NOW, notifications.append), "OBSERVATION_OK")
+            self.assertEqual(notifications, [])
+            m.check_health(root, NOW+timedelta(minutes=31), notifications.append)
+            m.check_health(root, NOW+timedelta(minutes=32), notifications.append)
+            self.assertEqual(notifications, ["STALE"])
+            m.check_health(root, NOW, notifications.append)
+            self.assertEqual(notifications, ["STALE", "OBSERVATION_OK"])
+
+    def test_watchdog_failed_notification_retried_without_marker(self):
+        with tempfile.TemporaryDirectory() as root:
+            def failed(_): raise RuntimeError("local notifier unavailable")
+            with self.assertRaises(RuntimeError): m.check_health(root, NOW, failed)
+            self.assertFalse((Path(root)/"watchdog.json").exists())
+            calls=[];m.check_health(root, NOW, calls.append)
+            self.assertEqual(calls, ["INVALID_OR_MISSING"])
+
+    def test_private_html_atomic_permissions(self):
+        with tempfile.TemporaryDirectory() as root:
+            p=Path(root)/"dashboard.html"
+            m.private_html(p,"first");m.private_html(p,"second")
+            self.assertEqual(p.read_text(),"second")
+            self.assertEqual(p.stat().st_mode & 0o777,0o600)
+
+    def test_provider_enum_with_digit_not_misclassified_as_deposit(self):
+        from scripts.coinbase_deposit_history import normalize_receives, CAPTURE_MODE
+        row=transaction();row["type"]="retail_eth2_deprecation"
+        r=normalize_receives({"mode":CAPTURE_MODE,"account_id":ACCOUNT,
+            "captured_at":NOW.isoformat(),"pages":[page([row])]},NOW)
+        self.assertEqual(r["event_count"],0)
+        self.assertEqual(r["excluded_other_event_count"],1)
+
+
+if __name__ == "__main__":
+    unittest.main()
