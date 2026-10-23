@@ -62,7 +62,7 @@ def load_config(watch_path, policy_path=None, connector="base"):
     except (ReadOnlyError, WalletSourceError, ValueError, TypeError, KeyError, AttributeError):
         raise PortalError('PORTAL_CONFIGURATION_REJECTED') from None
 
-def make_handler(config, asset_root):
+def make_handler(config, asset_root, observations_path=None):
     assets = {'/': ('index.html', 'text/html; charset=utf-8'),
               '/app.js': ('dist/app.js', 'text/javascript; charset=utf-8')}
     class Handler(BaseHTTPRequestHandler):
@@ -89,10 +89,20 @@ def make_handler(config, asset_root):
             supplied = self.headers.get('Origin')
             if supplied is not None and supplied != origin:
                 return self.reply(403)
-            if self.path == '/session':
+            if self.path in ('/session', '/observations'):
                 if supplied != origin and self.headers.get('Sec-Fetch-Site') != 'same-origin':
                     return self.reply(403)
-                return self.reply(200, json.dumps(config).encode(), 'application/json')
+                if self.path == '/session':
+                    return self.reply(200, json.dumps(config).encode(), 'application/json')
+                if observations_path is None:
+                    return self.reply(200, b'{"status":"NOT_CONFIGURED"}', 'application/json')
+                try:
+                    from scripts.panel_observations import load
+                    data = load(observations_path, config['accounts'], datetime.now(timezone.utc))
+                    require({w['chain_id'] for w in data['wallets']} <= set(config['connection']['chainIds']))
+                    return self.reply(200, json.dumps(data).encode(), 'application/json')
+                except (ValueError, TypeError, KeyError, OSError):
+                    return self.reply(503, b'{"status":"UNAVAILABLE"}', 'application/json')
             if self.path == '/favicon.ico':
                 return self.reply(204)
             if self.path not in assets:
@@ -118,6 +128,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--watchlist', type=Path, required=True)
     parser.add_argument('--transfer-policy', type=Path)
+    parser.add_argument('--observations', type=Path, help='Owner-only latest snapshot; GET reads files, never Coinbase credentials')
     parser.add_argument('--connector', choices=('base', 'injected'), default='base',
                         help='One explicit connector; no automatic provider fallback')
     parser.add_argument('--port', type=int, default=8766)
@@ -126,7 +137,7 @@ def main():
         config = load_config(args.watchlist, args.transfer_policy, args.connector)
         root = Path(__file__).resolve().parents[1] / 'wallet-portal'
         require((root / 'dist/app.js').is_file())
-        server = ThreadingHTTPServer(('127.0.0.1', args.port), make_handler(config, root))
+        server = ThreadingHTTPServer(('127.0.0.1', args.port), make_handler(config, root, args.observations))
     except (PortalError, OSError):
         parser.exit(2, 'Portal unavailable: check private configuration, build and port.\n')
     print(f'Wallet portal: http://127.0.0.1:{server.server_port} (stop: Ctrl+C)', flush=True)

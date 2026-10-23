@@ -192,3 +192,22 @@ test('safe wallet error category is visible while uncertain outcome remains lock
  await expect(page.locator('body')).not.toContainText('PRIVATE_PROVIDER_DETAILS');
  expect(await page.evaluate(()=>window.walletCalls.filter(x=>x==='eth_sendTransaction').length)).toBe(1);
 });
+
+
+test('read-only observations hide balances after failure and never request a wallet transaction',async({page})=>{
+ const at=new Date().toISOString();let failed=false;
+ const data={status:'AVAILABLE',generated_at_utc:at,exchange:{status:'FRESH',captured_at_utc:at,balances:[{asset:'BTC',available:'0.00005',hold:'0'}],holdings_usd:'10',staked_usd:'0',portfolio_count:1},wallets:[{status:'FRESH',chain_id:8453,retrieved_at_utc:at,block_time_utc:at,block_number:100,positions:[{asset:'cbBTC',quantity:'0.00123'}]}],transfers:[{amount:'0.00005',asset:'cbBTC',chain_id:8453,network:'FINALIZED',block_time_utc:at,verified_at_utc:at,tx_hash:HASH,recipient:TO,credit:'BALANCE_PRESENT_NOT_DEPOSIT_PROOF',credit_asset:'BTC',credit_link:'OPERATOR_ASSERTED'}]};
+ await page.route('**/observations',r=>r.fulfill({status:failed?503:200,contentType:'application/json',body:JSON.stringify(failed?{status:'UNAVAILABLE'}:data)}));
+ await setup(page,false);
+ await expect(page.locator('#exchange-observation')).toContainText('0.00005');
+ await expect(page.locator('#wallet-observation')).toContainText('0.00123');
+ await expect(page.locator('#transfer-history')).toContainText('bez identyfikatora wpłaty z API');
+ await expect(page.locator('#transfer-history')).toContainText('Sfinalizowany');
+ await page.setViewportSize({width:360,height:800});
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ failed=true;await page.click('#refresh-observations');
+ await expect(page.locator('#observation-status')).toContainText('Poprzednie salda zostały ukryte');
+ await expect(page.locator('#exchange-observation')).toBeEmpty();
+ await expect(page.locator('#wallet-observation')).toBeEmpty();
+ expect(await page.evaluate(()=>window.walletCalls)).toEqual(['eth_requestAccounts']);
+});

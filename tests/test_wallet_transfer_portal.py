@@ -61,7 +61,7 @@ class PortalTests(TestCase):
   with tempfile.TemporaryDirectory() as d:
    root=Path(d);(root/'index.html').write_text('<!doctype html><title>Test</title>')
    (root/'dist').mkdir();(root/'dist/app.js').write_text('export {};')
-   handler=make_handler({'accounts':[ADDR],'policy':None},root)
+   handler=make_handler({'accounts':[ADDR],'policy':None,'connection':{'chainIds':[8453]}},root,root/'observations')
    server=ThreadingHTTPServer(('127.0.0.1',0),handler)
    t=Thread(target=server.serve_forever,daemon=True);t.start()
    base=f'http://127.0.0.1:{server.server_port}'
@@ -75,6 +75,11 @@ class PortalTests(TestCase):
      self.assertEqual(r.status,200)
      self.assertEqual(r.headers['Cross-Origin-Opener-Policy'],'same-origin-allow-popups')
      self.assertEqual(r.read(),b'')
+    with self.assertRaises(HTTPError):urlopen(base+'/observations')
+    with self.assertRaises(HTTPError) as unavailable:
+     urlopen(Request(base+'/observations',headers={'Origin':base}))
+    self.assertEqual(unavailable.exception.code,503)
+    self.assertEqual(json.load(unavailable.exception),{'status':'UNAVAILABLE'})
     with self.assertRaises(HTTPError) as e:urlopen(base+'/session')
     self.assertEqual(e.exception.code,403)
     with urlopen(Request(base+'/session',headers={'Origin':base})) as r:
@@ -85,3 +90,32 @@ class PortalTests(TestCase):
     self.assertEqual(e.exception.code,405)
     with self.assertRaises(HTTPError):urlopen(base+'/../AGENTS.md')
    finally:server.shutdown();server.server_close();t.join()
+
+ def test_observation_feed_reads_replacements_and_never_serves_last_good_on_failure(self):
+  from scripts import panel_observations as observations
+  from tests.test_panel_observations import PanelObservationTests
+  from unittest.mock import patch
+  from tests.test_operational_read_only import NOW
+  fixture=PanelObservationTests();fixture.setUp()
+  try:snapshot=fixture.snapshot()
+  finally:fixture.doCleanups()
+  with tempfile.TemporaryDirectory() as d:
+   root=Path(d);root.chmod(0o700);path=root/'latest.json';write_private(path,snapshot)
+   handler=make_handler({'accounts':[ADDR],'policy':None,'connection':{'chainIds':[8453]}},root,path)
+   server=ThreadingHTTPServer(('127.0.0.1',0),handler);thread=Thread(target=server.serve_forever,daemon=True);thread.start()
+   base=f'http://127.0.0.1:{server.server_port}'
+   class Clock:
+    @staticmethod
+    def now(tz):return NOW
+   try:
+    with patch('scripts.wallet_transfer_portal.datetime',Clock):
+     with urlopen(Request(base+'/observations',headers={'Origin':base})) as response:
+      self.assertEqual(response.headers['Cache-Control'],'no-store');data=json.load(response)
+     self.assertEqual(data['exchange']['status'],'FRESH')
+     self.assertEqual(data['transfers'][0]['network'],'FINALIZED')
+     self.assertNotIn('account_uuid',str(data));self.assertNotIn('portfolio_id',str(data))
+     path.unlink();snapshot['expected_account']=TO;write_private(path,snapshot)
+     with self.assertRaises(HTTPError) as failed:urlopen(Request(base+'/observations',headers={'Origin':base}))
+     self.assertEqual(failed.exception.code,503)
+     self.assertEqual(json.load(failed.exception),{'status':'UNAVAILABLE'})
+   finally:server.shutdown();server.server_close();thread.join()

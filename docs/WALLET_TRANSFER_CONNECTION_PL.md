@@ -163,18 +163,13 @@ połączenie w ustawieniach portfela. Wycofanie kodu nie cofa wysłanej transakc
 
 ## Wybór właściwego konta portfela
 
-Domyślna opcja Coinbase Wallet korzysta z osobnego SDK `@coinbase/wallet-sdk`
-4.4.0 z `options: eoaOnly`: połączenie z rozszerzeniem lub portfelem mobilnym
-przez QR, bez przekierowania do logowania Base Account. Relay wymaga
-HTTPS/WSS `www.walletlink.org`, dopuszczonych w CSP. Sesja QR jest zarządzana
-przez SDK i może pozostać w jego storage. Base Account z passkey pozostaje
-osobną, jawnie opisaną opcją. Są to różne ścieżki połączenia, które mogą zwracać
-różne adresy. Panel nie rozwiązuje nazw `.base.id` ani nie poświadcza ich
-powiązania; sprawdza adres względem prywatnej listy. Wybierz właściwe konto
-w aplikacji portfela przed zatwierdzeniem połączenia. Po błędzie niewłaściwego
-konta można zmienić sposób połączenia; żadna blokada adresu nie jest pomijana.
-Wbudowana przeglądarka może nie mieć rozszerzeń: użyj QR albo zwykłej przeglądarki
-z rozszerzeniem. Nie importuj frazy odzyskiwania do panelu.
+Panel używa Base Account SDK i jednej tożsamości z prywatnej konfiguracji.
+Sprawdza adres rzeczywiście zwrócony przez portfel; nazwa `.base.id` nie
+zastępuje tego sprawdzenia. Dawna ścieżka mobilnego Coinbase Wallet SDK/QR
+została usunięta. Zwykłe podłączenie zachowuje istniejącą sesję SDK; jawny reset
+odłącza wyłącznie aktywnego dostawcę. Inne konto zostaje odrzucone, bez obejścia
+listy adresów i bez automatycznego przełączenia dostawcy. Nie importuj frazy
+odzyskiwania do panelu.
 
 Jeżeli istniejąca sesja portfela zwraca Ethereum, a konfiguracja wymaga Base,
 panel pokazuje przycisk „Przełącz portfel na sieć z konfiguracji”. Tylko jawne
@@ -206,3 +201,49 @@ Zniknięcie powiadomienia na telefonie nie jest dowodem wykonania ani anulowania
 Wygasła konfiguracja nie jest automatycznie odnawiana. Przy braku hash i
 nieznanym wyniku najpierw należy uzgodnić stan portfela/odbiorcy oraz zakończyć
 starą prośbę w portfelu; nie obchodź blokady przez odświeżanie lub nową sesję.
+
+## Prywatne salda i zarejestrowane zdarzenia
+
+Serwer przyjmuje opcjonalne `--observations /prywatny/katalog/latest.json`.
+`GET /observations` wymaga lokalnego Host i tego samego origin co `/session`,
+ma `Cache-Control: no-store`. Zwraca 200 `AVAILABLE` lub `NOT_CONFIGURED`;
+niepoprawny/nieczytelny plik daje 503 `UNAVAILABLE` bez treści błędu i ścieżek.
+Endpoint nie wywołuje Coinbase ani RPC. Zmiana pliku nie wymaga restartu.
+
+Publikowanie odczytu (pliki 0600, katalog 0700):
+
+```sh
+python -m scripts.panel_observations --watchlist /private/watch.json \
+  --exchange-capture /private/capture.json \
+  --registered-transfers /private/cases.json --output-dir /private/observations
+```
+
+Capture ma format `COINBASE_CONNECTOR_READ_ONLY_CAPTURE` opisany w dokumentacji
+operacyjnego odczytu. CLI nie uwierzytelnia Coinbase: pochodzenie odczytów
+z autoryzowanego konektora deklaruje operator. Nigdy nie umieszczaj kluczy w pliku.
+CLI sprawdza zgodność portfeli, paginację, dostępne salda i uzgodnienie pozycji.
+Zakres ogranicza się do portfeli w capture; nie poświadcza wszystkich kont.
+
+Plik cases ma dokładnie `mode: PRIVATE_REGISTERED_TRANSFERS_V1` oraz `cases`:
+lista do 20 obiektów z `chain_id`, pełnym `tx_hash`, `asset` (ETH/cbBTC),
+`amount` (łańcuch dziesiętny), `recipient`, `operator_credit_link` (bool),
+`operator_asserted_at_utc` (UTC). Jeden przypadek na sieć/hash. Powiązanie wpłaty
+jest deklaracją operatora; saldo dostępne nie dowodzi konkretnej wpłaty.
+To historia zarejestrowanych przypadków, nie indeks całej historii portfela.
+cbBTC wymaga kanonicznego logu Transfer; ETH obsługuje tylko bezpośredni transfer
+natywny. Transfer ETH wewnątrz bundla pozostaje nieudowodniony.
+
+CLI zapisuje niezmienne migawki i atomowo podmienia latest.json. Uzgodnienie
+sieci sprawdza receipt, hash bloku, kwotę, źródło, odbiorcę i finalized head.
+Kopie nie są kryptograficznym dowodem pochodzenia pliku i wymagają ochrony lokalnej.
+Odczyty giełdy i portfela wygasają po 15 minutach, czas bloku po 30 minutach;
+przeterminowane salda są ukryte. Historyczne potwierdzenie sieci pozostaje z czasem
+weryfikacji. Brak danych nie jest zerowym saldem. Nie sumujemy sald i zdarzeń;
+przy nakładaniu czasów sald panel pokazuje ostrzeżenie, bez wspólnej wyceny.
+
+Przycisk odświeżenia i odczyt co 30 sekund wczytują lokalny plik. Nie odnawiają
+sesji Coinbase, capture ani danych RPC. Operator musi pozyskać nowy autoryzowany
+odczyt i ponownie uruchomić CLI. Czas pobrania jest jawny; źródłowy czas danych
+Coinbase pozostaje nieznany. Uruchomienie bez polityki transferowej daje panel
+wyłącznie odczytowy. Wycofanie: uruchom serwer bez `--observations`; zachowaj
+prywatne migawki audytowe według własnych zasad retencji.

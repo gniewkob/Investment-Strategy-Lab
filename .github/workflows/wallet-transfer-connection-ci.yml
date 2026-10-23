@@ -4,7 +4,11 @@ on:
     paths:
       - 'wallet-portal/**'
       - 'scripts/wallet_transfer_portal.py'
+      - 'scripts/panel_observations.py'
+      - 'scripts/operational_read_only.py'
       - 'tests/test_wallet_transfer_portal.py'
+      - 'tests/test_panel_observations.py'
+      - 'tests/test_operational_read_only.py'
       - 'docs/WALLET_TRANSFER_CONNECTION_PL.md'
       - '.github/workflows/wallet-transfer-connection-ci.yml'
 permissions:

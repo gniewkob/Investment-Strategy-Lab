@@ -24,7 +24,7 @@ from scripts.read_only_portfolio_monitor import analyze_portfolio, _when, _numbe
 from scripts.private_wallet_chain_monitor import _private_config, WalletSourceError
 
 RPC_URLS = {1: 'https://ethereum-rpc.publicnode.com', 8453: 'https://mainnet.base.org'}
-READ_METHODS = frozenset({'eth_chainId', 'eth_getBlockByNumber', 'eth_getBalance', 'eth_call', 'eth_getLogs'})
+READ_METHODS = frozenset({'eth_chainId', 'eth_getBlockByNumber', 'eth_getBalance', 'eth_call', 'eth_getLogs', 'eth_getTransactionReceipt', 'eth_getTransactionByHash'})
 # Identity from https://www.coinbase.com/cbbtc (Ethereum AND Base deployments).
 # The same contract on another chain is NOT implicitly trusted.
 TOKENS = {c: {'0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf': ('cbBTC', 8)} for c in (1, 8453)}
@@ -47,6 +47,9 @@ def rpc_read(chain, method, params, *, opener=None, sleep=time.sleep):
     """Bounded retry for read RPC only; block redirects BEFORE following them."""
     if chain not in RPC_URLS or method not in READ_METHODS:
         raise ReadOnlyError('RPC_METHOD_OR_CHAIN_FORBIDDEN')
+    if method in ('eth_getTransactionReceipt', 'eth_getTransactionByHash'):
+        if not isinstance(params, list) or len(params) != 1 or not isinstance(params[0], str) or not HEX32.fullmatch(params[0]):
+            raise ReadOnlyError('RPC_TRANSACTION_HASH_REQUIRED')
     if method == 'eth_call':
         if (len(params) != 2 or set(params[0]) != {'to', 'data'}
                 or params[0]['to'] not in TOKENS[chain]
@@ -74,10 +77,12 @@ def rpc_read(chain, method, params, *, opener=None, sleep=time.sleep):
                 if isinstance(data['error'], dict) and data['error'].get('code') in (-32005, -32016, -32002) and attempt < 2:
                     sleep(delay); continue
                 raise ReadOnlyError('RPC_UPSTREAM_ERROR')
-            if data.get('jsonrpc') != '2.0' or 'result' not in data or data['result'] is None:
+            if data.get('jsonrpc') != '2.0' or 'result' not in data or (data['result'] is None and method != 'eth_getTransactionReceipt'):
                 raise ReadOnlyError('RPC_RESULT_MISSING')
             result = data['result']
-            expected_type = dict if method == 'eth_getBlockByNumber' else list if method == 'eth_getLogs' else str
+            if result is None and method == 'eth_getTransactionReceipt':
+                return None
+            expected_type = dict if method in ('eth_getBlockByNumber', 'eth_getTransactionReceipt', 'eth_getTransactionByHash') else list if method == 'eth_getLogs' else str
             if not isinstance(result, expected_type):
                 raise ReadOnlyError('RPC_RESULT_SHAPE_INVALID')
             return result
