@@ -12,7 +12,7 @@ import re
 from urllib.parse import parse_qs, urlsplit
 
 from scripts.coinbase_read_only_history import HistoryError, _time
-from scripts.deposit_evidence_reconciliation import reconcile
+from scripts.deposit_evidence_reconciliation import reconcile_inventory
 
 UUID = re.compile(r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\Z")
 CAPTURE_MODE = "PRIVATE_COINBASE_APP_TRANSACTIONS_V1"
@@ -142,9 +142,10 @@ def review_bundle(bundle, now):
     _require(isinstance(bundle, dict) and set(bundle) == {
         "mode", "history", "network_transfers", "deposit_records"} and bundle["mode"] == BUNDLE_MODE)
     history = normalize_receives(bundle["history"], now)
-    matches = reconcile(bundle["network_transfers"], bundle["deposit_records"])
+    inventory = reconcile_inventory(bundle["network_transfers"], bundle["deposit_records"])
     return {"mode": "PRIVATE_OFFLINE_DEPOSIT_REVIEW", "history": history,
-        "operator_evidence_reconciliation": matches,
+        "operator_evidence_reconciliation": inventory["network_results"],
+        "operator_evidence_coverage": {k: v for k, v in inventory.items() if k != "network_results"},
         "receive_events_linked_to_chain": False, "sources_summed": False,
         "financial_operations": 0, "balances_adjusted": False}
 

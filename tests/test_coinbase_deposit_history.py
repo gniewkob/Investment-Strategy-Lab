@@ -174,6 +174,19 @@ class DepositHistoryTests(unittest.TestCase):
             self.assertFalse((root / "rejected").exists())
             self.assertEqual(result.stdout.strip(), "DEPOSIT_HISTORY_PRIVATE_REVIEW_REJECTED")
 
+    def test_review_exposes_unpaired_deposit_without_linking_or_adding_receives(self):
+        b = bundle(); b["network_transfers"] = []
+        result = h.review_bundle(b, NOW)
+        coverage = result["operator_evidence_coverage"]
+        self.assertEqual(result["operator_evidence_reconciliation"], [])
+        self.assertEqual(coverage["counts"]["classification_counts"], {"NO_MATCHING_NETWORK_TRANSFER": 1})
+        self.assertEqual(coverage["unmatched_deposit_records"][0]["deposit_id"], "synthetic123")
+        self.assertFalse(coverage["unmatched_is_external_funding"])
+        self.assertFalse(result["receive_events_linked_to_chain"])
+        self.assertFalse(result["balances_adjusted"])
+        b["history"]["pages"] = [page([])]
+        self.assertEqual(h.review_bundle(b, NOW)["operator_evidence_coverage"], coverage)
+
 
 if __name__ == "__main__":
     unittest.main()

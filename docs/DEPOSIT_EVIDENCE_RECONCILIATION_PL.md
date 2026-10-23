@@ -89,3 +89,26 @@ Rollback: wycofać commit importera; istniejący panel, salda i comparator PR #6
 działają niezależnie. Następny etap wymaga dostępnego, zatwierdzonego odczytu
 historii Coinbase i weryfikacji rzeczywistego kontraktu odpowiedzi bez publikacji
 prywatnych danych; nie tworzyć sekretów ani wykonywać operacji finansowych.
+
+## Dwustronne pokrycie dowodów operatora
+
+`reconcile_inventory(network_transfers, deposit_records)` zachowuje wynik
+dotychczasowego `reconcile()` w `network_results` i dodaje
+`unmatched_deposit_records`. Każdy dowód wpłaty bez wspólnej pary chain/hash ma
+klasyfikację `NO_MATCHING_NETWORK_TRANSFER` oraz własny status
+`COMPLETED/PENDING/FAILED`. Nie znika z raportu, nawet przy pustej liście transferów.
+Ten wynik nie rozstrzyga, czy transfer istnieje poza dostarczonym zakresem.
+
+`counts` zawiera liczby wejściowych transferów i dowodów wpłat, liczbę wspólnych
+par chain/hash i liczby klasyfikacji. **Wspólna para nie oznacza zgodności**:
+różnica kwoty/odbiorcy/aktywa nadal daje konflikt. Różne sieci przy tym samym
+hashu tworzą dwa nieuzgodnione rekordy. Każdy transfer ma jeden wynik; każdy
+dowód wpłaty należy do wspólnej pary albo do listy bez transferu. Liczniki nie
+sumują kwot i nie dowodzą kompletności historii konta.
+
+Prywatny raport CLI zachowuje `operator_evidence_reconciliation` i dodaje
+`operator_evidence_coverage` z pokryciem drugiej strony. Obserwacje receive
+pozostają niezależne: ich brak lub obecność nie uzupełnia dowodów operatora.
+`unmatched_is_external_funding=false`, brak korekt salda i nieuwierzytelnione
+pochodzenie obowiązują także dla dowodów tylko po stronie giełdy.
+Rollback: wycofać zmianę dwustronnego raportu; API `reconcile()` pozostaje zgodne.

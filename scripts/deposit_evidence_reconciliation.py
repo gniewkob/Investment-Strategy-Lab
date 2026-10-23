@@ -3,6 +3,7 @@
 Inputs are caller-provided records. Even a matching record remains SOURCE_UNVERIFIED
 until a separate trusted Coinbase connector attests provenance. No network or writes.
 """
+from collections import Counter
 from decimal import Decimal, InvalidOperation
 import re
 
@@ -30,6 +31,33 @@ def _amount(value, asset):
         raise DepositEvidenceError("DEPOSIT_EVIDENCE_REJECTED") from None
     _require(result.is_finite() and result > 0)
     return result
+
+
+def reconcile_inventory(network_transfers, deposit_records):
+    """Account for both supplied inventories without asserting source completeness.
+
+    reconcile() remains the validation and classification authority. A shared
+    chain/hash pair can still conflict; unpaired records are never funding proof.
+    """
+    network_results = reconcile(network_transfers, deposit_records)
+    network_keys = {(t["chain_id"], t["tx_hash"].lower()) for t in network_transfers}
+    unpaired = []
+    for d in deposit_records:
+        if (d["chain_id"], d["tx_hash"].lower()) not in network_keys:
+            unpaired.append({"chain_id": d["chain_id"], "tx_hash": d["tx_hash"].lower(),
+                "deposit_id": d["deposit_id"], "status": d["status"],
+                "classification": "NO_MATCHING_NETWORK_TRANSFER",
+                "coinbase_provenance_verified": False, "balance_used_as_proof": False})
+    classifications = Counter(row["classification"] for row in network_results + unpaired)
+    return {"network_results": network_results, "unmatched_deposit_records": unpaired,
+        "counts": {"input_network_transfers": len(network_transfers),
+            "input_deposit_records": len(deposit_records),
+            "shared_chain_hash_pairs": len(deposit_records) - len(unpaired),
+            "classification_counts": dict(sorted(classifications.items()))},
+        "input_scope": "OPERATOR_SUPPLIED_RECORDS_ONLY",
+        "complete_funding_history_certified": False,
+        "unmatched_is_external_funding": False,
+        "coinbase_provenance_verified": False, "balances_adjusted": False}
 
 def reconcile(network_transfers, deposit_records):
     """Return conservative classifications without enriching or mutating inputs.

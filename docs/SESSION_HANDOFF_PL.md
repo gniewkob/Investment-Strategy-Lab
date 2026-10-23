@@ -1,3 +1,26 @@
+## 2026-10-23 — Coinbase history review fixed; bidirectional evidence coverage
+
+[PR #64](https://github.com/gniewkob/Investment-Strategy-Lab/pull/64) merged as
+`b785291022f1c9dc005246f20dacdfd7d582c994` after correcting provider timestamp
+offsets raised in review. Provider event dates normalize to UTC; naive/future
+events remain rejected. **433/433 offline tests passed locally** and
+[CI passed on reviewed head 0724f68](https://github.com/gniewkob/Investment-Strategy-Lab/actions/runs/39926339744).
+
+Follow-up: `reconcile_inventory()` preserves the existing `reconcile()` output
+and adds operator deposit records with no supplied chain/hash counterpart,
+explicit statuses and record-coverage counts. The private CLI adds
+`operator_evidence_coverage`, preserving `operator_evidence_reconciliation`.
+Shared chain/hash counts do not imply amount/recipient agreement; different
+networks remain unpaired. Receive-history records never fill evidence gaps.
+**439/439 offline tests passed locally**, including six new coverage/regression
+tests; CI for the follow-up must pass on its own head before merging.
+See [contract and rollback](DEPOSIT_EVIDENCE_RECONCILIATION_PL.md).
+
+Authenticated live deposit access and receive-to-chain linkage remain **PENDING**.
+No account calls, financial operations, DB writes, credentials, ACL changes or
+schedules. All inputs/results are operator supplied and provenance unverified;
+unmatched records are never classified as new external funding or added to balances.
+
 ## 2026-10-23 — Deposit reconciliation reviewed; private history import
 
 [PR #63](https://github.com/gniewkob/Investment-Strategy-Lab/pull/63) merged as
