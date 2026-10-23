@@ -52,6 +52,10 @@ Kontrakt pliku capture (wyłącznie prywatny katalog poza repozytorium):
   kwota `amount.amount` i `amount.currency`. Duplikaty, brak stron, przyszłe
   zdarzenia i błędne kształty danych przerywają import.
 
+Daty zdarzeń dostawcy z jawnym offsetem (np. `-07:00` w przykładzie Coinbase)
+są przeliczane na UTC przed sprawdzeniem przyszłych zdarzeń i zapisem wyniku.
+Daty bez strefy są odrzucane; lokalny `captured_at` i `--at` nadal wymagają UTC.
+
 Wynik zachowuje tylko receive: pseudonim ID (SHA-256 z konta i ID), czas, symbol,
 kwotę i status. Nieznany status pozostaje `UNKNOWN`. Opisy, dane kontrahentów,
 surowe identyfikatory, adresy i hash z capture nie trafiają do historii wynikowej.

@@ -119,6 +119,23 @@ class DepositHistoryTests(unittest.TestCase):
         c = capture(); c["pages"][0]["response"]["data"][0]["status"] = "new_status"
         self.assertEqual(h.normalize_receives(c, NOW)["events"][0]["status"], "UNKNOWN")
 
+    def test_provider_offsets_normalize_to_utc_for_receives_and_other_types(self):
+        expected = h.normalize_receives(capture(), NOW)
+        for stamp in ("2026-10-22T05:00:00-07:00", "2026-10-22T14:00:00+02:00"):
+            c = capture(); c["pages"][0]["response"]["data"][0]["created_at"] = stamp
+            self.assertEqual(h.normalize_receives(c, NOW), expected)
+        c = capture()
+        c["pages"][0]["response"]["data"][0].update(
+            type="buy", created_at="2015-03-26T23:44:08-07:00")
+        self.assertEqual(h.normalize_receives(c, NOW)["excluded_non_receive_count"], 1)
+
+    def test_provider_offsets_do_not_bypass_future_or_timezone_checks(self):
+        for stamp in ("2026-10-23T05:00:00-07:00", "2026-10-22T12:00:00",
+                      "9999-12-31T23:59:59-07:00"):
+            c = capture(); c["pages"][0]["response"]["data"][0]["created_at"] = stamp
+            with self.subTest(stamp=stamp), self.assertRaises(HistoryError):
+                h.normalize_receives(c, NOW)
+
     def test_budgets_are_enforced(self):
         c = capture(); c["pages"] *= 51
         with self.assertRaises(HistoryError): h.normalize_receives(c, NOW)

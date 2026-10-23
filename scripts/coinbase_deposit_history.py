@@ -31,6 +31,17 @@ def _uuid(value):
     return value
 
 
+def _provider_time(value):
+    """Provider events may use explicit nonzero offsets; emit canonical UTC."""
+    _require(isinstance(value, str))
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        _require(parsed.tzinfo is not None and parsed.utcoffset() is not None)
+        return parsed.astimezone(timezone.utc)
+    except (ValueError, OverflowError):
+        raise HistoryError("DEPOSIT_HISTORY_REJECTED") from None
+
+
 def _cursor(uri, path):
     if uri is None:
         return None
@@ -98,7 +109,7 @@ def normalize_receives(capture, now):
             kind, status = row.get("type"), row.get("status")
             _require(isinstance(kind, str) and bool(re.fullmatch(r"[a-z_]{1,64}", kind))
                      and isinstance(status, str) and bool(re.fullmatch(r"[a-z_]{1,64}", status)))
-            created = _time(row.get("created_at"))
+            created = _provider_time(row.get("created_at"))
             _require(created <= captured + timedelta(seconds=5))
             if kind != "receive":
                 continue
