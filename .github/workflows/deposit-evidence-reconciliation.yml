@@ -1,0 +1,21 @@
+name: Deposit evidence reconciliation
+on:
+  pull_request:
+    paths:
+      - 'scripts/deposit_evidence_reconciliation.py'
+      - 'tests/test_deposit_evidence_reconciliation.py'
+      - '.github/workflows/deposit-evidence-reconciliation.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  offline-unit-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify synthetic-only reconciliation
+        run: python -m unittest -v tests.test_deposit_evidence_reconciliation
