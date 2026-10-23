@@ -8,6 +8,8 @@ on:
       - 'tests/test_coinbase_deposit_history.py'
       - 'scripts/autonomous_coinbase_history.py'
       - 'tests/test_autonomous_coinbase_history.py'
+      - 'scripts/setup_autonomous_history.py'
+      - 'tests/test_setup_autonomous_history.py'
       - 'docs/AUTONOMOUS_READ_ONLY_HISTORY_PL.md'
       - 'requirements-autonomous-history.txt'
       - 'docs/DEPOSIT_EVIDENCE_RECONCILIATION_PL.md'
