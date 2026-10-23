@@ -219,7 +219,13 @@ def main():
     try:
         now=datetime.now(timezone.utc)
         s=build_snapshot(read_private(args.watchlist),read_private(args.exchange_capture),read_private(args.registered_transfers),now)
-        project(s,[s['expected_account']],datetime.now(timezone.utc));publish(args.output_dir,s)
-        print('PRIVATE_PANEL_OBSERVATION_PUBLISHED; credentials=0; financial_operations=0; combined_total=unknown')
+        view=project(s,[s['expected_account']],datetime.now(timezone.utc))
+        publish(args.output_dir,s)
+        partial=(view['exchange']['status']!='FRESH'
+                 or any(w['status']!='FRESH' for w in view['wallets'])
+                 or any(t['network']=='UNAVAILABLE' for t in view['transfers']))
+        print('PRIVATE_PANEL_OBSERVATION_PUBLISHED; quality='+('PARTIAL' if partial else 'COMPLETE')
+              +'; credentials=0; financial_operations=0; combined_total=unknown')
+        if partial:p.exit(3,'Partial observation published; inspect source statuses in the private panel.\n')
     except (ValueError,TypeError,KeyError,OSError):p.exit(2,'Observation unavailable; verify private inputs and source freshness.\n')
 if __name__=='__main__':main()

@@ -2,6 +2,8 @@
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -30,6 +32,40 @@ class FrozenDateTime(datetime):
  def now(cls,tz=None):return NOW
 
 class PanelObservationTests(unittest.TestCase):
+ def test_cli_exit_codes_and_atomic_output_cover_complete_partial_and_rejected_runs(self):
+  harness='''
+import sys
+from unittest.mock import patch
+from scripts import panel_observations as m
+from tests.test_panel_observations import rpc,FrozenDateTime
+kind=sys.argv.pop(1)
+original=m.build_snapshot
+def offline(*args):raise ValueError('PRIVATE_UPSTREAM_DETAILS')
+m.build_snapshot=lambda a,b,c,d:original(a,b,c,d,rpc=offline if kind=='partial' else rpc)
+with patch('scripts.panel_observations.datetime',FrozenDateTime), patch('scripts.operational_read_only.datetime',FrozenDateTime):
+ m.main()
+'''
+  for kind,expected in (('complete',0),('partial',3),('rejected',2)):
+   with self.subTest(kind=kind),tempfile.TemporaryDirectory() as directory:
+    root=Path(directory);root.chmod(0o700);out=root/'out';out.mkdir(mode=0o700)
+    for name,data in (('watch',{} if kind=='rejected' else watch()),('capture',funded()),('cases',cases())):
+     m.write_private(root/name,data)
+    result=subprocess.run([sys.executable,'-c',harness,kind,'--watchlist',str(root/'watch'),
+       '--exchange-capture',str(root/'capture'),'--registered-transfers',str(root/'cases'),
+       '--output-dir',str(out)],cwd=Path(__file__).resolve().parents[1],capture_output=True,text=True,timeout=10)
+    self.assertEqual(result.returncode,expected,result.stderr)
+    self.assertNotIn('Traceback',result.stderr)
+    for private in ('PRIVATE_UPSTREAM_DETAILS',ADDR,TO,TX,str(root)):
+     self.assertNotIn(private,result.stdout+result.stderr)
+    if expected==2:
+     self.assertEqual(list(out.iterdir()),[])
+    else:
+     self.assertIn('quality='+('PARTIAL' if expected==3 else 'COMPLETE'),result.stdout)
+     self.assertEqual(len(list(out.glob('observation-*.json'))),1)
+     self.assertEqual((out/'latest.json').stat().st_mode&0o777,0o600)
+     view=m.load(out/'latest.json',[ADDR],NOW)
+     self.assertEqual(view['wallet']['status'],'UNAVAILABLE' if expected==3 else 'FRESH')
+     self.assertEqual(view['transfers'][0]['network'],'UNAVAILABLE' if expected==3 else 'FINALIZED')
  def test_exact_units_do_not_round_at_decimal_context_boundary(self):
   self.assertEqual(m.units('123456789012345678901234567890.12345678',8),12345678901234567890123456789012345678)
   for value in ('0','0.000000001',str(2**256)):

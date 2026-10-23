@@ -241,6 +241,13 @@ przeterminowane salda są ukryte. Historyczne potwierdzenie sieci pozostaje z cz
 weryfikacji. Brak danych nie jest zerowym saldem. Nie sumujemy sald i zdarzeń;
 przy nakładaniu czasów sald panel pokazuje ostrzeżenie, bez wspólnej wyceny.
 
+Kody CLI: `0` oznacza świeże skonfigurowane salda i odczytaną sieć dla wszystkich
+zarejestrowanych przypadków; `3` oznacza zapisaną migawkę częściową (źródło
+niedostępne lub przeterminowane); `2` oznacza odrzucone wejście lub błąd publikacji.
+`quality=COMPLETE` dotyczy wyłącznie tego zakresu odczytu, nie całej historii,
+udowodnienia wpłat ani wszystkich aktywów. Stan PENDING/REVERTED jest prawidłowym
+wynikiem odczytu sieci, nie zapewnieniem powodzenia transferu.
+
 Przycisk odświeżenia i odczyt co 30 sekund wczytują lokalny plik. Nie odnawiają
 sesji Coinbase, capture ani danych RPC. Operator musi pozyskać nowy autoryzowany
 odczyt i ponownie uruchomić CLI. Czas pobrania jest jawny; źródłowy czas danych
