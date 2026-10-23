@@ -188,5 +188,95 @@ class DepositHistoryTests(unittest.TestCase):
         self.assertEqual(h.review_bundle(b, NOW)["operator_evidence_coverage"], coverage)
 
 
+class ReceiveComparisonTests(unittest.TestCase):
+    def captures(self):
+        previous, current = capture(), capture()
+        previous["captured_at"] = "2026-10-23T09:00:00Z"
+        return previous, current
+
+    def test_repeat_observation_and_decimal_formatting_are_unchanged(self):
+        previous, current = self.captures()
+        current["pages"][0]["response"]["data"][0]["amount"]["amount"] = "0.00005"
+        current["pages"][0]["response"]["data"][0]["created_at"] = "2026-10-22T05:00:00-07:00"
+        before = deepcopy((previous, current))
+        result = h.compare_receive_captures(previous, current, NOW)
+        self.assertEqual(result["changes"], [])
+        self.assertEqual(result["unchanged_receive_count"], 1)
+        self.assertEqual((previous, current), before)
+        self.assertFalse(result["new_external_funding_certified"])
+        for value in (ACCOUNT, IDENT, "[PRIVATE_NOTE]", "[PRIVATE_EMAIL]"):
+            self.assertNotIn(value, json.dumps(result))
+
+    def test_added_and_missing_events_do_not_mean_new_funding_or_deletion(self):
+        previous, current = self.captures()
+        current["pages"] = [page([transaction(SECOND)])]
+        result = h.compare_receive_captures(previous, current, NOW)
+        self.assertCountEqual([c["classification"] for c in result["changes"]],
+            ["NEWLY_OBSERVED_NOT_NEW_FUNDING", "NOT_OBSERVED_IN_CURRENT_CAPTURE"])
+        self.assertFalse(result["missing_means_deleted"])
+        self.assertFalse(result["balances_adjusted"])
+
+    def test_status_changes_never_count_as_another_deposit(self):
+        for old, new in (("pending", "completed"), ("completed", "pending"),
+                         ("pending", "failed"), ("completed", "new_status")):
+            previous, current = self.captures()
+            previous["pages"][0]["response"]["data"][0]["status"] = old
+            current["pages"][0]["response"]["data"][0]["status"] = new
+            result = h.compare_receive_captures(previous, current, NOW)
+            self.assertEqual(result["previous_receive_count"], 1)
+            self.assertEqual(result["current_receive_count"], 1)
+            self.assertEqual(result["changes"][0]["classification"], "STATUS_CHANGED_NOT_NEW_FUNDING")
+
+    def test_material_record_changes_take_precedence_over_status_change(self):
+        for field, changes in (("asset", {"amount": {"amount": "0.00005", "currency": "ETH"}}),
+                               ("quantity_reported", {"amount": {"amount": "0.00006", "currency": "BTC"}}),
+                               ("source_event_timestamp_utc", {"created_at": "2026-10-22T13:00:00Z"})):
+            previous, current = self.captures()
+            current["pages"][0]["response"]["data"][0].update(**changes, status="pending")
+            row = h.compare_receive_captures(previous, current, NOW)["changes"][0]
+            self.assertEqual(row["classification"], "CONFLICTING_RECEIVE_RECORD")
+            self.assertEqual(row["changed_fields"], [field])
+
+    def test_different_accounts_equal_or_reversed_capture_times_rejected(self):
+        previous, current = self.captures()
+        for stamp in (previous["captured_at"], "2026-10-23T08:00:00Z"):
+            c = deepcopy(current); c["captured_at"] = stamp
+            with self.assertRaises(HistoryError): h.compare_receive_captures(previous, c, NOW)
+        current["account_id"] = SECOND
+        current["pages"][0]["response"]["data"][0]["resource_path"] = PATH.replace(ACCOUNT, SECOND) + "/" + IDENT
+        with self.assertRaises(HistoryError): h.compare_receive_captures(previous, current, NOW)
+
+    def test_incomplete_prior_capture_cannot_be_used_as_a_baseline(self):
+        previous, current = self.captures()
+        previous["pages"][0] = page([transaction()], next_cursor=IDENT)
+        with self.assertRaises(HistoryError): h.compare_receive_captures(previous, current, NOW)
+        previous["pages"] = [page([])]
+        current["pages"] = [page([])]
+        result = h.compare_receive_captures(previous, current, NOW)
+        self.assertEqual(result["changes"], [])
+        self.assertEqual(result["unchanged_receive_count"], 0)
+
+    def test_cli_comparison_uses_private_baseline_and_preserves_old_mode(self):
+        previous, current = self.captures()
+        b = bundle(); b["history"] = current
+        self.assertNotIn("receive_history_comparison", h.review_bundle(b, NOW))
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            write_private(root / "previous", previous)
+            write_private(root / "bundle", b)
+            cmd = [sys.executable, "-m", "scripts.coinbase_deposit_history", "--input", str(root / "bundle"),
+                   "--previous-history", str(root / "previous"), "--output", str(root / "result"),
+                   "--at", NOW.isoformat()]
+            run = subprocess.run(cmd, capture_output=True, text=True)
+            self.assertEqual(run.returncode, 0, run.stderr)
+            self.assertEqual(read_private(root / "result")["receive_history_comparison"]["unchanged_receive_count"], 1)
+            (root / "previous").chmod(0o644)
+            cmd[cmd.index("--output") + 1] = str(root / "rejected")
+            run = subprocess.run(cmd, capture_output=True, text=True)
+            self.assertEqual(run.returncode, 2)
+            self.assertFalse((root / "rejected").exists())
+            self.assertEqual(run.stdout.strip(), "DEPOSIT_HISTORY_PRIVATE_REVIEW_REJECTED")
+
+
 if __name__ == "__main__":
     unittest.main()

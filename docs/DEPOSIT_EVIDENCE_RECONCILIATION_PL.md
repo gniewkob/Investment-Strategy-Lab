@@ -112,3 +112,31 @@ pozostają niezależne: ich brak lub obecność nie uzupełnia dowodów operator
 `unmatched_is_external_funding=false`, brak korekt salda i nieuwierzytelnione
 pochodzenie obowiązują także dla dowodów tylko po stronie giełdy.
 Rollback: wycofać zmianę dwustronnego raportu; API `reconcile()` pozostaje zgodne.
+
+## Porównanie kolejnych zapisów historii receive
+
+Opcjonalne `--previous-history /PRIVATE_DIR/previous-capture.json` przyjmuje
+wcześniejszy capture historii (nie bundle ani gotowy raport). Oba capture muszą
+niezależnie przejść walidację stron, należeć do tego samego konta i mieć ściśle
+rosnące `captured_at`. Nie wolno porównywać różnych kont ani plików ze wspólnym
+lub cofniętym czasem zapisu. Czasy i kompletność nadal są deklaracją operatora.
+
+Raport dodaje `receive_history_comparison`: liczby receive w obu zapisach,
+liczbę niezmienionych rekordów oraz listę zmian według pseudonimu ID:
+
+- `NEWLY_OBSERVED_NOT_NEW_FUNDING`: rekord widoczny po raz pierwszy w tym porównaniu.
+- `NOT_OBSERVED_IN_CURRENT_CAPTURE`: rekord był wcześniej widoczny; brak w nowym
+  zapisie nie oznacza usunięcia ani anulowania wpłaty.
+- `STATUS_CHANGED_NOT_NEW_FUNDING`: zmiana statusu tego samego zdarzenia, także
+  regresja completed → pending. Nie powstaje druga wpłata.
+- `CONFLICTING_RECEIVE_RECORD`: ten sam ID ma inną kwotę, walutę lub czas zdarzenia.
+  Konflikt ma pierwszeństwo przed zmianą statusu. `changed_fields` wymienia pola,
+  bez kopiowania starych i nowych wartości.
+
+Równoważne zapisy dziesiętne kwoty i czasów z offsetem nie tworzą pozornych zmian.
+Pseudonimy i porównania pozostają prywatne. `new_external_funding_certified=false`,
+`missing_means_deleted=false` i `balances_adjusted=false` obowiązują zawsze.
+Nie ma sumowania kwot, dopisywania do ledgerów ani automatycznych działań.
+Bez opcjonalnego argumentu dotychczasowy format raportu pozostaje bez zmian.
+Rollback: wycofać opcję porównania; zwykły import i dwustronne uzgadnianie dowodów
+działają niezależnie. Dostęp do uwierzytelnionej historii na żywo pozostaje PENDING.
