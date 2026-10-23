@@ -1,3 +1,23 @@
+## 2026-10-23 — Live read-only activation authorized; local secret provisioning required
+
+User explicitly answered YES to local Coinbase connection with view only,
+without trade/transfer or secrets in chat. **Do not ask for that permission again.**
+Typical local runtime/config/export locations and Coinbase/CDP environment names
+were checked without reading secret values; no existing key/config was found.
+An exact merged PR #67 checkout and pinned SDK environment were provisioned under
+the user's private Application Support runtime. No account access or service
+startup has yet occurred; an operator-managed key file remains required.
+
+Follow-up adds native local file/account selection, strict view-only preflight,
+bounded GET /v2/accounts discovery and private config/key copy. Discovery retains
+only UUID/currency locally, never balances/names in console/chat. Existing config
+is not overwritten; cancellation/invalid account/broad key abort setup. Managed
+copy is rolled back if config creation fails. No key is created in the portal.
+464/464 tests PASS locally (seven new setup tests); final CI must pass before
+deploying this setup revision. Next: choose the ECDSA view-only export locally,
+complete setup, run one live canary, then verify supervised polling/health.
+No real transfer/order, DB write or privilege change performed.
+
 ## 2026-10-23 — Autonomous read-only polling prepared; live activation pending
 
 [PR #66](https://github.com/gniewkob/Investment-Strategy-Lab/pull/66) merged as
