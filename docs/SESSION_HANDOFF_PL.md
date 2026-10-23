@@ -1,3 +1,24 @@
+## 2026-10-23 — Live schema handling: preserve generic tx events as unclassified
+
+The read-only BTC polling service and independent health agent were activated
+after PR #69 merge `0373914242e9dd8395e9a3401d8966b64b80f2d8`; an unattended
+second 300-second live cycle and second watchdog check passed. Sanitized
+deployment evidence is recorded in PR #69 and the private local deployment receipt.
+
+Next source review identified a schema gap: documented Coinbase generic `tx`
+events must not disappear when filtering receive-only history. New importer
+output retains them as UNCLASSIFIED_ACCOUNT_EVENT with signed account direction,
+without deposit/funding/trading inference. Old capture tx amounts omitted by the
+previous minimizer stay null/UNKNOWN, never zero. New runtime retains minimized
+amount/currency for tx and signals source_schema_status. Receive comparison
+explicitly remains RECEIVE_ONLY; generic records are not a new-funding ledger.
+
+476 offline tests PASS locally, including seven new generic-event/legacy-upgrade
+tests. Final PR CI and a private live upgrade must pass before claiming deployment.
+No account values, transaction examples, keys or IDs are included here.
+Blockchain linkage remains unestablished; no hash/network/recipient is guessed.
+Existing single-account scope, view-only gate and zero financial operations remain.
+
 ## 2026-10-23 — First BTC history live canary PASS; health supervision prepared
 
 User completed native private setup and selected the BTC account. The waiting
