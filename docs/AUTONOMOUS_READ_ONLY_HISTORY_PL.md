@@ -1,5 +1,32 @@
 # Autonomiczny odczyt Coinbase App — gotowy runtime, aktywacja live osobno
 
+## Lokalny konfigurator po zgodzie użytkownika
+
+23.10.2026 użytkownik zatwierdził lokalne podłączenie klucza wyłącznie `view`.
+Nie znaleziono istniejącego eksportu ani konfiguracji w typowych lokalizacjach.
+Nie jest to ponowna prośba o zgodę: brakującym warunkiem jest plik klucza
+utworzony/zapisany przez operatora bez ujawniania go w czacie.
+
+`python -m scripts.setup_autonomous_history --runtime-root /PRIVATE_DIR/runtime --enable-local-setup`
+otwiera systemowe okno wyboru pliku i lokalny wybór konta. Sprawdza ECDSA P-256
+i view-only przed odkryciem kont, korzystając z udokumentowanego
+[`GET /v2/accounts`](https://docs.cdp.coinbase.com/coinbase-app/track-apis/accounts).
+W trybie konfiguracji klient dopuszcza tylko uprawnienia i listę kont; nie
+dopuszcza historii konkretnego konta. W zwykłym trybie nadal dopuszcza tylko
+uprawnienia i historię wybranego UUID. Listy kont nie są wypisywane w konsoli.
+
+Konfigurator zachowuje z listy tylko UUID/walutę, pomija salda i nazwy.
+Do wyboru wyświetla użytkownikowi walutę i numer pozycji, nie sekret.
+Poprawny, wybrany plik należący do operatora ogranicza do 0600, tworzy zarządzaną
+prywatną kopię i plik konfiguracji. Symlinki, istniejąca konfiguracja, konto
+spoza listy oraz klucz z trade/transfer są odrzucane. Błąd zapisu config usuwa
+wyłącznie nowo utworzoną kopię; nie usuwa źródłowego eksportu. Setup ma blokadę
+procesu i wymaga jawnej opcji aktywacji. Nie tworzy klucza w portalu Coinbase.
+
+Nie zapisuje się do repozytorium żadnej rzeczywistej ścieżki credentials ani
+wartości konta. Uruchomienie setup/live i wynik wymagają osobnej obserwacji;
+same testy transportu nie dowodzą, że operator wybrał prawdziwy klucz.
+
 ## Wynik i granice
 
 `scripts/autonomous_coinbase_history.py` jest lokalnym procesem cyklicznym,

@@ -44,9 +44,9 @@ class NoRedirect(HTTPRedirectHandler):
 class ReadOnlyClient:
     """The signer receives GET and an allowlisted path; queries never set methods."""
     def __init__(self, account, portfolio, signer, *, opener=None):
-        self.account = _uuid(account)
+        self.account = _uuid(account) if account is not None else None
         self.portfolio = _uuid(portfolio)
-        self.path = f"/v2/accounts/{account}/transactions"
+        self.path = f"/v2/accounts/{account}/transactions" if account is not None else "/v2/accounts"
         self.signer = signer
         self.opener = opener or build_opener(ProxyHandler({}), NoRedirect()).open
 
