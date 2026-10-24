@@ -31,7 +31,7 @@ def source(start, end):
 
 def gap(lo=2000, hi=2199):
     first = c.advance(None, ENTRIES, source(1000, 1999))
-    return c.advance(first, ENTRIES, source(lo+0, hi+1000))
+    return c.advance(first, ENTRIES, source(hi+1, hi+1000))
 
 
 def rpc_fixture(event=False, *, limit=False, changed=False, logs_fail=False):
