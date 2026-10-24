@@ -29,7 +29,7 @@ https://docs.cdp.coinbase.com/coinbase-app/track-apis/transactions
 
 Salda Coinbase i salda własnych adresów są oddzielnymi lokalizacjami.
 Salda z CDP nie są ponownie dodawane do sald RPC. Wycena jest częściowa,
-referencyjna w USD; brak ceny nie oznacza wartości zero. Nie certyfikujemy
+referencyjna w PLN po aktualnym dostępnym kursie średnim NBP USD/PLN; brak ceny nie oznacza wartości zero. Nie certyfikujemy
 kompletnego majątku: DeFi, NFT i nieznane tokeny nie są kompletnie wycenione.
 Użytkownik wskazuje publiczny adres własnego Wallet; samo wskazanie nie jest
 kryptograficznym dowodem własności. Nie stosować adresu depozytowego giełdy
@@ -43,12 +43,21 @@ Nieobecność receive nie potwierdza braku wpłat. Niesklasyfikowane tx zostają
 zachowane w prywatnych checkpointach. Historia ERC20 ma ograniczony zakres,
 nie obejmuje natywnych transferów ETH, wewnętrznych wywołań, NFT ani pełnej historii.
 
+Kurs pobiera istniejący adapter NBP (tabela A), z kontrolą konserwatywnego czasu
+udostępnienia i wieku maksymalnie 5 dni. Panel podaje datę tabeli. Brak kursu,
+nieprawidłowy lub stary kurs oznacza brak wyceny PLN i alert źródła usdpln.
+Nie stosujemy kursu 1 ani nie oznaczamy wartości USD jako PLN. Pola USD pozostają
+wewnętrzną bazą źródłową, a nowe pola PLN są zaokrąglane do groszy po mnożeniu.
+
 ## Symulacja i panel
 
 Stały prospektywny benchmark: fikcyjne 10 000 USD, 50% BTC / 50% ETH buy-and-hold,
 porównanie z gotówką; założenie kosztu wejścia 20 pb + poślizg 10 pb.
 Brak optymalizacji, realnych alokacji i obietnicy rentowności. Znane ceny zamknięcia
 są wyłącznie cenami referencyjnymi, nie możliwymi do wykonania zleceniami.
+Zmiana waluty panelu nie resetuje portfela symulowanego ani jednostek aktywów.
+Baza symulacji pozostaje w USD; bieżąca prezentacja PLN używa jawnego kursu NBP.
+To nie jest historyczna stopa zwrotu w PLN.
 Ten sam znacznik świecy nie powoduje ponownego wejścia ani kosztu. Po awarii
 ostatni poprawny stan symulacji jest zachowany; bieżący wynik jest niedostępny.
 Panel lokalny `portfolio-state/dashboard.html` ma 0600, nie pobiera zewnętrznych

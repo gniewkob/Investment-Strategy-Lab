@@ -20,7 +20,7 @@ from urllib.request import Request, build_opener, ProxyHandler
 from scripts import autonomous_coinbase_history as history
 from scripts.coinbase_deposit_history import _cursor
 from scripts.operational_read_only import read_private, write_private, observe_wallets, TOKENS, reconcile_events
-from scripts.read_only_portfolio_monitor import fetch_markets
+from scripts.read_only_portfolio_monitor import fetch_markets, fetch_usdpln
 
 NETWORKS = {1: "ethereum", 8453: "base"}
 NATIVE = "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
@@ -187,9 +187,44 @@ def paper_snapshot(previous, market, now):
             "real_holdings_used": False, "financial_operations": 0}
 
 
+def reference_fx(now, reader):
+    """Reuse the validated NBP adapter; refuse unavailable/stale FX, never assume 1."""
+    data = reader(now)
+    history.require(isinstance(data, dict))
+    rate = quantity(data.get("usdpln_mid_reference"))
+    history.require(rate > 0)
+    stamp = datetime.fromisoformat(data["assumed_eligible_utc"])
+    history.require(stamp.tzinfo is not None and stamp.utcoffset() == timedelta(0)
+                    and timedelta(0) <= now - stamp <= timedelta(days=5))
+    effective = datetime.strptime(data["nbp_effective_date"], "%Y-%m-%d").date()
+    history.require(effective <= stamp.date())
+    return data
+
+
+def pln_values(report, fx):
+    """Add display-only PLN fields. Preserve USD basis and paper entry/units."""
+    rate = quantity(fx["usdpln_mid_reference"]) if fx else None
+    def convert(value):
+        if value is None or rate is None:
+            return None
+        with localcontext() as ctx:
+            ctx.prec = 160
+            return format((quantity(value) * rate).quantize(Decimal("0.01")), "f")
+    report["reference_currency"] = "PLN"
+    report["known_priced_subtotal_pln"] = convert(report["known_priced_subtotal_usd"])
+    for row in report["holdings"]:
+        row["reference_value_pln"] = convert(row["reference_value_usd"])
+    paper = report["paper_simulation"]["data"]
+    if paper is not None:
+        report["paper_simulation"]["data"] = {**paper,
+            "reference_value_pln": convert(paper["reference_value_usd"])}
+    report["reference_fx"] = fx
+    return report
+
+
 def cycle(config, state, clock, *, signer_factory=history.make_sdk_signer,
           client_factory=history.ReadOnlyClient, cdp_factory=cdp_signer,
-          wallet_reader=observe_wallets, market_reader=fetch_markets):
+          wallet_reader=observe_wallets, market_reader=fetch_markets, fx_reader=fetch_usdpln):
     now = clock()
     history.require(now.tzinfo is not None and now.utcoffset() == timedelta(0))
     signer = signer_factory(config["credentials_file"])
@@ -226,6 +261,7 @@ def cycle(config, state, clock, *, signer_factory=history.make_sdk_signer,
             sources[f"cdp_{label}_{chain}"] = source_read(lambda: CdpBalances(
                 cdp_factory(config["credentials_file"])).collect(chain, address), clock)
     sources["market"] = source_read(lambda: market_reader(clock()), clock)
+    sources["usdpln"] = source_read(lambda: reference_fx(clock(), fx_reader), clock)
     # Treat CEX account totals and wallet locations separately. Never add portfolio
     # summary balances to account balances; never use indexer balances twice.
     holdings = []
@@ -280,6 +316,7 @@ def cycle(config, state, clock, *, signer_factory=history.make_sdk_signer,
         "alerts": missing + ([] if watch else ["WALLET_NOT_CONFIGURED"])
             + ([] if paper["status"] == "OK" else ["PAPER_SIMULATION_UNAVAILABLE"]),
         "financial_operations": 0}
+    pln_values(report, sources["usdpln"]["data"])
     history.atomic_private(state / "portfolio.json", report)
     history.atomic_private(state / "health.json", {k: report[k] for k in (
         "status", "checked_at_utc", "expires_at_utc", "financial_operations", "alerts")})
@@ -287,9 +324,13 @@ def cycle(config, state, clock, *, signer_factory=history.make_sdk_signer,
 
 
 def render(report):
-    def safe(v): return escape(str(v))
+    def safe(v): return escape("Dane niedostępne" if v is None else str(v))
+    fx = report.get("reference_fx") or {}
+    fx_note = ("Kurs średni NBP USD/PLN: " + safe(fx["usdpln_mid_reference"]) +
+               " · data tabeli: " + safe(fx["nbp_effective_date"]) +
+               ". Kurs referencyjny, nie kurs wymiany walut.") if fx else "Kurs NBP niedostępny — wycena w PLN niedostępna."
     rows = "".join("<tr>" + "".join("<td>" + safe(row.get(k, "—")) + "</td>"
-        for k in ("location", "asset", "quantity", "reference_value_usd")) + "</tr>" for row in report["holdings"])
+        for k in ("location", "asset", "quantity", "reference_value_pln")) + "</tr>" for row in report["holdings"])
     sources = "".join("<li>" + safe(k) + ": " + safe(v["status"]) + "</li>" for k,v in report["sources"].items())
     return ("<!doctype html><html lang=pl><meta charset=utf-8><meta http-equiv=refresh content=60>"
         "<meta http-equiv=Content-Security-Policy content=\"default-src 'none'; style-src 'unsafe-inline'\">"
@@ -299,14 +340,15 @@ def render(report):
         "<h1>Investment Strategy Lab</h1><p>Tryb obserwacji · operacje finansowe: 0</p>"
         "<p>Aktualizacja: " + safe(report["checked_at_utc"]) + " · ważne do: " + safe(report["expires_at_utc"]) +
         "</p><p>Status: " + safe(report["status"]) + "</p><h2>Znane pozycje</h2>"
-        "<p>Wycena częściowa USD: " + safe(report["known_priced_subtotal_usd"]) +
+        "<p>Wycena częściowa PLN: " + safe(report.get("known_priced_subtotal_pln")) +
         ". Brak wyceny części aktywów nie oznacza wartości zero. Pozycje DeFi i NFT nie są w pełni objęte.</p>"
-        "<table><tr><th>Miejsce</th><th>Aktywo</th><th>Ilość</th><th>Wartość referencyjna USD</th></tr>" + rows +
+        "<p>" + fx_note + "</p><table><tr><th>Miejsce</th><th>Aktywo</th><th>Ilość</th><th>Wartość referencyjna PLN</th></tr>" + rows +
         "</table><h2>Źródła</h2><ul>" + sources + "</ul><h2>Uzgadnianie</h2>"
-        "<h2>Symulacja referencyjna</h2><p>Wirtualne 10 000 USD: 50% BTC i 50% ETH, "
-        "koszt wejścia 20 pb + poślizg 10 pb. Wyniki są symulowane na cenach referencyjnych.</p><p>" +
-        safe((report.get("paper_simulation", {}).get("data") or {}).get("reference_value_usd", "Dane niedostępne")) +
-        " USD</p><p>Historia konta nie zapewnia jeszcze powiązania z transakcją blockchain. "
+        "<h2>Symulacja referencyjna</h2><p>Wycena w PLN: 50% BTC i 50% ETH, "
+        "koszt wejścia 20 pb + poślizg 10 pb. Symulacja zachowuje bazę USD; "
+        "wartość przeliczana jest na PLN po podanym kursie NBP.</p><p>" +
+        safe((report.get("paper_simulation", {}).get("data") or {}).get("reference_value_pln")) +
+        " PLN</p><p>Historia konta nie zapewnia jeszcze powiązania z transakcją blockchain. "
         "Zgodność kwoty i czasu nie potwierdza wpłaty. Wynik strategii: nieustalony.</p></html>")
 
 
