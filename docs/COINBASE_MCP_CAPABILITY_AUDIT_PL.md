@@ -5,17 +5,17 @@
 ## Źródła pierwotne
 
 - [Coinbase AI Agents overview](https://docs.cdp.coinbase.com/ai-agents/overview) — trzy odrębne powierzchnie: Coinbase MCP (giełda), Wallet MCP (self-custody), CDP MCP (platforma developerska).
-- [Coinbase MCP](https://docs.cdp.coinbase.com/ai-agents/coinbase-for-agents/coinbase-mcp) — tabela narzędzi, nazwy z prefiksem coinbase_, limity portfolio, wewnętrzny zakres \`transfer\`, x402 i ograniczenia klientów.
+- [Coinbase MCP](https://docs.cdp.coinbase.com/ai-agents/coinbase-for-agents/coinbase-mcp) — tabela narzędzi, nazwy z prefiksem coinbase_, limity portfolio, wewnętrzny zakres `transfer`, x402 i ograniczenia klientów.
 - [Wallet MCP](https://docs.cdp.coinbase.com/ai-agents/coinbase-for-agents/wallet-mcp) — zapis tylko za zatwierdzeniem; swap tylko na mainnet.
 - [Spend Permissions](https://docs.cdp.coinbase.com/wallets/using-wallets/spend-permissions) — Smart Account, spender, token, allowance, period. To **nie** jest ogólny limit giełdowych zleceń.
 - [Agentic Wallet MCP FAQ](https://docs.cdp.coinbase.com/agentic-wallet/mcp/faq) — odrębny portfel płatności x402; limity na wywołanie i na sesję ustawia właściciel, nie agent.
 
 ## Co zweryfikowano
 
-- MCP/CLI na giełdzie rozróżnia listę narzędzi od rzeczywistych uprawnień użytkownika i wybranego portfolio. Sama obecność funkcji \`coinbase_orders_create\` w katalogu nie potwierdza, że dany klucz może jej użyć.
+- MCP/CLI na giełdzie rozróżnia listę narzędzi od rzeczywistych uprawnień użytkownika i wybranego portfolio. Sama obecność funkcji `coinbase_orders_create` w katalogu nie potwierdza, że dany klucz może jej użyć.
 - Transfer w Coinbase CLI: wyłącznie pomiędzy portfolio giełdowymi; **nie** stanowi ścieżki wypłaty na zewnętrzny wallet.
 - Wyodrębnione portfolio agenta obejmuje spot; US futures wymaga domyślnego portfolio i zależy od jurysdykcji.
-- \`coinbase_x402_resources\` odkrywa katalog bez płatności; \`coinbase_x402_fetch\` i \`coinbase_x402_pay\` są płatne. Limit 5 USDC / transakcję to **nie** budżet dzienny ani sesyjny. To, czy narzędzia są dostępne, zależy też od klienta i połączenia.
+- `coinbase_x402_resources` odkrywa katalog bez płatności; `coinbase_x402_fetch` i `coinbase_x402_pay` są płatne. Limit 5 USDC / transakcję to **nie** budżet dzienny ani sesyjny. To, czy narzędzia są dostępne, zależy też od klienta i połączenia.
 - Wallet MCP wymaga zatwierdzenia każdego zapisu; ten fakt nie oznacza, że proces nadzorczy Investment Strategy Lab ma dostęp do Wallet MCP.
 - CDP token-balance indexer i RPC finalized są dwoma źródłami dowodowymi dla portfela; istniejący supervisor ich nie sumuje ponownie.
 
@@ -23,16 +23,16 @@
 
 - [PR #71](https://github.com/gniewkob/Investment-Strategy-Lab/pull/71): lokalny automatyczny odczyt Coinbase i adresów EVM; prywatne checkpointy, dashboard, watchdog; **bez operacji finansowych i zapisów do Neon**. Udokumentowana częściowa historia Base przy HTTP 429, bez certyfikacji pełnego uzgadniania.
 - [PR #72](https://github.com/gniewkob/Investment-Strategy-Lab/pull/72): referencyjna prezentacja w PLN wg datowanej tabeli NBP; raportuje 501 testów offline i 42 testy instalacyjne.
-- Zgodnie z [autonomicznym kontraktem portfela](AUTONOMOUS_PORTFOLIO_PL.md) pełna rekonsyliacja Exchange↔Wallet jest \`false\`, bo źródłowe zdarzenia konta nie zapewniają pewnego onchain tx hash / network linkage. Nie dopasowuj przepływów po samej kwocie i czasie.
+- Zgodnie z [autonomicznym kontraktem portfela](AUTONOMOUS_PORTFOLIO_PL.md) pełna rekonsyliacja Exchange↔Wallet jest `false`, bo źródłowe zdarzenia konta nie zapewniają pewnego onchain tx hash / network linkage. Nie dopasowuj przepływów po samej kwocie i czasie.
 - Monitoring jest lokalny. Brak dowodu ciągłości działania, gdy komputer jest wyłączony lub uśpiony.
 
 ## Artefakt P0 — powtarzalny audyt katalogu narzędzi
 
-\`scripts.coinbase_mcp_capability_audit\` to niezależny moduł **offline**. Przyjmuje lokalny manifest zawierający tylko nazwy narzędzi, podział na odczyt, funkcje płatne, operacje zmieniające stan i nieznane. *Nie uruchamia żadnego narzędzia ani nie sprawdza tokenów, rzeczywistego scope, funkcjonalności API, portfeli czy finansów*. Nie jest runtime policy gateway; nie zapewnia kontroli dostępu na poziomie platformy.
+`scripts.coinbase_mcp_capability_audit` to niezależny moduł **offline**. Przyjmuje lokalny manifest zawierający tylko nazwy narzędzi, podział na odczyt, funkcje płatne, operacje zmieniające stan i nieznane. *Nie uruchamia żadnego narzędzia ani nie sprawdza tokenów, rzeczywistego scope, funkcjonalności API, portfeli czy finansów*. Nie jest runtime policy gateway; nie zapewnia kontroli dostępu na poziomie platformy.
 
 Przykład wyłącznie syntetyczny, bez danych konta:
 
-\`\`\`json
+```json
 {
   "mode": "COINBASE_MCP_TOOL_INVENTORY_V1",
   "source": "coinbase_mcp",
@@ -43,15 +43,15 @@ Przykład wyłącznie syntetyczny, bez danych konta:
     "coinbase_x402_fetch"
   ]
 }
-\`\`\`
+```
 
 Syntetyczny manifest należy zachować w prywatnej lokalizacji, a następnie można uzyskać klasyfikację:
 
-\`\`\`sh
+```sh
 python -m scripts.coinbase_mcp_capability_audit --file /PRIVATE/coinbase-tool-names.json
-\`\`\`
+```
 
-Output jawnie zawiera \`account_permissions_verified=false\`, \`portfolio_scope_verified=false\`, \`live_execution_authorized=false\`, \`financial_operations=0\` i \`x402_payments=0\`; jest to **deklaracja braku wykonania**, nie dowód rzeczywistego audytu autoryzacji. Przyszłe narzędzia o nieznanych nazwach pozostają niezaklasyfikowane/niedopuszczone. Manifest z dodatkowymi polami (np. z kluczem dostępu) jest odrzucany.
+Output jawnie zawiera `account_permissions_verified=false`, `portfolio_scope_verified=false`, `live_execution_authorized=false`, `financial_operations=0` i `x402_payments=0`; jest to **deklaracja braku wykonania**, nie dowód rzeczywistego audytu autoryzacji. Przyszłe narzędzia o nieznanych nazwach pozostają niezaklasyfikowane/niedopuszczone. Manifest z dodatkowymi polami (np. z kluczem dostępu) jest odrzucany.
 
 ## Matryca wdrożenia P0–P5 i zaległości
 
