@@ -108,7 +108,7 @@ def normalize_receives(capture, now):
             seen.add(ident)
             last_id = ident
             kind, status = row.get("type"), row.get("status")
-            _require(isinstance(kind, str) and bool(re.fullmatch(r"[a-z_]{1,64}", kind))
+            _require(isinstance(kind, str) and bool(re.fullmatch(r"[a-z][a-z0-9_]{0,63}", kind))
                      and isinstance(status, str) and bool(re.fullmatch(r"[a-z_]{1,64}", status)))
             created = _provider_time(row.get("created_at"))
             _require(created <= captured + timedelta(seconds=5))
