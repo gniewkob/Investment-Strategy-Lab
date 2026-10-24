@@ -87,6 +87,7 @@ def inspect(config_path, expected, phase, now, *, git_probe=local_code_attestati
     root = Path(repository_root or Path(__file__).resolve().parents[1])
     require(git_probe(expected, root) is True)
     config_file = _private_path(str(config_path), file=True)
+    _private_path(str(config_file.parent))
     config = read_private(config_file)
     require(set(config) == {"credentials_file", "portfolio_id", "watchlist_file",
                             "state_directory", "interval_seconds"})
@@ -96,6 +97,7 @@ def inspect(config_path, expected, phase, now, *, git_probe=local_code_attestati
     require(type(config["interval_seconds"]) is int and
             300 <= config["interval_seconds"] <= 86400)
     state_dir = _private_path(config["state_directory"])
+    _private_path(str(state_dir.parent))
     secret = _private_path(config["credentials_file"], file=True)
     watch_path = _private_path(config["watchlist_file"], file=True)
     for location in (config_file, secret, watch_path, state_dir):
@@ -154,9 +156,14 @@ def inspect(config_path, expected, phase, now, *, git_probe=local_code_attestati
     expected_keys = {f"chain_{label}_{chain}" for chain, address, label, contracts in entries}
     require(set(coverage["streams"]) == expected_keys)
     for chain, address, label, contracts in entries:
-        record = history_coverage._record(coverage["streams"][f"chain_{label}_{chain}"])
+        key = f"chain_{label}_{chain}"
+        record = history_coverage._record(coverage["streams"][key])
         require(record["identity_sha256"] == history_coverage._identity(
-            chain, address, contracts))
+            chain, address, contracts)
+            and key in sources)
+    require(coverage.get("latest_source_incomplete") is
+            any(r["latest_status"] != "COMPLETE_RANGE"
+                for r in coverage["streams"].values()))
     require(coverage.get("gap_range_count") ==
             sum(len(r["gap_ranges"]) for r in coverage["streams"].values()))
     require(coverage.get("historical_gap_detected") is
@@ -169,6 +176,19 @@ def inspect(config_path, expected, phase, now, *, git_probe=local_code_attestati
             and 0 <= backfill["recovered_block_count"] <= 80
             and type(backfill.get("events_saved")) is int
             and 0 <= backfill["events_saved"] <= 1000)
+    # A supposedly healthy report must not conceal a failed upstream source,
+    # an outstanding gap, or a failed historical repair attempt.
+    if portfolio["status"] == "OBSERVATION_OK":
+        require(not portfolio["alerts"]
+                and all(source["status"] == "OK" for source in sources.values())
+                and not coverage["latest_source_incomplete"]
+                and not coverage["historical_gap_detected"]
+                and backfill["status"] != "UNAVAILABLE")
+    require((backfill["status"] == "RECOVERED_WINDOW"
+             and 1 <= backfill["recovered_block_count"] <= 80)
+            or (backfill["status"] != "RECOVERED_WINDOW"
+                and backfill["recovered_block_count"] == 0
+                and backfill["events_saved"] == 0))
     result["observed_source_count"] = len(sources)
     result["gap_range_count"] = coverage["gap_range_count"]
     result["gap_or_overflow_detected"] = coverage["historical_gap_detected"]
