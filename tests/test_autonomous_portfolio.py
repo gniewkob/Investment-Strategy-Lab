@@ -22,6 +22,11 @@ def balances(network="base"):
                   "contractAddress": m.NATIVE}}]}
 
 
+def fx_fixture(now=NOW):
+    return {"usdpln_mid_reference": "4.1234", "nbp_effective_date": now.date().isoformat(),
+            "assumed_eligible_utc": now.isoformat(), "market_fx_tradable_quote": False}
+
+
 class CdpTests(unittest.TestCase):
     def test_read_only_path_units_identity_and_redaction(self):
         calls, signed = [], []
@@ -153,11 +158,14 @@ class RuntimeTests(unittest.TestCase):
             with patch.object(m.CdpBalances, "collect", return_value={"positions": [{"quantity": "99999"}]}):
                 report = m.cycle(config, root, lambda: NOW, signer_factory=lambda p: None,
                     client_factory=Source, cdp_factory=lambda p: None, wallet_reader=wallet,
+                    fx_reader=lambda now: fx_fixture(now),
                     market_reader=lambda now: {asset+"-USD": {"last_closed_price_usd": "1000",
                         "last_completed_candle_end_utc": now.replace(minute=0,second=0,microsecond=0).isoformat()} for asset in ("BTC","ETH")})
             eth = [r for r in report["holdings"] if r["asset"] == "ETH"]
             self.assertEqual({r["quantity"] for r in eth}, {"2", "0.1"})
             self.assertEqual(report["known_priced_subtotal_usd"], "2100.0")
+            self.assertEqual(report["known_priced_subtotal_pln"], "8659.14")
+            self.assertEqual(report["reference_currency"], "PLN")
             self.assertEqual(report["financial_operations"], 0)
             self.assertEqual(report["status"], "OBSERVATION_OK")
             self.assertEqual(report["paper_simulation"]["status"], "OK")
@@ -170,6 +178,7 @@ class RuntimeTests(unittest.TestCase):
             with patch.object(m.CdpBalances, "collect", return_value={"positions": []}):
                 partial = m.cycle(config, root, lambda: NOW, signer_factory=lambda p: None,
                     client_factory=Source, cdp_factory=lambda p: None, wallet_reader=wallet,
+                    fx_reader=lambda now: fx_fixture(now),
                     market_reader=lambda now: {asset+"-USD": {"last_closed_price_usd": "1000",
                         "last_completed_candle_end_utc": now.replace(minute=0,second=0,microsecond=0).isoformat()}
                         for asset in ("BTC", "ETH")})
@@ -181,6 +190,20 @@ class RuntimeTests(unittest.TestCase):
             notifications = []
             m.check_health(root, NOW, notifications.append)
             self.assertEqual(notifications, ["PARTIAL"])
+            def unavailable_fx(now):
+                raise RuntimeError("SYNTHETIC_NBP_UNAVAILABLE")
+            with patch.object(m.CdpBalances, "collect", return_value={"positions": []}):
+                no_fx = m.cycle(config, root, lambda: NOW, signer_factory=lambda p: None,
+                    client_factory=Source, cdp_factory=lambda p: None, wallet_reader=wallet,
+                    fx_reader=unavailable_fx,
+                    market_reader=lambda now: {asset+"-USD": {"last_closed_price_usd": "1000",
+                        "last_completed_candle_end_utc": now.replace(minute=0,second=0,microsecond=0).isoformat()}
+                        for asset in ("BTC", "ETH")})
+            self.assertEqual(no_fx["status"], "PARTIAL")
+            self.assertIn("usdpln", no_fx["alerts"])
+            self.assertIsNone(no_fx["known_priced_subtotal_pln"])
+            self.assertTrue(all(row["reference_value_pln"] is None for row in no_fx["holdings"]))
+            self.assertEqual(no_fx["paper_last_success"]["units"], report["paper_last_success"]["units"])
 
     def test_dashboard_escapes_external_content_and_has_expiry(self):
         report = {"checked_at_utc": NOW.isoformat(), "expires_at_utc": NOW.isoformat(),
@@ -265,6 +288,46 @@ class PaperAndHealthTests(unittest.TestCase):
             "captured_at":NOW.isoformat(),"pages":[page([row])]},NOW)
         self.assertEqual(r["event_count"],0)
         self.assertEqual(r["excluded_other_event_count"],1)
+
+
+class PlnTests(unittest.TestCase):
+    def report(self):
+        return {"known_priced_subtotal_usd": "12.345", "holdings": [
+            {"reference_value_usd": "12.345"}, {"reference_value_usd": None}],
+            "paper_simulation": {"data": {"reference_value_usd": "10000", "units": {"ETH": "1"}}}}
+
+    def test_conversion_rounding_unknown_and_paper_basis_preserved(self):
+        report = self.report()
+        original_paper = report["paper_simulation"]["data"]
+        result = m.pln_values(report, fx_fixture())
+        self.assertEqual(result["known_priced_subtotal_pln"], "50.90")
+        self.assertIsNone(result["holdings"][1]["reference_value_pln"])
+        self.assertEqual(result["paper_simulation"]["data"]["reference_value_pln"], "41234.00")
+        self.assertEqual(original_paper, {"reference_value_usd": "10000", "units": {"ETH": "1"}})
+        self.assertEqual(result["paper_simulation"]["data"]["reference_value_usd"], "10000")
+
+    def test_missing_fx_is_unknown_not_zero_or_usd_relabelled(self):
+        report = m.pln_values(self.report(), None)
+        self.assertIsNone(report["known_priced_subtotal_pln"])
+        self.assertTrue(all(r["reference_value_pln"] is None for r in report["holdings"]))
+        self.assertIsNone(report["paper_simulation"]["data"]["reference_value_pln"])
+
+    def test_reference_fx_rejects_zero_stale_future_and_nan(self):
+        for field, value in (("usdpln_mid_reference", "0"), ("usdpln_mid_reference", "NaN"),
+                ("assumed_eligible_utc", (NOW-timedelta(days=6)).isoformat()),
+                ("assumed_eligible_utc", (NOW+timedelta(days=1)).isoformat()),
+                ("nbp_effective_date", (NOW+timedelta(days=1)).date().isoformat())):
+            fx = fx_fixture(); fx[field] = value
+            with self.assertRaises(ValueError): m.reference_fx(NOW, lambda now: fx)
+
+    def test_panel_labels_pln_and_nbp_date(self):
+        report = {"checked_at_utc": NOW.isoformat(), "expires_at_utc": NOW.isoformat(),
+            "status": "PARTIAL", "sources": {}, **self.report()}
+        html = m.render(m.pln_values(report, fx_fixture()))
+        self.assertIn("Wartość referencyjna PLN", html)
+        self.assertIn("Wycena częściowa PLN: 50.90", html)
+        self.assertIn("data tabeli: " + NOW.date().isoformat(), html)
+        self.assertNotIn("Wartość referencyjna USD", html)
 
 
 if __name__ == "__main__":
