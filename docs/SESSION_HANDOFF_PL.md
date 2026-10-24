@@ -1,3 +1,27 @@
+## 2026-10-24 — ntfy wdrożone do obu watchdogów; odbiór na iOS oczekuje potwierdzenia
+
+Po jawnej zgodzie użytkownika [PR #82](https://github.com/gniewkob/Investment-Strategy-Lab/pull/82)
+scalono jako `fcc7c2cc774b98d29af5a4286278c8ebac432038`.
+[PR CI](https://github.com/gniewkob/Investment-Strategy-Lab/actions/runs/40126004272)
+i GitGuardian PASS; lokalnie na aktualnym main 557 testów OK (1 pominięty).
+
+Na Mac utworzono osobny losowy kanał w prywatnym pliku 0600 poza Git oraz
+lokalną instrukcję subskrypcji, otwartą operatorowi w TextEdit. Nazwa kanału
+nie weszła do czatu, GitHub, logów ani argumentów procesu. Wydzielony czysty
+checkout powiadomień jest przypięty do scalonego SHA. Przełączono wyłącznie
+dwa watchdogi (historia i portfel), zachowując harmonogram 300 sekund.
+Oba są załadowane; pierwsze wykonania exit 0. Procesy pobierające dane nie były
+restartowane, ich checkouty pozostały czyste. Prywatne kopie poprzednich plist
+i lokalny receipt pozwalają cofnąć zmianę wyłącznie konfiguracji watchdogów.
+
+Rzeczywisty POST testowy zwrócił `NTFY_SERVER_ACCEPTED_TEST` po walidacji
+HTTP 200 oraz event/topic/id odpowiedzi serwera. **Odbiór na iPhonie pozostaje
+PENDING_OPERATOR_CONFIRMATION**: użytkownik musi dodać kanał w aplikacji ntfy.
+Akceptacja serwera nie jest dowodem wyświetlenia powiadomienia na urządzeniu.
+Zero operacji finansowych i odczytu kluczy przez agenta.
+
+Poniżej zachowano historyczny opis przygotowania i polecenia operatora.
+
 ## 2026-10-24 — Opcjonalne powiadomienia ntfy na osobnym kanale (lokalna poprawka)
 
 Użytkownik wybrał osobny kanał ntfy dla Investment Strategy Lab. Moduł
