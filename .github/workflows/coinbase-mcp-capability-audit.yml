@@ -1,0 +1,36 @@
+name: Coinbase MCP offline capability audit
+on:
+  pull_request:
+    paths:
+      - scripts/coinbase_mcp_capability_audit.py
+      - tests/test_coinbase_mcp_capability_audit.py
+      - docs/COINBASE_MCP_CAPABILITY_AUDIT_PL.md
+      - .github/workflows/coinbase-mcp-capability-audit.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  offline-contract-tests:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Isolated capability regression (no network, account or secrets)
+        run: python -m unittest tests.test_coinbase_mcp_capability_audit -v
+      - name: Static no-execution module check
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('scripts/coinbase_mcp_capability_audit.py').read_text()
+          forbidden=('requests', 'urllib', 'coinbase SDK', 'psycopg', 'subprocess',
+                     'os.environ', 'os.getenv', 'create_order(', 'transfer(',
+                     'execute_trade(', 'coinbase_x402_fetch(')
+          assert not any(s in p for s in forbidden)
+          print('OFFLINE_CAPABILITY_AUDIT_BOUNDARY_OK')
+          PY
