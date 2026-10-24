@@ -23,7 +23,23 @@ from urllib.request import Request, build_opener, HTTPRedirectHandler
 from scripts.read_only_portfolio_monitor import analyze_portfolio, _when, _number
 from scripts.private_wallet_chain_monitor import _private_config, WalletSourceError
 
-RPC_URLS = {1: 'https://ethereum-rpc.publicnode.com', 8453: 'https://mainnet.base.org'}
+# Static, audited read-only RPC hosts. A different provider receives public
+# wallet addresses, so switching Base away from its default is explicit opt-in.
+# Freeze source at import/startup: never mix providers within a source cycle.
+BASE_RPC_SOURCES = {
+    'OFFICIAL': 'https://mainnet.base.org',
+    'PUBLICNODE': 'https://base-rpc.publicnode.com',
+}
+
+
+def configured_rpc_urls(source):
+    if not isinstance(source, str) or source not in BASE_RPC_SOURCES:
+        raise ValueError('BASE_RPC_SOURCE_NOT_ALLOWLISTED')
+    return {1: 'https://ethereum-rpc.publicnode.com',
+            8453: BASE_RPC_SOURCES[source]}
+
+
+RPC_URLS = configured_rpc_urls(os.environ.get('ISL_BASE_RPC_SOURCE', 'OFFICIAL'))
 READ_METHODS = frozenset({'eth_chainId', 'eth_getBlockByNumber', 'eth_getBalance', 'eth_call', 'eth_getLogs', 'eth_getTransactionReceipt', 'eth_getTransactionByHash'})
 # Identity from https://www.coinbase.com/cbbtc (Ethereum AND Base deployments).
 # The same contract on another chain is NOT implicitly trusted.
