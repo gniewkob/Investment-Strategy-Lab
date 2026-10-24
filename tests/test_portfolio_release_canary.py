@@ -186,6 +186,33 @@ class LocalReleaseTests(unittest.TestCase):
             with self.assertRaises(m.ReleaseRejected):
                 self.audit(config, "before")
 
+    def test_false_healthy_reports_are_never_accepted(self):
+        cases = (
+            lambda report: report["sources"]["usdpln"].update(status="UNAVAILABLE"),
+            lambda report: report["history_backfill"].update(status="UNAVAILABLE"),
+            lambda report: report["history_backfill"].update(
+                status="RECOVERED_WINDOW", recovered_block_count=0),
+            lambda report: report["sources"].pop(KEY),
+            lambda report: report["history_coverage"].update(
+                latest_source_incomplete=True),
+        )
+        for mutate in cases:
+            with self.subTest(case=repr(mutate)), tempfile.TemporaryDirectory() as d:
+                config, key, watch, state = self.setup(d)
+                report = self.make_reports(watch, state)
+                mutate(report)
+                (state/"portfolio.json").unlink()
+                write_private(state/"portfolio.json", report)
+                with self.assertRaises(m.ReleaseRejected):
+                    self.audit(config, "after")
+
+    def test_healthy_claim_cannot_hide_existing_gap(self):
+        with tempfile.TemporaryDirectory() as d:
+            config, key, watch, state = self.setup(d)
+            self.make_reports(watch, state, status="OBSERVATION_OK", gaps=True)
+            with self.assertRaises(m.ReleaseRejected):
+                self.audit(config, "after")
+
     def test_wrong_commit_rejected_before_reading_private_data(self):
         with tempfile.TemporaryDirectory() as d:
             config, key, watch, state = self.setup(d)
