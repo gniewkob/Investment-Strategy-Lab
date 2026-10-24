@@ -304,6 +304,20 @@ class PaperAndHealthTests(unittest.TestCase):
             calls=[];m.check_health(root, NOW, calls.append)
             self.assertEqual(calls, ["INVALID_OR_MISSING"])
 
+    def test_native_watchdog_notification_preserves_polish_text(self):
+        with tempfile.TemporaryDirectory() as root:
+            root = Path(root)
+            write_private(root/"health.json", {"status": "PARTIAL",
+                "financial_operations": 0, "alerts": [],
+                "checked_at_utc": NOW.isoformat(),
+                "expires_at_utc": (NOW+timedelta(minutes=30)).isoformat()})
+            with patch.object(m.subprocess, "run") as native:
+                self.assertEqual(m.check_health(root, NOW), "PARTIAL")
+            script = native.call_args.args[0][2]
+            self.assertIn("Sprawdź lokalny panel.", script)
+            self.assertNotIn("\\u", script)
+            self.assertEqual(read_private(root/"watchdog.json")["signature"], "PARTIAL:")
+
     def test_private_html_atomic_permissions(self):
         with tempfile.TemporaryDirectory() as root:
             p=Path(root)/"dashboard.html"

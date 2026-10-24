@@ -495,7 +495,7 @@ def check_health(state, now, notify=None):
             message = ("Monitoring portfela wznowiony." if status == "OBSERVATION_OK" else
                        "Monitoring portfela: brak danych lub awaria. Sprawdź lokalny panel.")
             def notify(_):
-                subprocess.run(["osascript", "-e", 'display notification ' + json.dumps(message) +
+                subprocess.run(["osascript", "-e", 'display notification ' + json.dumps(message, ensure_ascii=False) +
                     ' with title "Investment Strategy Lab"'], check=True, timeout=5,
                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         notify(status)
