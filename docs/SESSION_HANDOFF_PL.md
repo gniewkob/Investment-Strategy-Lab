@@ -1,3 +1,58 @@
+## 2026-10-24 — Opcjonalne powiadomienia ntfy na osobnym kanale (lokalna poprawka)
+
+Użytkownik wybrał osobny kanał ntfy dla Investment Strategy Lab. Moduł
+`scripts.ntfy_notifications` dostarcza stałe komunikaty o awarii, nieaktualności
+i przywróceniu działania historii Coinbase oraz monitoringu portfela. Brak sald,
+adresów, identyfikatorów kont, transakcji i surowych błędów w treści wiadomości.
+Kontrakt: POST UTF-8 na `https://ntfy.sh/<topic>`, tytuł aplikacji, priorytet high
+dla problemów/default dla recovery i testu, timeout 8 s, brak proxy/przekierowań.
+Wymagane HTTP 200 oraz ograniczone potwierdzenie JSON event/topic/id.
+Dokumentacja dostawcy: https://docs.ntfy.sh/publish/ . Orbit discovery nie
+zwrócił pasującego API ntfy; kontrakt sprawdzono w oficjalnej dokumentacji.
+
+Konfiguracja zawiera wyłącznie `topic`, jest prywatnym plikiem 0600 poza Git.
+Inicjalizacja generuje nowy losowy kanał z 192 bitami losowości, bez nadpisywania
+pliku. To kanał anonimowy: znajomość jego nazwy umożliwia dostęp, więc nazwa
+pozostaje lokalnie, nigdy w logach, czacie, repo lub argumentach procesu.
+Nie kopiujemy kanału ani sekretów OpenBrain.
+
+Po zatwierdzeniu aktywacji i przejściu istniejącej bramki PR/CI operator:
+
+```sh
+# /PRIVATE oznacza istniejący katalog 0700 poza repozytorium.
+python -m scripts.ntfy_notifications --config /PRIVATE/ntfy.json --init
+```
+
+Operator odczytuje `topic` lokalnie w prywatnym pliku i dodaje subskrypcję
+w ntfy iOS (serwer `https://ntfy.sh`). Następnie wykonuje:
+
+```sh
+python -m scripts.ntfy_notifications --config /PRIVATE/ntfy.json --test
+```
+
+`NTFY_SERVER_ACCEPTED_TEST` potwierdza akceptację serwera; odbiór na iOS wymaga
+potwierdzenia na urządzeniu. Do istniejących poleceń watchdogów
+`scripts.autonomous_history_watchdog` i `scripts.autonomous_portfolio --check-health`
+dodać `--ntfy-config /PRIVATE/ntfy.json`. Zachować wszystkie dotychczasowe argumenty,
+runtime i harmonogramy. Bez tej opcji działanie pozostaje lokalne, jak dotąd.
+
+Deduplicacja korzysta z istniejącego znacznika każdego watchdoga: cicho przy
+niezmienionym stanie, komunikat przy zmianie i recovery. Błąd ntfy nie zatwierdza
+znacznika, więc następna kontrola ponowi próbę; lokalny alert nadal jest wywoływany.
+Awaria Notification Center nie blokuje udanej wysyłki ntfy. Możliwe powtórzenie
+po utracie odpowiedzi HTTP lub błędzie zapisu znacznika (brak gwarancji exactly-once).
+Rollback: usunąć wyłącznie `--ntfy-config` z poleceń watchdogów, zachować stan.
+
+Weryfikacja lokalna obejmuje syntetyczny transport HTTP, prywatne uprawnienia,
+odrzucanie przekierowań, redakcję błędów, CLI, retry, deduplicację i recovery obu
+watchdogów. Wynik: 42/42 testy integracji i watchdogów PASS; pełny zestaw
+w tymczasowej czystej kopii Git i Python 3.14 z zależnością psycopg zgodną z CI:
+549 testów, OK (1 pominięty). Czysta kopia była potrzebna istniejącemu testowi
+atestacji wydania, który celowo odrzuca checkout z niezapisanymi zmianami.
+Aktywacja, kanał rzeczywisty, zmiany LaunchAgents, live POST, odbiór
+na iPhonie, publikacja poprawki i CI dla tej poprawki pozostają PENDING.
+Nie wykonano operacji finansowych ani odczytu kluczy lub konfiguracji kont.
+
 ## 2026-10-23 — Live schema handling: preserve generic tx events as unclassified
 
 The read-only BTC polling service and independent health agent were activated

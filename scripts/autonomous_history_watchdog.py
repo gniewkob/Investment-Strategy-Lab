@@ -8,6 +8,7 @@ import subprocess
 from scripts.autonomous_coinbase_history import atomic_private, require
 from scripts.coinbase_read_only_history import _time
 from scripts.operational_read_only import read_private
+from scripts import ntfy_notifications
 
 MODE = "PRIVATE_HISTORY_WATCHDOG_V1"
 
@@ -56,9 +57,12 @@ def run_check(directory, now, *, notify=native_notify):
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Private local Coinbase history freshness watchdog")
     parser.add_argument("--state-directory", required=True)
+    parser.add_argument("--ntfy-config", help="Private ntfy configuration; enables iOS delivery")
     args = parser.parse_args(argv)
     try:
-        result = run_check(args.state_directory, datetime.now(timezone.utc))
+        notify = (ntfy_notifications.notifier(args.ntfy_config, "history", native_notify)
+                  if args.ntfy_config else native_notify)
+        result = run_check(args.state_directory, datetime.now(timezone.utc), notify=notify)
         print("HISTORY_WATCHDOG_" + result["status"])
         return 0 if result["status"] == "HEALTHY" else 2
     except Exception:
