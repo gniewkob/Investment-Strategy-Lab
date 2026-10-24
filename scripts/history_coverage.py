@@ -70,13 +70,29 @@ def advance(previous, entries, sources):
              and isinstance(sources, dict))
     old = {}
     if previous is not None:
-        _require(isinstance(previous, dict) and set(previous) == {"mode", "streams"}
-                 and previous["mode"] == MODE and isinstance(previous["streams"], dict)
-                 and len(previous["streams"]) <= 8)
+        _require(isinstance(previous, dict) and set(previous) == {
+            "mode", "streams", "gap_range_count", "historical_gap_detected",
+            "latest_source_incomplete", "coverage_scope",
+            "complete_chain_history_certified", "account_to_chain_linkage_certified",
+            "financial_operations"} and previous["mode"] == MODE
+            and isinstance(previous["streams"], dict)
+            and len(previous["streams"]) <= 8
+            and previous["coverage_scope"] ==
+                "ONLY_REGISTERED_ERC20_LOGS_SINCE_FIRST_COMPLETE_WINDOW"
+            and previous["complete_chain_history_certified"] is False
+            and previous["account_to_chain_linkage_certified"] is False
+            and previous["financial_operations"] == 0)
         old = previous["streams"]
         for name, value in old.items():
             _require(isinstance(name, str) and len(name) <= 75)
             _record(value)
+        _require(type(previous["gap_range_count"]) is int
+                 and previous["gap_range_count"] ==
+                     sum(len(v["gap_ranges"]) for v in old.values())
+                 and previous["historical_gap_detected"] is
+                     any(v["gap_ranges"] or v["gap_range_overflow"] for v in old.values())
+                 and previous["latest_source_incomplete"] is
+                     any(v["latest_status"] != "COMPLETE_RANGE" for v in old.values()))
 
     fresh = {}
     for chain, address, label, contracts in entries:
