@@ -23,6 +23,12 @@ jobs:
           python-version: '3.12'
       - name: Isolated capability regression (no network, account or secrets)
         run: python -m unittest discover -s tests -p 'test_coinbase_mcp_capability_audit.py' -v
+      - name: Full offline suite dependencies (no credentials)
+        run: |
+          python -m pip install 'psycopg[binary]>=3.2,<4'
+          python -m pip install -r requirements-autonomous-history.txt
+      - name: Full offline regression
+        run: python -m unittest discover -s tests -v
       - name: Static no-execution module check
         run: |
           python - <<'PY'
