@@ -19,6 +19,7 @@ from urllib.request import Request, build_opener, ProxyHandler
 
 from scripts import autonomous_coinbase_history as history
 from scripts import history_coverage
+from scripts import history_backfill
 from scripts.coinbase_deposit_history import _cursor
 from scripts.operational_read_only import read_private, write_private, observe_wallets, TOKENS, reconcile_events
 from scripts.read_only_portfolio_monitor import fetch_markets, fetch_usdpln
@@ -225,7 +226,8 @@ def pln_values(report, fx):
 
 def cycle(config, state, clock, *, signer_factory=history.make_sdk_signer,
           client_factory=history.ReadOnlyClient, cdp_factory=cdp_signer,
-          wallet_reader=observe_wallets, market_reader=fetch_markets, fx_reader=fetch_usdpln):
+          wallet_reader=observe_wallets, market_reader=fetch_markets, fx_reader=fetch_usdpln,
+          backfill_runner=history_backfill.recover_one):
     now = clock()
     history.require(now.tzinfo is not None and now.utcoffset() == timedelta(0))
     signer = signer_factory(config["credentials_file"])
@@ -299,6 +301,22 @@ def cycle(config, state, clock, *, signer_factory=history.make_sdk_signer,
     coverage = history_coverage.advance(
         (previous or {}).get("history_coverage"), entries if watch is not None else [],
         sources)
+    # A single bounded, read-only backfill per cycle. Persist evidence before
+    # updating the private coverage watermark; failures retain the gap.
+    try:
+        recovery = backfill_runner(coverage, entries if watch is not None else [],
+                                   sources, state)
+        history.require(recovery["financial_operations"] == 0)
+        coverage = recovery["coverage"]
+        recovery_summary = {"status": recovery["status"],
+                            "recovered_block_count": recovery["recovered_block_count"],
+                            "events_saved": recovery["events_saved"],
+                            "financial_operations": 0}
+    except Exception:
+        # Never leak wallet addresses, RPC URLs, hashes, or upstream error text.
+        recovery_summary = {"status": "UNAVAILABLE",
+                            "recovered_block_count": 0, "events_saved": 0,
+                            "financial_operations": 0}
     coverage_alerts = [
         "HISTORY_COVERAGE_GAP" if coverage["historical_gap_detected"] else None,
         "HISTORY_SCOPE_RESET" if any(s["scope_reset"] for s in coverage["streams"].values()) else None,
@@ -310,7 +328,8 @@ def cycle(config, state, clock, *, signer_factory=history.make_sdk_signer,
     paper = source_read(lambda: paper_snapshot(prior_paper, market, clock()), clock)
     ready = (watch is not None and paper["status"] == "OK"
              and all(s["status"] == "OK" for s in sources.values())
-             and not coverage_alerts and not coverage["latest_source_incomplete"])
+             and not coverage_alerts and not coverage["latest_source_incomplete"]
+             and recovery_summary["status"] != "UNAVAILABLE")
     missing = [key for key, s in sources.items() if s["status"] != "OK"]
     with localcontext() as ctx:
         ctx.prec = 120
@@ -326,11 +345,14 @@ def cycle(config, state, clock, *, signer_factory=history.make_sdk_signer,
         "risk_scope": "PRICED_SUBSET_ONLY_NOT_FULL_PORTFOLIO_RISK",
         "reconciliation": reconciliation,
         "history_coverage": coverage,
+        "history_backfill": recovery_summary,
         "paper_simulation": paper,
         "paper_last_success": paper["data"] if paper["status"] == "OK" else (previous or {}).get("paper_last_success"),
         "research": {"mode": "REFERENCE_SIMULATION_ONLY", "profitability_proven": False,
                      "paper_allocations_changed": False},
-        "alerts": missing + coverage_alerts + ([] if watch else ["WALLET_NOT_CONFIGURED"])
+        "alerts": missing + coverage_alerts +
+            (["HISTORY_BACKFILL_UNAVAILABLE"] if recovery_summary["status"] == "UNAVAILABLE" else []) +
+            ([] if watch else ["WALLET_NOT_CONFIGURED"])
             + ([] if paper["status"] == "OK" else ["PAPER_SIMULATION_UNAVAILABLE"]),
         "financial_operations": 0}
     pln_values(report, sources["usdpln"]["data"])
@@ -357,6 +379,10 @@ def render(report):
     coverage_note = ("Pokrycie historii ERC20: " + continuity +
                      "; przedziały brakujących bloków: " + safe(gaps) +
                      ". Nie oznacza to kompletnej historii blockchain.")
+    backfill = report.get("history_backfill") or {}
+    backfill_note = ("Odzyskiwanie: " + safe(backfill.get("status")) +
+                     "; bloki w tym cyklu: " + safe(backfill.get("recovered_block_count")) +
+                     ". Obejmuje tylko zarejestrowane ERC20.")
     return ("<!doctype html><html lang=pl><meta charset=utf-8><meta http-equiv=refresh content=60>"
         "<meta http-equiv=Content-Security-Policy content=\"default-src 'none'; style-src 'unsafe-inline'\">"
         "<title>Investment Strategy Lab</title><style>body{font:17px system-ui;background:#101827;color:#e5eaf3;"
@@ -369,7 +395,8 @@ def render(report):
         ". Brak wyceny części aktywów nie oznacza wartości zero. Pozycje DeFi i NFT nie są w pełni objęte.</p>"
         "<p>" + fx_note + "</p><table><tr><th>Miejsce</th><th>Aktywo</th><th>Ilość</th><th>Wartość referencyjna PLN</th></tr>" + rows +
         "</table><h2>Źródła</h2><ul>" + sources + "</ul><h2>Pokrycie historii</h2><p>" +
-        escape(coverage_note) + "</p><h2>Uzgadnianie</h2>"
+        escape(coverage_note) + "</p><p>" + escape(backfill_note) +
+        "</p><h2>Uzgadnianie</h2>"
         "<h2>Symulacja referencyjna</h2><p>Wycena w PLN: 50% BTC i 50% ETH, "
         "koszt wejścia 20 pb + poślizg 10 pb. Symulacja zachowuje bazę USD; "
         "wartość przeliczana jest na PLN po podanym kursie NBP.</p><p>" +
