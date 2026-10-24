@@ -18,6 +18,7 @@ from urllib.parse import urlencode
 from urllib.request import Request, build_opener, ProxyHandler
 
 from scripts import autonomous_coinbase_history as history
+from scripts import history_coverage
 from scripts.coinbase_deposit_history import _cursor
 from scripts.operational_read_only import read_private, write_private, observe_wallets, TOKENS, reconcile_events
 from scripts.read_only_portfolio_monitor import fetch_markets, fetch_usdpln
@@ -292,9 +293,24 @@ def cycle(config, state, clock, *, signer_factory=history.make_sdk_signer,
         "full_autonomous_reconciliation_ready": False, "unmatched_is_external_funding": False,
         "account_history_checkpoints": "PRIVATE_PER_ACCOUNT_DIRECTORIES"})
     previous = read_private(state / "portfolio.json") if (state / "portfolio.json").exists() else None
+    # Rolling 1000-block reads can miss events during a prolonged Base RPC outage.
+    # Preserve the last verified covered block, record irreversible gaps, and
+    # never conflate recovery of the latest read with continuous history.
+    coverage = history_coverage.advance(
+        (previous or {}).get("history_coverage"), entries if watch is not None else [],
+        sources)
+    coverage_alerts = [
+        "HISTORY_COVERAGE_GAP" if coverage["historical_gap_detected"] else None,
+        "HISTORY_SCOPE_RESET" if any(s["scope_reset"] for s in coverage["streams"].values()) else None,
+        "HISTORY_BLOCK_REGRESSION" if any(
+            s["latest_status"] == "BLOCK_REGRESSION" for s in coverage["streams"].values()) else None,
+    ]
+    coverage_alerts = [item for item in coverage_alerts if item]
     prior_paper = (previous or {}).get("paper_last_success")
     paper = source_read(lambda: paper_snapshot(prior_paper, market, clock()), clock)
-    ready = watch is not None and paper["status"] == "OK" and all(s["status"] == "OK" for s in sources.values())
+    ready = (watch is not None and paper["status"] == "OK"
+             and all(s["status"] == "OK" for s in sources.values())
+             and not coverage_alerts and not coverage["latest_source_incomplete"])
     missing = [key for key, s in sources.items() if s["status"] != "OK"]
     with localcontext() as ctx:
         ctx.prec = 120
@@ -309,11 +325,12 @@ def cycle(config, state, clock, *, signer_factory=history.make_sdk_signer,
         "known_priced_concentration_pct": concentration,
         "risk_scope": "PRICED_SUBSET_ONLY_NOT_FULL_PORTFOLIO_RISK",
         "reconciliation": reconciliation,
+        "history_coverage": coverage,
         "paper_simulation": paper,
         "paper_last_success": paper["data"] if paper["status"] == "OK" else (previous or {}).get("paper_last_success"),
         "research": {"mode": "REFERENCE_SIMULATION_ONLY", "profitability_proven": False,
                      "paper_allocations_changed": False},
-        "alerts": missing + ([] if watch else ["WALLET_NOT_CONFIGURED"])
+        "alerts": missing + coverage_alerts + ([] if watch else ["WALLET_NOT_CONFIGURED"])
             + ([] if paper["status"] == "OK" else ["PAPER_SIMULATION_UNAVAILABLE"]),
         "financial_operations": 0}
     pln_values(report, sources["usdpln"]["data"])
@@ -332,6 +349,14 @@ def render(report):
     rows = "".join("<tr>" + "".join("<td>" + safe(row.get(k, "—")) + "</td>"
         for k in ("location", "asset", "quantity", "reference_value_pln")) + "</tr>" for row in report["holdings"])
     sources = "".join("<li>" + safe(k) + ": " + safe(v["status"]) + "</li>" for k,v in report["sources"].items())
+    coverage = report.get("history_coverage") or {}
+    gaps = coverage.get("gap_range_count")
+    continuity = ("Dane niedostępne" if gaps is None else
+                  "Wykryto przerwę w pokryciu" if coverage.get("historical_gap_detected") else
+                  "Bez wykrytej przerwy od pierwszego pełnego odczytu")
+    coverage_note = ("Pokrycie historii ERC20: " + continuity +
+                     "; przedziały brakujących bloków: " + safe(gaps) +
+                     ". Nie oznacza to kompletnej historii blockchain.")
     return ("<!doctype html><html lang=pl><meta charset=utf-8><meta http-equiv=refresh content=60>"
         "<meta http-equiv=Content-Security-Policy content=\"default-src 'none'; style-src 'unsafe-inline'\">"
         "<title>Investment Strategy Lab</title><style>body{font:17px system-ui;background:#101827;color:#e5eaf3;"
@@ -343,7 +368,8 @@ def render(report):
         "<p>Wycena częściowa PLN: " + safe(report.get("known_priced_subtotal_pln")) +
         ". Brak wyceny części aktywów nie oznacza wartości zero. Pozycje DeFi i NFT nie są w pełni objęte.</p>"
         "<p>" + fx_note + "</p><table><tr><th>Miejsce</th><th>Aktywo</th><th>Ilość</th><th>Wartość referencyjna PLN</th></tr>" + rows +
-        "</table><h2>Źródła</h2><ul>" + sources + "</ul><h2>Uzgadnianie</h2>"
+        "</table><h2>Źródła</h2><ul>" + sources + "</ul><h2>Pokrycie historii</h2><p>" +
+        escape(coverage_note) + "</p><h2>Uzgadnianie</h2>"
         "<h2>Symulacja referencyjna</h2><p>Wycena w PLN: 50% BTC i 50% ETH, "
         "koszt wejścia 20 pb + poślizg 10 pb. Symulacja zachowuje bazę USD; "
         "wartość przeliczana jest na PLN po podanym kursie NBP.</p><p>" +
