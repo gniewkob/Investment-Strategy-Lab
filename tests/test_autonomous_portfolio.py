@@ -168,6 +168,10 @@ class RuntimeTests(unittest.TestCase):
             self.assertEqual(report["reference_currency"], "PLN")
             self.assertEqual(report["financial_operations"], 0)
             self.assertEqual(report["status"], "OBSERVATION_OK")
+            self.assertEqual(report["history_coverage"]["gap_range_count"], 0)
+            self.assertFalse(report["history_coverage"]["complete_chain_history_certified"])
+            self.assertEqual(report["history_coverage"]["streams"]["chain_primary_8453"]
+                             ["last_complete_to_block"], 100)
             self.assertEqual(report["paper_simulation"]["status"], "OK")
             self.assertEqual(report["known_priced_concentration_pct"], {"ETH": "100.00"})
             self.assertFalse(report["complete_net_worth_certified"])
@@ -185,6 +189,9 @@ class RuntimeTests(unittest.TestCase):
             self.assertEqual(partial["status"], "PARTIAL")
             self.assertEqual(partial["holdings"], report["holdings"])
             self.assertIn("chain_primary_8453", partial["alerts"])
+            self.assertTrue(partial["history_coverage"]["latest_source_incomplete"])
+            self.assertEqual(partial["history_coverage"]["streams"]["chain_primary_8453"]
+                             ["last_complete_to_block"], 100)
             health = read_private(root/"health.json")
             self.assertEqual(health["status"], "PARTIAL")
             notifications = []
@@ -327,6 +334,7 @@ class PlnTests(unittest.TestCase):
         self.assertIn("Wartość referencyjna PLN", html)
         self.assertIn("Wycena częściowa PLN: 50.90", html)
         self.assertIn("data tabeli: " + NOW.date().isoformat(), html)
+        self.assertIn("Pokrycie historii ERC20", html)
         self.assertNotIn("Wartość referencyjna USD", html)
 
 
