@@ -34,7 +34,7 @@ def gap(lo=2000, hi=2199):
     return c.advance(first, ENTRIES, source(hi+1, hi+1000))
 
 
-def rpc_fixture(event=False, *, limit=False, changed=False, logs_fail=False):
+def rpc_fixture(event=False, *, limit=False, changed=False, logs_fail=False, head_number=5000):
     calls = []
     def rpc(chain, method, params):
         calls.append((chain, method, params))
@@ -44,7 +44,7 @@ def rpc_fixture(event=False, *, limit=False, changed=False, logs_fail=False):
             return hex(CHAIN)
         if method == "eth_getBlockByNumber":
             ident = params[0]
-            number = 5000 if ident == "finalized" else int(ident, 16)
+            number = head_number if ident == "finalized" else int(ident, 16)
             return {"number": hex(number), "hash": ("0x" + "f"*64 if changed and ident != "finalized" and calls.count((chain,method,params))>1 else HASH),
                     "timestamp": "0x70"}
         if method == "eth_getLogs":
@@ -161,9 +161,12 @@ class RecoveryTests(unittest.TestCase):
             self.assertEqual(captured["events"][0]["block_number"],2000)
             self.assertFalse(captured["coinbase_linkage_verified"])
             self.assertNotIn(ADDRESS,files[0].read_text())
-            # Simulate crash after durable evidence, before coverage commit.
-            again=b.recover_one(original,ENTRIES,source(2081,3080),root,rpc=rpc)
+            # Simulate crash after durable evidence, before coverage commit;
+            # replay must tolerate a later provider-finalized head height.
+            later_rpc, _ = rpc_fixture(event=True, head_number=6000)
+            again=b.recover_one(original,ENTRIES,source(2081,3080),root,rpc=later_rpc)
             self.assertEqual(again["coverage"],first["coverage"])
+            self.assertEqual(json.loads(files[0].read_text())["finalized_head_number_at_read"], 5000)
             self.assertEqual(len(list((Path(root)/"history-backfill").glob("*.json"))),1)
             self.assertEqual(first["coverage"]["streams"][KEY]["gap_ranges"],[[2080,2080]])
 
