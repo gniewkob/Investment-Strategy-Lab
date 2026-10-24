@@ -1,6 +1,6 @@
 """Offline contracts, fault isolation and private-state tests; no real HTTP/key."""
 from copy import deepcopy
-from datetime import timedelta
+from datetime import datetime, timedelta
 import json
 from pathlib import Path
 import tempfile
@@ -111,6 +111,29 @@ class AccountsTests(unittest.TestCase):
 
 
 class RuntimeTests(unittest.TestCase):
+    def test_advancing_clock_keeps_cycle_expiry_valid_for_watchdog(self):
+        tick = 0
+        def clock():
+            nonlocal tick
+            tick += 1
+            return NOW + timedelta(microseconds=tick)
+        with tempfile.TemporaryDirectory() as root:
+            root = Path(root)
+            config = {"credentials_file": "unused", "portfolio_id": PORTFOLIO,
+                      "watchlist_file": None}
+            with patch.object(m, "exchange_accounts", return_value=[]):
+                report = m.cycle(config, root, clock,
+                    signer_factory=lambda p: None, client_factory=lambda *args: None,
+                    market_reader=lambda now: {}, fx_reader=fx_fixture)
+            checked = datetime.fromisoformat(report["checked_at_utc"])
+            expires = datetime.fromisoformat(report["expires_at_utc"])
+            self.assertEqual(expires - checked, timedelta(minutes=30))
+            self.assertEqual(read_private(root/"health.json")["expires_at_utc"],
+                             report["expires_at_utc"])
+            notifications = []
+            self.assertEqual(m.check_health(root, clock(), notifications.append), "PARTIAL")
+            self.assertEqual(notifications, ["PARTIAL"])
+
     def test_source_failure_redacts_error_and_preserves_unknown(self):
         def failed(): raise RuntimeError("[PRIVATE_ACCOUNT_JWT]")
         r = m.source_read(failed, lambda: NOW)

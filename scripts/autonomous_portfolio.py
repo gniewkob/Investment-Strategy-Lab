@@ -336,8 +336,9 @@ def cycle(config, state, clock, *, signer_factory=history.make_sdk_signer,
         concentration = {asset: str((sum(quantity(row["reference_value_usd"]) for row in priced
             if row["asset"] == asset and row["reference_value_usd"] is not None) / subtotal * 100).quantize(Decimal("0.01")))
             for asset in {row["asset"] for row in priced if row["reference_value_usd"] is not None}} if subtotal else {}
-    report = {"mode": MODE, "checked_at_utc": clock().isoformat(),
-        "expires_at_utc": (clock() + timedelta(minutes=30)).isoformat(),
+    checked_at = clock()
+    report = {"mode": MODE, "checked_at_utc": checked_at.isoformat(),
+        "expires_at_utc": (checked_at + timedelta(minutes=30)).isoformat(),
         "status": "OBSERVATION_OK" if ready else "PARTIAL", "sources": sources,
         "holdings": priced, "known_priced_subtotal_usd": format(subtotal, "f"),
         "unpriced_position_count": unpriced, "complete_net_worth_certified": False,
