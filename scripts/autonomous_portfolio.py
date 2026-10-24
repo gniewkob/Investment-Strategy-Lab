@@ -216,8 +216,13 @@ def cycle(config, state, clock, *, signer_factory=history.make_sdk_signer,
         for chain, address, label, contracts in entries:
             one = {"mode": "PRIVATE_WALLET_READ_ONLY", "watch": [item for item in watch["watch"]
                 if item["chain_id"] == chain and item["address"].lower() == address]}
-            sources[f"chain_{label}_{chain}"] = source_read(lambda: wallet_reader(
+            chain_source = source_read(lambda: wallet_reader(
                 one, clock(), history_blocks=1000, allow_partial_history=True), clock)
+            if (chain_source["status"] == "OK" and
+                    chain_source["data"].get("history_complete_for_requested_range") is not True):
+                chain_source["status"] = "PARTIAL"
+                chain_source["reason"] = "REQUESTED_TOKEN_HISTORY_UNAVAILABLE"
+            sources[f"chain_{label}_{chain}"] = chain_source
             sources[f"cdp_{label}_{chain}"] = source_read(lambda: CdpBalances(
                 cdp_factory(config["credentials_file"])).collect(chain, address), clock)
     sources["market"] = source_read(lambda: market_reader(clock()), clock)
@@ -227,7 +232,7 @@ def cycle(config, state, clock, *, signer_factory=history.make_sdk_signer,
     for row in sources["exchange"].get("data") or []:
         holdings.append({"location": "COINBASE", "asset": row["asset"], "quantity": row["quantity"]})
     for key, source in sources.items():
-        if key.startswith("chain_") and source["status"] == "OK":
+        if key.startswith("chain_") and source["status"] in {"OK", "PARTIAL"}:
             for wallet in source["data"]["wallets"]:
                 for position in wallet["positions"]:
                     holdings.append({"location": key, "chain_id": wallet["chain_id"], **position})
@@ -243,7 +248,7 @@ def cycle(config, state, clock, *, signer_factory=history.make_sdk_signer,
             priced.append({**row, "reference_value_usd": format(value, "f") if value is not None else None})
     wallet_events = []
     for key, source in sources.items():
-        if key.startswith("chain_") and source["status"] == "OK":
+        if key.startswith("chain_") and source["status"] in {"OK", "PARTIAL"}:
             for wallet in source["data"]["wallets"]:
                 wallet_events.extend((wallet.get("history") or {}).get("events", []))
     reconciliation = reconcile_events([], wallet_events)

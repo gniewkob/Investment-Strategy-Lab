@@ -73,7 +73,9 @@ Katalog 0700, pliki JSON/HTML 0600; setup nie nadpisuje istniejącej konfiguracj
 Odczyt cykliczny co 900 sekund, oddzielna blokada procesu. Uwierzytelnienie
 Coinbase oraz CDP jest rozdzielone po dokładnym hoście i ścieżce. Brak proxy,
 przekierowań, przekazywania URL od dostawcy i ujawniania treści błędów.
-Każde źródło otrzymuje OK lub UNAVAILABLE, nigdy wymyśloną pustą odpowiedź.
+Każde źródło otrzymuje OK, PARTIAL lub UNAVAILABLE, nigdy wymyśloną pustą odpowiedź.
+Awaria żądanej historii ERC20 zachowuje poprawne salda, lecz wymusza PARTIAL
+oraz alert w health.json; niezależny watchdog przekazuje powiadomienie.
 
 Watchdog uruchamiany osobno co 300 sekund czyta wyłącznie health.json;
 termin ważności 30 minut. Powiadamia o zmianie awarii/zakresu brakujących źródeł,

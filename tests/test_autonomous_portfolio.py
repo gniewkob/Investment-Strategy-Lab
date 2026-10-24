@@ -8,7 +8,7 @@ import unittest
 from unittest.mock import patch
 
 from scripts import autonomous_portfolio as m
-from scripts.operational_read_only import read_private, write_private
+from scripts.operational_read_only import read_private, write_private, ReadOnlyError
 from tests.test_autonomous_coinbase_history import PORTFOLIO, Response, Provider
 from tests.test_coinbase_deposit_history import ACCOUNT, NOW, transaction, page
 from tests.test_operational_read_only import fake_rpc, watch
@@ -140,8 +140,11 @@ class RuntimeTests(unittest.TestCase):
                         return {"data": [{"id": ACCOUNT, "currency": "ETH", "balance": {
                             "currency": "ETH", "amount": "2"}}], "pagination": {"next_uri": None}}
                     return page([transaction()])["response"]
+            log_failure = [False]
             def wallet(conf, now, **kwargs):
                 def rpc(chain, method, params):
+                    if log_failure[0] and method == "eth_getLogs":
+                        raise ReadOnlyError("SYNTHETIC_HISTORY_UNAVAILABLE")
                     result = fake_rpc(chain, method, params)
                     if method == "eth_getBlockByNumber":
                         result["timestamp"] = hex(int(now.timestamp())-30)
@@ -163,6 +166,21 @@ class RuntimeTests(unittest.TestCase):
             self.assertFalse(report["reconciliation"]["full_autonomous_reconciliation_ready"])
             self.assertEqual((root/"portfolio.json").stat().st_mode & 0o777, 0o600)
             self.assertNotIn(ADDRESS, m.render(report))
+            log_failure[0] = True
+            with patch.object(m.CdpBalances, "collect", return_value={"positions": []}):
+                partial = m.cycle(config, root, lambda: NOW, signer_factory=lambda p: None,
+                    client_factory=Source, cdp_factory=lambda p: None, wallet_reader=wallet,
+                    market_reader=lambda now: {asset+"-USD": {"last_closed_price_usd": "1000",
+                        "last_completed_candle_end_utc": now.replace(minute=0,second=0,microsecond=0).isoformat()}
+                        for asset in ("BTC", "ETH")})
+            self.assertEqual(partial["status"], "PARTIAL")
+            self.assertEqual(partial["holdings"], report["holdings"])
+            self.assertIn("chain_primary_8453", partial["alerts"])
+            health = read_private(root/"health.json")
+            self.assertEqual(health["status"], "PARTIAL")
+            notifications = []
+            m.check_health(root, NOW, notifications.append)
+            self.assertEqual(notifications, ["PARTIAL"])
 
     def test_dashboard_escapes_external_content_and_has_expiry(self):
         report = {"checked_at_utc": NOW.isoformat(), "expires_at_utc": NOW.isoformat(),
