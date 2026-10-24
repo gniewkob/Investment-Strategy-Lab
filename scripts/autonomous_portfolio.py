@@ -20,6 +20,7 @@ from urllib.request import Request, build_opener, ProxyHandler
 from scripts import autonomous_coinbase_history as history
 from scripts import history_coverage
 from scripts import history_backfill
+from scripts import ntfy_notifications
 from scripts.coinbase_deposit_history import _cursor
 from scripts.operational_read_only import read_private, write_private, observe_wallets, TOKENS, reconcile_events
 from scripts.read_only_portfolio_monitor import fetch_markets, fetch_usdpln
@@ -471,7 +472,7 @@ def run(config, *, once=False, clock=lambda: datetime.now(timezone.utc), sleep=t
             sleep(interval)
 
 
-def check_health(state, now, notify=None):
+def check_health(state, now, notify=None, *, ntfy_config=None):
     """Independent periodic watchdog, consumes metadata only; notify on change."""
     state = Path(state)
     try:
@@ -498,6 +499,8 @@ def check_health(state, now, notify=None):
                 subprocess.run(["osascript", "-e", 'display notification ' + json.dumps(message, ensure_ascii=False) +
                     ' with title "Investment Strategy Lab"'], check=True, timeout=5,
                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if ntfy_config:
+            notify = ntfy_notifications.notifier(ntfy_config, "portfolio", notify)
         notify(status)
     history.atomic_private(marker, {"signature": signature, "checked_at_utc": now.isoformat()})
     return status
@@ -508,6 +511,7 @@ def main(argv=None):
     parser.add_argument("--config", required=True)
     parser.add_argument("--setup-wallet", action="store_true")
     parser.add_argument("--check-health", action="store_true")
+    parser.add_argument("--ntfy-config", help="Private ntfy configuration; enables iOS delivery")
     parser.add_argument("--enable-live-read", action="store_true")
     parser.add_argument("--once", action="store_true")
     args = parser.parse_args(argv)
@@ -515,7 +519,8 @@ def main(argv=None):
         print("PORTFOLIO_LIVE_READ_NOT_ENABLED"); return 2
     try:
         if args.check_health:
-            status = check_health(read_private(args.config)["state_directory"], datetime.now(timezone.utc))
+            status = check_health(read_private(args.config)["state_directory"], datetime.now(timezone.utc),
+                                  ntfy_config=args.ntfy_config)
             print("PORTFOLIO_WATCHDOG_" + status)
             return 0 if status == "OBSERVATION_OK" else 2
         if args.setup_wallet:
