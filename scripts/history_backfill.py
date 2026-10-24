@@ -148,7 +148,20 @@ def recover_one(current, entries, sources, state, *, rpc=rpc_read):
         f"{key}:{row['identity_sha256']}:{start}:{end}".encode()).hexdigest()
     path = folder / (basename + ".json")
     if os.path.lexists(path):
-        _require(read_private(path) == evidence)
+        persisted = read_private(path)
+        # Head height legitimately advances between retries. The original
+        # evidence stays immutable; require every invariant besides the
+        # originally observed (still >= requested end) finalized head height.
+        _require(isinstance(persisted, dict)
+                 and set(persisted) == set(evidence)
+                 and type(persisted.get("finalized_head_number_at_read")) is int
+                 and persisted["finalized_head_number_at_read"] >= end
+                 and {k: v for k, v in persisted.items()
+                      if k != "finalized_head_number_at_read"} ==
+                     {k: v for k, v in evidence.items()
+                      if k != "finalized_head_number_at_read"})
+        raw = json.dumps(persisted, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+        evidence_sha = sha256(raw).hexdigest()
     else:
         write_private(path, evidence)
         fd = os.open(folder, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
