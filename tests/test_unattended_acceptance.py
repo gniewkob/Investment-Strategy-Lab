@@ -77,6 +77,41 @@ class AcceptanceTests(unittest.TestCase):
         definition['WorkingDirectory'] = '/unreviewed'
         self.assertFalse(m.watchdog_attestation(runtime, definition, loaded)['recognized'])
 
+    def test_transport_metadata_keeps_unknown_and_rejects_extra_private_fields(self):
+        p,h,w=fixture()
+        self.assertIsNone(m.transport_metadata(p))
+        p['rpc_diagnostics']={'mode':'SCOPED_RPC_TRANSPORT_METADATA_V1','scope':'ETHEREUM_BASE_RPC_ONLY',
+                              'chains':{k:dict.fromkeys(m.RPC_COUNTERS,0) for k in ['1','8453']}}
+        p['rpc_diagnostics']['chains']['1']['requests']=2
+        p['rpc_diagnostics']['chains']['1']['http_429']=2
+        self.assertEqual(m.project(p,h,w,{},1010)['http_429_count'],2)
+        p['rpc_diagnostics']['chains']['1']['private_address']='PRIVATE'
+        self.assertIsNone(m.project(p,h,w,{},1010)['http_429_count'])
+        del p['rpc_diagnostics']['chains']['1']['private_address']
+        p['rpc_diagnostics']['chains']['1']['http_429']=True
+        self.assertIsNone(m.transport_metadata(p))
+
+    def test_429_counts_do_not_multiply_with_polls_or_include_baseline(self):
+        rows=[sample(0),sample(900),sample(960,900)]
+        for row,count in zip(rows,[1,2,2]):row['http_429_count']=count
+        self.assertEqual(m.summarize(rows)['http_429_count'],2)
+
+    def test_full_known_telemetry_window_can_pass_without_certifying_notification_delivery(self):
+        rows=[sample(n,(n//900)*900) for n in range(0,86401,60)]
+        for row in rows:row['http_429_count']=0
+        result=m.summarize(rows)
+        self.assertEqual(result['status'],'PASS')
+        self.assertEqual(result['reasons'],[])
+        self.assertFalse(result['watchdog_transitions_certified'])
+
+    def test_expected_runtime_pin_is_explicit(self):
+        row=sample(1000)
+        row['runtime']['commit']='a'*40
+        self.assertFalse(m.healthy(row))
+        row['runtime']['expected_commit']='a'*40
+        self.assertTrue(m.healthy(row))
+        with self.assertRaises(ValueError):m.record(Path('/unused'),Path('/unused'),Path('/unused'),0,'not-a-full-sha')
+
     def test_repeated_checkpoint_and_baseline_excluded(self):
         result = m.summarize([sample(1000), sample(1060,1000), sample(1960,1900)])
         self.assertEqual(result['natural_unique_checkpoints'], 1)

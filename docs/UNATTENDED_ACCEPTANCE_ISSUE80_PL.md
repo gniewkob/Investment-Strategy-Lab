@@ -120,3 +120,13 @@ zweryfikowany notification checkout/SHA; wymaga zgodności z załadowanym launch
 oraz czystego kodu. Nie czyta configu ntfy, nie wysyła powiadomień. Zmiana definicji
 nadal jest faktem historycznym; nie przepisujemy dziennika ani wyniku zakończonego
 okna. Poprawka przygotowana do wdrożenia, istniejący kolektor jeszcze jej nie uruchamia.
+
+Kolektor przygotowano również do odczytu `rpc_diagnostics` z osobnej poprawki
+supervisora: akceptuje tylko dwa identyfikatory sieci i stałe, nieujemne liczniki
+całkowite. Brak, dodatkowe pola lub błędne liczniki = UNKNOWN. Sumy HTTP429 są
+liczone raz na nowy naturalny checkpoint, z wyłączeniem baseline'u i duplikatów.
+Stare próbki bez telemetry nadal blokują certyfikację całego historycznego okna.
+Nowy pełny okres ze wszystkimi spełnionymi kontrolami może otrzymać PASS dla
+obserwowanego zakresu; nie oznacza to dostarczenia powiadomień ani pełnej historii.
+Nowy pin supervisora podaje się jawnie jako pełny `--expected-commit`; domyślny
+pozostaje c0b5430. To przygotowanie kodu, nie wdrożenie lub nowy okres obserwacji.

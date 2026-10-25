@@ -16,6 +16,8 @@ import tempfile
 
 EXPECTED_SHA = 'c0b543015f61692a85808f11e577c8c13fd4dc8f'
 NOTIFICATION_SHA = 'fcc7c2cc774b98d29af5a4286278c8ebac432038'
+RPC_COUNTERS = ('requests', 'http_200', 'http_429', 'http_other', 'network_errors',
+                'rpc_capacity_errors', 'rpc_other_errors', 'rejected_responses', 'retries')
 SOURCE_NAMES = ('exchange', 'history', 'cdp_ethereum', 'cdp_base',
                 'rpc_ethereum', 'rpc_base', 'market', 'nbp')
 STATUSES = {'OK', 'PARTIAL', 'UNAVAILABLE', 'STALE', 'UNKNOWN'}
@@ -50,10 +52,10 @@ def command(args, cwd=None):
     return subprocess.check_output(args, cwd=cwd, text=True, stderr=subprocess.DEVNULL, timeout=10).strip()
 
 
-def watchdog_attestation(runtime, definition, loaded_job):
+def watchdog_attestation(runtime, definition, loaded_job, expected_commit=EXPECTED_SHA):
     """Attest the reviewed, separately pinned notification checkout, without reading ntfy config."""
     directory = definition.get('WorkingDirectory')
-    allowed = {str(runtime): EXPECTED_SHA,
+    allowed = {str(runtime): expected_commit,
                str(runtime.parent / 'notification-app'): NOTIFICATION_SHA}
     loaded = re.search(r'^\s*working directory = (.+)$', loaded_job, re.M)
     if directory not in allowed or loaded is None or loaded[1] != directory:
@@ -64,7 +66,7 @@ def watchdog_attestation(runtime, definition, loaded_job):
             'commit': sha if re.fullmatch('[0-9a-f]{40}', sha) else None, 'clean': clean}
 
 
-def inspect_runtime(runtime):
+def inspect_runtime(runtime, expected_commit=EXPECTED_SHA):
     """Store only allowlisted process metadata; never persist command lines."""
     job = command(['launchctl', 'print', f'gui/{os.getuid()}/pl.gniewkob.isl.portfolio'])
     match = re.search(r'^\s*pid = (\d+)$', job, re.M)
@@ -86,7 +88,7 @@ def inspect_runtime(runtime):
         definition_hashes.append(sha256(raw).hexdigest())
     supervisor, watchdog = definitions
     watchdog_job = command(['launchctl', 'print', f'gui/{os.getuid()}/pl.gniewkob.isl.portfolio-health'])
-    watchdog_code = watchdog_attestation(runtime, watchdog, watchdog_job)
+    watchdog_code = watchdog_attestation(runtime, watchdog, watchdog_job, expected_commit)
     schedule_ok = (supervisor.get('KeepAlive') is True and supervisor.get('RunAtLoad') is True and
                    watchdog.get('StartInterval') == 300 and
                    watchdog_code['recognized'] and
@@ -100,6 +102,7 @@ def inspect_runtime(runtime):
     if not re.fullmatch('[0-9a-f]{40}', sha):
         raise ValueError('invalid revision')
     return {'pid': pid, 'process_start': start, 'unique_natural_supervisor': natural,
+            'expected_commit': expected_commit,
             'watchdog_code': watchdog_code,
             'launchagent_hashes': definition_hashes, 'launchagents_ok': schedule_ok, 'publicnode': provider_ok, 'runtime_bound': bound_runtime,
             'commit': sha, 'clean': not bool(command(['git', 'status', '--porcelain'], cwd=runtime))}
@@ -116,6 +119,26 @@ def source_name(key):
                 if key.endswith(suffix):
                     return group + '_' + network
     return None
+
+
+def transport_metadata(portfolio):
+    """Absent/invalid instrumentation remains UNKNOWN; copy fixed integer counters only."""
+    value = portfolio.get('rpc_diagnostics')
+    if not isinstance(value, dict) or value.get('mode') != 'SCOPED_RPC_TRANSPORT_METADATA_V1' or value.get('scope') != 'ETHEREUM_BASE_RPC_ONLY':
+        return None
+    chains = value.get('chains')
+    if not isinstance(chains, dict) or set(chains) != {'1', '8453'}:
+        return None
+    clean = {}
+    for chain, counters in chains.items():
+        if not isinstance(counters, dict) or set(counters) != set(RPC_COUNTERS) or any(
+                type(count) is not int or not 0 <= count <= 1_000_000 for count in counters.values()):
+            return None
+        if (sum(counters[k] for k in ('http_200', 'http_429', 'http_other')) > counters['requests'] or
+                counters['network_errors'] > counters['requests'] or counters['retries'] > counters['requests']):
+            return None
+        clean[chain] = {key: counters[key] for key in RPC_COUNTERS}
+    return clean
 
 
 def project(portfolio, health, watchdog, runtime, now):
@@ -163,6 +186,7 @@ def project(portfolio, health, watchdog, runtime, now):
     watchdog_status = str(watchdog.get('signature', '')).split(':', 1)[0]
     if watchdog_status not in {'OBSERVATION_OK', 'PARTIAL', 'UNAVAILABLE', 'STALE', 'INVALID_OR_MISSING'}:
         watchdog_status = 'UNKNOWN'
+    transport = transport_metadata(portfolio)
     status = health['status'] if health['status'] in {'OBSERVATION_OK', 'PARTIAL', 'UNAVAILABLE'} else 'UNKNOWN'
     return {'observed_at': now, 'checkpoint_at': checked, 'expires_at': expires,
             'status': status if now < expires else 'STALE', 'runtime': runtime,
@@ -175,14 +199,17 @@ def project(portfolio, health, watchdog, runtime, now):
             'watchdog_fresh': -5 <= watchdog_age <= 420,
             'watchdog_at': timestamp(watchdog['checked_at_utc']), 'watchdog_status': watchdog_status,
             'watchdog_matches': watchdog.get('signature') == status + ':' and status == 'OBSERVATION_OK',
-            'http_429_count': None, 'financial_operations': 0}
+            'rpc_transport': transport,
+            'http_429_count': sum(c['http_429'] for c in transport.values()) if transport is not None else None,
+            'financial_operations': 0}
 
 
 def healthy(row):
     r = row.get('runtime', {})
     return (row.get('status') == 'OBSERVATION_OK' and r.get('unique_natural_supervisor') is True and
             r.get('clean') is True and r.get('launchagents_ok') is True and
-            r.get('publicnode') is True and r.get('runtime_bound') is True and r.get('commit') == EXPECTED_SHA and
+            r.get('publicnode') is True and r.get('runtime_bound') is True and
+            r.get('commit') == r.get('expected_commit', EXPECTED_SHA) and
             row.get('coverage_ok') is True and row.get('watchdog_fresh') is True and
             row.get('watchdog_matches') is True and row.get('backfill', {}).get('available') is True and
             set(row.get('sources', {})) == set(SOURCE_NAMES) and
@@ -201,7 +228,7 @@ def summarize(rows):
                           r['checkpoint_at'] <= r['observed_at'] + 5})
     gaps = [b - a for a, b in zip(checkpoints, checkpoints[1:])]
     poll_gaps = [b['observed_at'] - a['observed_at'] for a, b in zip(rows, rows[1:])]
-    reasons = ['HTTP_429_TELEMETRY_NOT_PERSISTED']
+    reasons = ['HTTP_429_TELEMETRY_NOT_PERSISTED'] if any(r.get('http_429_count') is None for r in rows) else []
     if now - first < 86400:
         reasons.append('LESS_THAN_24H')
     definitions = {tuple(r.get('runtime', {}).get('launchagent_hashes', [])) for r in rows}
@@ -221,7 +248,7 @@ def summarize(rows):
     if now - first >= 86400 and len(checkpoints) < math.floor((now - first) / 1020):
         reasons.append('INSUFFICIENT_NATURAL_CHECKPOINTS')
     unique = {r['checkpoint_at']: r for r in rows if r.get('checkpoint_at') in checkpoints}
-    return {'status': 'PARTIAL', 'reasons': reasons, 'start_utc': datetime.fromtimestamp(first, timezone.utc).isoformat(),
+    return {'status': 'PARTIAL' if reasons else 'PASS', 'reasons': reasons, 'start_utc': datetime.fromtimestamp(first, timezone.utc).isoformat(),
             'end_utc': datetime.fromtimestamp(now, timezone.utc).isoformat(), 'span_seconds': now - first,
             'sample_count': len(rows), 'natural_unique_checkpoints': len(checkpoints),
             'baseline_checkpoints_excluded': 1,
@@ -241,7 +268,9 @@ def summarize(rows):
             'recovered_blocks_unique_natural_cycles': sum(r.get('backfill', {}).get('recovered_blocks', 0)
                                                         for r in unique.values()),
             'process_identity_count': len(identities), 'all_samples_healthy': all(healthy(r) for r in rows),
-            'http_429_count': None, 'watchdog_transitions_certified': False,
+            'http_429_count': None if any(r.get('http_429_count') is None for r in rows) else
+                sum(r['http_429_count'] for r in unique.values()),
+            'watchdog_transitions_certified': False,
             'prior_history_certified': False, 'financial_operations': 0}
 
 
@@ -256,7 +285,9 @@ def atomic(path, data):
             os.unlink(temporary)
 
 
-def record(state, runtime, output, now):
+def record(state, runtime, output, now, expected_commit=EXPECTED_SHA):
+    if not re.fullmatch('[0-9a-f]{40}', expected_commit):
+        raise ValueError('full expected revision required')
     private_directory(state); private_directory(output)
     # Separate lock: never acquire or mutate the supervisor lock/state.
     fd = os.open(output / 'collector.lock', os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
@@ -267,7 +298,7 @@ def record(state, runtime, output, now):
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         try:
             row = project(load(state / 'portfolio.json'), load(state / 'health.json'),
-                          load(state / 'watchdog.json'), inspect_runtime(runtime), now)
+                          load(state / 'watchdog.json'), inspect_runtime(runtime, expected_commit), now)
         except Exception:
             row = {'observed_at': now, 'status': 'INVALID', 'financial_operations': 0}
         ledger = output / 'samples.jsonl'
@@ -296,9 +327,10 @@ def main(argv=None):
     parser.add_argument('--state-directory', required=True, type=Path)
     parser.add_argument('--runtime', required=True, type=Path)
     parser.add_argument('--output', required=True, type=Path)
+    parser.add_argument('--expected-commit', default=EXPECTED_SHA)
     args = parser.parse_args(argv)
     try:
-        summary = record(args.state_directory, args.runtime, args.output, datetime.now(timezone.utc).timestamp())
+        summary = record(args.state_directory, args.runtime, args.output, datetime.now(timezone.utc).timestamp(), args.expected_commit)
         print('UNATTENDED_ACCEPTANCE_' + summary['status'])
         return 0
     except Exception:
