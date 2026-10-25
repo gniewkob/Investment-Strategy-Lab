@@ -92,3 +92,31 @@ pozostaje cicha bez istotnej zmiany; po upływie 24h odczyta wynik i przekaże j
 raport, po czym ma się wstrzymać. Wymaga działającego Maca/aplikacji; ciągłość
 samego kolektora i automatyzacji musi zostać oceniona z przyszłych zapisów.
 To nie jest druga instancja odczytująca Coinbase ani drugi supervisor.
+
+## Ustalenia po pełnym oknie, 25.10.2026
+
+Pierwsze rzeczywiste pełne okno: 24.10 **18:12:03.219346** – 25.10
+**18:12:23.877249 UTC**, **86420,657903 s**, 1423 próbki. Nowe naturalne
+checkpointy: **94**, w tym **83 OBSERVATION_OK / 11 PARTIAL**, wszystkie PARTIAL
+na RPC Ethereum. Pozostałe siedem grup źródeł 94/94 OK. Nominalne przedziały
+900 s: 96; odstępy rzeczywistych checkpointów **919,116624–937,510678 s**,
+zero ponad 1020 s. Najdłuższy odstęp kolektora **64,901244 s**, zero ponad 120 s.
+Zero zapisanych zakresów luk i odzyskanych bloków; nie oznacza pełnej historii.
+Zero nieświeżych próbek watchdoga; 20 obserwowanych zmian statusu, bez certyfikacji
+dostarczenia powiadomień. HTTP429 nadal UNKNOWN. Wynik całego okna: **PARTIAL**.
+SHA-256 pierwszych 1423 dokładnych linii dziennika:
+`b6998318bb9b7674768fc845a115ec925b538d83440da854828f45c694d06c89`.
+Automatyzację jednorazowego odbioru usunięto po raporcie; kolektor nadal działa.
+
+Zmiana definicji watchdoga zaobserwowana 24.10 **19:38:13.216767 UTC** pochodzi
+z osobnego wdrożenia powiadomień ntfy: [PR #82](https://github.com/gniewkob/Investment-Strategy-Lab/pull/82),
+merge **fcc7c2cc774b98d29af5a4286278c8ebac432038**, oraz receipt wdrożenia PR #83.
+Checkout `notification-app` jest obecnie czysty na tym SHA; supervisor pozostaje
+na c0b5430. Poprzednia kontrola kolektora wymagała tego samego checkoutu dla obu
+jobów i dlatego błędnie odrzucała poprawny osobny checkout watchdoga.
+
+Poprawiona kontrola akceptuje wyłącznie pierwotny checkout/SHA lub ten konkretny,
+zweryfikowany notification checkout/SHA; wymaga zgodności z załadowanym launchd
+oraz czystego kodu. Nie czyta configu ntfy, nie wysyła powiadomień. Zmiana definicji
+nadal jest faktem historycznym; nie przepisujemy dziennika ani wyniku zakończonego
+okna. Poprawka przygotowana do wdrożenia, istniejący kolektor jeszcze jej nie uruchamia.

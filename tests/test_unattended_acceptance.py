@@ -50,7 +50,7 @@ class AcceptanceTests(unittest.TestCase):
         job = 'pid = 123\nworking directory = /synthetic/runtime\nISL_BASE_RPC_SOURCE => PUBLICNODE'
         def commands(args, cwd=None):
             if args[0] == 'launchctl':
-                return 'run interval = 300 seconds' if args[-1].endswith('-health') else job
+                return 'run interval = 300 seconds\nworking directory = /synthetic/runtime' if args[-1].endswith('-health') else job
             if args[:2] == ['ps','-axo']:
                 return '123 python -m scripts.autonomous_portfolio --enable-live-read'
             if args[0] == 'ps': return 'fixed-start'
@@ -60,6 +60,22 @@ class AcceptanceTests(unittest.TestCase):
         for key in ['unique_natural_supervisor','runtime_bound','launchagents_ok','publicnode','clean']:
             self.assertTrue(result[key])
         self.assertEqual(len(result['launchagent_hashes']),2)
+
+    def test_separate_reviewed_watchdog_checkout_is_recognized(self):
+        runtime = Path('/synthetic/runtime')
+        directory = runtime.parent / 'notification-app'
+        definition = {'WorkingDirectory': str(directory)}
+        loaded = 'working directory = ' + str(directory)
+        with patch.object(m, 'command', side_effect=[m.NOTIFICATION_SHA, '']):
+            self.assertTrue(m.watchdog_attestation(runtime, definition, loaded)['recognized'])
+        for revision, dirty in [('f' * 40, ''), (m.NOTIFICATION_SHA, ' M code.py')]:
+            with patch.object(m, 'command', side_effect=[revision, dirty]):
+                self.assertFalse(m.watchdog_attestation(runtime, definition, loaded)['recognized'])
+        with patch.object(m, 'command') as command:
+            self.assertFalse(m.watchdog_attestation(runtime, definition, 'working directory = /other')['recognized'])
+            command.assert_not_called()
+        definition['WorkingDirectory'] = '/unreviewed'
+        self.assertFalse(m.watchdog_attestation(runtime, definition, loaded)['recognized'])
 
     def test_repeated_checkpoint_and_baseline_excluded(self):
         result = m.summarize([sample(1000), sample(1060,1000), sample(1960,1900)])

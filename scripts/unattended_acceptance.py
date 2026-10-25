@@ -15,6 +15,7 @@ import subprocess
 import tempfile
 
 EXPECTED_SHA = 'c0b543015f61692a85808f11e577c8c13fd4dc8f'
+NOTIFICATION_SHA = 'fcc7c2cc774b98d29af5a4286278c8ebac432038'
 SOURCE_NAMES = ('exchange', 'history', 'cdp_ethereum', 'cdp_base',
                 'rpc_ethereum', 'rpc_base', 'market', 'nbp')
 STATUSES = {'OK', 'PARTIAL', 'UNAVAILABLE', 'STALE', 'UNKNOWN'}
@@ -49,6 +50,20 @@ def command(args, cwd=None):
     return subprocess.check_output(args, cwd=cwd, text=True, stderr=subprocess.DEVNULL, timeout=10).strip()
 
 
+def watchdog_attestation(runtime, definition, loaded_job):
+    """Attest the reviewed, separately pinned notification checkout, without reading ntfy config."""
+    directory = definition.get('WorkingDirectory')
+    allowed = {str(runtime): EXPECTED_SHA,
+               str(runtime.parent / 'notification-app'): NOTIFICATION_SHA}
+    loaded = re.search(r'^\s*working directory = (.+)$', loaded_job, re.M)
+    if directory not in allowed or loaded is None or loaded[1] != directory:
+        return {'recognized': False, 'commit': None, 'clean': False}
+    sha = command(['git', 'rev-parse', 'HEAD'], cwd=directory)
+    clean = not bool(command(['git', 'status', '--porcelain'], cwd=directory))
+    return {'recognized': sha == allowed[directory] and clean,
+            'commit': sha if re.fullmatch('[0-9a-f]{40}', sha) else None, 'clean': clean}
+
+
 def inspect_runtime(runtime):
     """Store only allowlisted process metadata; never persist command lines."""
     job = command(['launchctl', 'print', f'gui/{os.getuid()}/pl.gniewkob.isl.portfolio'])
@@ -71,9 +86,10 @@ def inspect_runtime(runtime):
         definition_hashes.append(sha256(raw).hexdigest())
     supervisor, watchdog = definitions
     watchdog_job = command(['launchctl', 'print', f'gui/{os.getuid()}/pl.gniewkob.isl.portfolio-health'])
+    watchdog_code = watchdog_attestation(runtime, watchdog, watchdog_job)
     schedule_ok = (supervisor.get('KeepAlive') is True and supervisor.get('RunAtLoad') is True and
                    watchdog.get('StartInterval') == 300 and
-                   watchdog.get('WorkingDirectory') == str(runtime) and
+                   watchdog_code['recognized'] and
                    '--check-health' in watchdog.get('ProgramArguments', []) and
                    'run interval = 300 seconds' in watchdog_job)
     provider_ok = 'ISL_BASE_RPC_SOURCE => PUBLICNODE' in job
@@ -84,6 +100,7 @@ def inspect_runtime(runtime):
     if not re.fullmatch('[0-9a-f]{40}', sha):
         raise ValueError('invalid revision')
     return {'pid': pid, 'process_start': start, 'unique_natural_supervisor': natural,
+            'watchdog_code': watchdog_code,
             'launchagent_hashes': definition_hashes, 'launchagents_ok': schedule_ok, 'publicnode': provider_ok, 'runtime_bound': bound_runtime,
             'commit': sha, 'clean': not bool(command(['git', 'status', '--porcelain'], cwd=runtime))}
 
