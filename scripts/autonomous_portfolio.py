@@ -23,6 +23,7 @@ from scripts import history_backfill
 from scripts import ntfy_notifications
 from scripts.coinbase_deposit_history import _cursor
 from scripts.operational_read_only import read_private, write_private, observe_wallets, TOKENS, reconcile_events
+from scripts.operational_read_only import capture_rpc_metadata, rpc_metadata_snapshot
 from scripts.read_only_portfolio_monitor import fetch_markets, fetch_usdpln
 
 NETWORKS = {1: "ethereum", 8453: "base"}
@@ -229,6 +230,17 @@ def cycle(config, state, clock, *, signer_factory=history.make_sdk_signer,
           client_factory=history.ReadOnlyClient, cdp_factory=cdp_signer,
           wallet_reader=observe_wallets, market_reader=fetch_markets, fx_reader=fetch_usdpln,
           backfill_runner=history_backfill.recover_one):
+    with capture_rpc_metadata():
+        return _cycle(config, state, clock, signer_factory=signer_factory,
+                      client_factory=client_factory, cdp_factory=cdp_factory,
+                      wallet_reader=wallet_reader, market_reader=market_reader,
+                      fx_reader=fx_reader, backfill_runner=backfill_runner)
+
+
+def _cycle(config, state, clock, *, signer_factory=history.make_sdk_signer,
+           client_factory=history.ReadOnlyClient, cdp_factory=cdp_signer,
+           wallet_reader=observe_wallets, market_reader=fetch_markets, fx_reader=fetch_usdpln,
+           backfill_runner=history_backfill.recover_one):
     now = clock()
     history.require(now.tzinfo is not None and now.utcoffset() == timedelta(0))
     signer = signer_factory(config["credentials_file"])
@@ -339,6 +351,7 @@ def cycle(config, state, clock, *, signer_factory=history.make_sdk_signer,
             for asset in {row["asset"] for row in priced if row["reference_value_usd"] is not None}} if subtotal else {}
     checked_at = clock()
     report = {"mode": MODE, "checked_at_utc": checked_at.isoformat(),
+        "rpc_diagnostics": rpc_metadata_snapshot(),
         "expires_at_utc": (checked_at + timedelta(minutes=30)).isoformat(),
         "status": "OBSERVATION_OK" if ready else "PARTIAL", "sources": sources,
         "holdings": priced, "known_priced_subtotal_usd": format(subtotal, "f"),
