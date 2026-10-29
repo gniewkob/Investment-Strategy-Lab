@@ -9,6 +9,7 @@ already-running Python process has reloaded the on-disk Git checkout.
 from __future__ import annotations
 
 import argparse
+from hashlib import sha1, sha256
 from datetime import datetime, timezone
 import json
 import os
@@ -24,6 +25,8 @@ LABEL_PORTFOLIO = "pl.gniewkob.isl.portfolio"
 LABEL_HEALTH = "pl.gniewkob.isl.portfolio-health"
 LABEL_COLLECTOR = "pl.gniewkob.isl.acceptance"
 SHA_RE = re.compile(r"[0-9a-f]{40}\Z")
+# Reviewed collector v2, Git blob at deployment PR #81 head 3122b571b0e5...
+APPROVED_COLLECTOR_GIT_BLOB = "41a8ca1e40af5697f6661b5e158bc205b4fe48ff"
 
 
 class PreflightRejected(ValueError):
@@ -67,6 +70,47 @@ def command(*args, cwd=None):
         raise PreflightRejected("M1_PREDEPLOY_READONLY_REJECTED") from None
     require(result.returncode == 0 and len(result.stdout) < 128_000)
     return result.stdout.strip()
+
+
+def verified_collector_entrypoint(arguments, *, approved_source=None, uid=None):
+    """Only accepted entrypoints: reviewed -m module or exact approved copied code.
+
+    The deployed collector is a separate private .py file on macOS, not
+    necessarily named unattended_acceptance.py. Require exact source bytes
+    before treating a direct script invocation as authorized. No execution.
+    """
+    require(type(arguments) is list and all(type(a) is str for a in arguments))
+    require(len(arguments) >= 3)
+    exe = Path(arguments[0]).name.lower()
+    require(exe.startswith(("python", "pypy")))
+    if arguments[1:3] == ["-m", "scripts.unattended_acceptance"]:
+        return "REVIEWED_PYTHON_MODULE"
+    require(len(arguments) >= 2 and arguments[1].endswith(".py"))
+    script = Path(arguments[1])
+    require(script.is_absolute())
+    if uid is None:
+        uid = os.getuid()
+    src = Path(approved_source or Path(__file__).resolve().parent /
+               "unattended_acceptance.py")
+    # Read only the audited source file, after rejecting symlink/path tricks.
+    def trusted_bytes(path):
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+        with os.fdopen(fd, "rb") as stream:
+            st = os.fstat(stream.fileno())
+            require(stat.S_ISREG(st.st_mode) and st.st_uid == uid
+                    and not (st.st_mode & 0o022)
+                    and 10_000 <= st.st_size <= 200_000)
+            raw = stream.read(200_001)
+        require(len(raw) == st.st_size and len(raw) <= 200_000)
+        return raw
+
+    approved = trusted_bytes(src)
+    signature = sha1(b"blob " + str(len(approved)).encode("ascii") +
+                     b"\x00" + approved).hexdigest()
+    require(signature == APPROVED_COLLECTOR_GIT_BLOB)
+    deployed = trusted_bytes(script)
+    require(sha256(deployed).digest() == sha256(approved).digest())
+    return "REVIEWED_COPIED_PYTHON_SCRIPT"
 
 
 def check(expected, *, home=None, uid=None, reader=read_launchagent,
@@ -118,9 +162,10 @@ def check(expected, *, home=None, uid=None, reader=read_launchagent,
     require(type(watchdog.get("StartInterval")) is int
             and watchdog["StartInterval"] == 300)
     step("CHECK_COLLECTOR_COMMAND")
-    require(type(collector_args) is list
-            and all(type(arg) is str for arg in collector_args)
-            and "scripts.unattended_acceptance" in collector_args)
+    require(type(collector_args) is list and all(type(arg) is str
+            for arg in collector_args))
+    step("CHECK_COLLECTOR_CODE_IDENTITY")
+    collector_mode = verified_collector_entrypoint(collector_args, uid=uid)
     step("CHECK_COLLECTOR_INTERVAL")
     require(type(collector.get("StartInterval")) is int
             and collector["StartInterval"] == 60)
@@ -184,6 +229,7 @@ def check(expected, *, home=None, uid=None, reader=read_launchagent,
         "active_process_command_matches_supervisor": True,
         "loaded_periodic_health_and_collector": True,
         "collector_expected_sha_matches_existing_runtime": True,
+        "collector_entrypoint_verified": collector_mode,
         "current_runtime_checkout_clean": True,
         "candidate_private_release_canary": "PASS",
         "candidate_is_active_on_disk_revision": current == expected,
