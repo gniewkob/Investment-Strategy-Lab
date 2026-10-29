@@ -135,8 +135,52 @@ class PreflightTests(unittest.TestCase):
                 "credential content /private/DO_NOT_OUTPUT")):
             with redirect_stdout(out):
                 self.assertEqual(m.main(["--expected-commit", NEW]), 2)
-        self.assertEqual(out.getvalue().strip(), "M1_PREDEPLOY_READONLY_REJECTED")
+        self.assertEqual(out.getvalue().strip().splitlines(), [
+            "M1_PREDEPLOY_READONLY_REJECTED",
+            "M1_FAILURE_STAGE=VALIDATE_EXPECTED_SHA",
+        ])
         self.assertNotIn("DO_NOT_OUTPUT", out.getvalue())
+
+    def test_diagnostic_stage_sanitizes_bad_loaded_collector(self):
+        observed = []
+
+        def bad_collector(*args, **kwargs):
+            if args[:2] == ("launchctl", "print") and args[-1].endswith(
+                    m.LABEL_COLLECTOR):
+                raise RuntimeError(
+                    "private/config /secret-value should never appear")
+            return commands(*args, **kwargs)
+
+        with self.assertRaises(RuntimeError):
+            m.check(NEW, reader=lambda _home, label, _uid: fixtures()[label],
+                    command_fn=bad_collector, probe=probe, stage=observed.append)
+        self.assertEqual(observed[-1], "CHECK_LOADED_PERIODIC_SCHEDULES")
+
+        def bad_canary(*args):
+            raise RuntimeError("wallet address private")
+
+        observed.clear()
+        with self.assertRaises(RuntimeError):
+            m.check(NEW, reader=lambda _home, label, _uid: fixtures()[label],
+                    command_fn=commands, probe=bad_canary,
+                    stage=observed.append)
+        self.assertEqual(observed[-1], "CHECK_CANDIDATE_RELEASE_CANARY")
+
+    def test_cli_sanitizes_caught_stage_diagnostic(self):
+        output = StringIO()
+
+        def reject(_sha, *, stage):
+            stage("CHECK_COLLECTOR_EXPECTED_SHA")
+            raise RuntimeError("sensitive local path")
+
+        with patch.object(m, "check", side_effect=reject):
+            with redirect_stdout(output):
+                self.assertEqual(m.main(["--expected-commit", NEW]), 2)
+        self.assertEqual(output.getvalue().strip().splitlines(), [
+            "M1_PREDEPLOY_READONLY_REJECTED",
+            "M1_FAILURE_STAGE=CHECK_COLLECTOR_EXPECTED_SHA",
+        ])
+        self.assertNotIn("sensitive", output.getvalue())
 
     def test_command_line_option_rejects_duplicate_or_missing_values(self):
         self.assertEqual(m.option(["--output", OUT], "--output"), OUT)
