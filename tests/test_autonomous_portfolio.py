@@ -210,6 +210,8 @@ class RuntimeTests(unittest.TestCase):
                         "last_completed_candle_end_utc": now.replace(minute=0,second=0,microsecond=0).isoformat()}
                         for asset in ("BTC", "ETH")})
             self.assertEqual(partial["status"], "PARTIAL")
+            self.assertEqual(partial["sources"]["chain_primary_8453"]
+                             ["history_failure_categories"], ["UNKNOWN"])
             self.assertEqual(partial["holdings"], report["holdings"])
             self.assertIn("chain_primary_8453", partial["alerts"])
             self.assertTrue(partial["history_coverage"]["latest_source_incomplete"])
