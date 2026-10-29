@@ -7,6 +7,56 @@ All dynamic HTML text is escaped. This file is safe for offline synthetic tests.
 from html import escape
 
 
+_RPC_COUNTS = (
+    "requests", "http_200", "http_429", "http_other", "network_errors",
+    "rpc_capacity_errors", "rpc_other_errors", "rejected_responses", "retries",
+)
+
+
+def _rpc_metadata_table(metadata):
+    """Render only the exact fixed transport schema introduced by PR #85.
+
+    Older reports, missing producers, invalid counters or unexpected provider
+    structures remain UNKNOWN; never turn absent telemetry into zero RPC errors.
+    This is presentation only and has no producer/transport side effects.
+    """
+    unavailable = ("<p class='fine'>Telemetria transportu RPC niedostępna lub "
+                   "niezweryfikowana dla tego cyklu. Liczba HTTP 429: nieznana.</p>")
+    if not isinstance(metadata, dict) or set(metadata) != {"mode", "scope", "chains"}:
+        return unavailable
+    if (metadata["mode"] != "SCOPED_RPC_TRANSPORT_METADATA_V1"
+            or metadata["scope"] != "ETHEREUM_BASE_RPC_ONLY"):
+        return unavailable
+    chains = metadata["chains"]
+    if not isinstance(chains, dict) or set(chains) != {"1", "8453"}:
+        return unavailable
+    for counts in chains.values():
+        if (not isinstance(counts, dict) or set(counts) != set(_RPC_COUNTS)
+                or any(type(counts[k]) is not int or not 0 <= counts[k] <= 1000000000
+                       for k in _RPC_COUNTS)):
+            return unavailable
+    labels = {"1": "Ethereum", "8453": "Base"}
+    rows = "".join(
+        "<tr><th scope='row'>" + labels[chain] + "</th>" +
+        "".join("<td class='number'>" + str(chains[chain][k]) + "</td>"
+                for k in _RPC_COUNTS) + "</tr>"
+        for chain in ("1", "8453")
+    )
+    headers = (
+        "Żądania", "HTTP 200", "HTTP 429", "Inne HTTP",
+        "Błędy sieci", "RPC capacity", "Inne błędy RPC",
+        "Odrzucone odpowiedzi", "Ponowienia",
+    )
+    return ("<div class='table-wrap'><table><thead><tr><th>Sieć</th>" +
+            "".join("<th scope='col'>" + h + "</th>" for h in headers) +
+            "</tr></thead><tbody>" + rows + "</tbody></table></div>" +
+            "<p class='fine'>Liczniki dotyczą tylko RPC Ethereum/Base w ostatnim "
+            "zapisanym cyklu, razem z próbami ponowienia i backfill. "
+            "HTTP 429 po udanym retry nadal jest liczone. Kategorie błędów mogą "
+            "się nakładać. Zero w tym zestawieniu nie oznacza braku błędów "
+            "w Coinbase, CDP, danych rynkowych ani w poprzednich cyklach.</p>")
+
+
 def render(report):
     """Render the existing private portfolio report as static, local-only HTML."""
     def safe(value):
@@ -96,6 +146,8 @@ def render(report):
         "brak potwierdzonej przewagi strategii lub ceny wykonania."
     )
 
+    rpc_table = _rpc_metadata_table(report.get("rpc_diagnostics"))
+
     reconcile = report.get("reconciliation") or {}
     reconciliation_note = (
         "Powiązanie Coinbase Exchange z transakcjami na Ethereum/Base nie jest "
@@ -172,6 +224,8 @@ def render(report):
         "</tbody></table></div></section>"
         "<section class='panel'><h2>Pokrycie historii i uzgadnianie</h2><p>" +
         safe(coverage_note) + "</p><p>" + safe(reconciliation_note) + "</p></section>"
+        "<section class='panel'><h2>Diagnostyka Ethereum/Base RPC</h2>" +
+        rpc_table + "</section>"
         "<section class='panel'><h2>Symulacja referencyjna</h2><p>" +
         safe(paper_note) + "</p></section>"
         "<section class='panel'><details><summary>Alerty i wyjątki</summary><ul>" +
