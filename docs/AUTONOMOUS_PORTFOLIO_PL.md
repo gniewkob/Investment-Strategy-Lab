@@ -105,3 +105,38 @@ Nieudane powiadomienie nie zatwierdza znacznika, więc będzie ponowione.
 
 Nie wdrażamy webhooków: okresowy odczyt wystarcza w tym zakresie, a udostępnienie
 publicznego odbiornika nie jest potrzebne. Brak nowych płatnych usług lub subskrypcji.
+
+## Panel obserwacyjny v2 — propozycja zmian 29.10.2026
+
+Nowy, bezsieciowy renderer `scripts/private_portfolio_dashboard.py` odczytuje
+wyłącznie istniejący lokalny `report` supervisora. `scripts.autonomous_portfolio.render`
+zachowuje dotychczasowe API i deleguje generację HTML do tego renderer-a.
+
+- Pokazuje wynik ostatniego cyklu, zakres wyceny referencyjnej PLN, liczbę
+  dostępnych/niezweryfikowanych pozycji, status każdego źródła oraz czas kontroli.
+- Oddziela kontrolę ciągłości wyłącznie obserwowanej historii ERC20 i backfill
+  od pełnej rekonsyliacji Coinbase↔Wallet; nigdy nie certyfikuje pełnej historii.
+- W symulacji wymaga `paper_simulation.status=OK`, nie pokazuje poprzedniego
+  poprawnego wyniku, jeśli bieżący odczyt jest niedostępny.
+- Utrzymuje `HOLD_NO_CHANGE` jako stałą klasyfikację edukacyjną, nie generuje
+  sygnałów ani dyspozycji finansowych.
+- Escape wszystkich dynamicznych pól, Content-Security-Policy
+  `default-src 'none'`, brak JavaScript, zewnętrznych obrazów, fontów i żądań.
+- Pozostaje plikiem 0600 w lokalnym katalogu 0700; brak nowego URL/API.
+  Odświeżenie HTML co 60 s wczytuje ostatni zapis — NIE jest ponowną próbą
+  odczytu konta ani dowodem ciągłej pracy usługi.
+- Czas `checked_at_utc` informuje o wykonaniu odczytu; nie dowodzi oryginalnej
+  chronologii publikacji historycznych cen. Referencyjne NBP PLN nie jest
+  ceną wykonania ani historyczną stopą zwrotu PLN.
+
+**Granica odbioru:** gałąź i PR to wyłącznie zmiana kodu. CI syntetyczne nie
+certyfikuje rzeczywistego procesu na Macu, odbioru 24h, aktywów, sald, P&L,
+autentycznego PIT ani sprawności alertów iOS. Przed ewentualnym wdrożeniem:
+przejrzeć diff, wymagać zielonego CI dla dokładnego SHA; dopiero potem
+kontrolowany rollout zgodny z wcześniejszym runbookiem i rollbackiem. Nie
+przerywać trwającego zadania obserwacyjnego #80; nie scalać/nie wdrażać na
+podstawie samego przygotowania PR.
+
+**Bez zmian:** Coinbase/CDP/EVM read-only, uprawnienia, watchlista, harmonogramy,
+Neon i źródła danych, kredencjały, prywatne checkpointy, konfiguracja i
+operacje finansowe.
