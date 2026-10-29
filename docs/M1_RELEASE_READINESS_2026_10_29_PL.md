@@ -316,3 +316,48 @@ Kolejne kroki G2 (np. odczyt statusu `launchctl`, potwierdzenie
 kolektora oraz weryfikacja nowego checkoutu przez canary) mogą nadal
 zwrócić NO-GO. Nawet kompletne G2 PASS nie stanowi zgody na restart,
 merge, deploy ani automatyczny trading.
+
+
+## M1.2 — niezależne code review i blokady release (2026-10-29)
+
+W odpowiedzi na `@codex review` dla kandydata
+`4d406bb104f0cf87360c47800b33df9cada2d06c` opublikowano dwie
+uwagi **P2**, dotyczące przypadków fałszywego `READY`:
+
+1. Samo `python -m scripts.unattended_acceptance` mogło zostać
+   zaakceptowane bez weryfikacji, z którego katalogu i przy jakim
+   `PYTHONPATH` Python załaduje moduł.
+2. Zabrakło sprawdzenia wymaganego argumentu `--runtime`. Bez niego
+   rzeczywisty kolektor kończy pracę na walidacji CLI, mimo że
+   preflight mógł zgłosić `PASS`.
+
+**Zmiana fail-closed, bez ingerencji w Maca:**
+
+- W M1.2 dopuszczamy wyłącznie udowodnioną lokalnie formę
+  `python /abs/path/copied.py` z kontrolą właściciela, uprawnień,
+  braku symlinków oraz pełnej zgodności kodu z przypiętym zatwierdzonym
+  Git blob. `python -m` jest od tej wersji **celowo odrzucany**,
+  dopóki nie istnieje osobna, niezależna atestacja rozwiązywania
+  importu; wcześniej wspierany wariant modułowy nie był bezpiecznie
+  atestowany.
+- Wymagamy pojedynczego `--runtime` z bezwzględną ścieżką równą
+  `WorkingDirectory` istniejącego supervisora, oprócz
+  `--state-directory`, `--output`, `--expected-commit`.
+- Weryfikujemy kompletne 10 argumentów znanego modelu produkcyjnego.
+  Nieznany wpis ani brakujący plik kolektora nie wywoła wyjątku
+  zdradzającego prywatną ścieżkę w publicznym CLI.
+
+**Dowód poprzedniego M1.1:** Operator uruchomił starszy zweryfikowany
+commit `4d406bb104f0cf87360c47800b33df9cada2d06c`, otrzymując
+`READY_FOR_RELEASE_REVIEW_NOT_DEPLOYED` i exit `0`. Zapisał
+`current_on_disk_runtime_sha=93038ca62edff39492f9b8ddb68d890e3e6e5c45`,
+`collector_entrypoint_verified=REVIEWED_COPIED_PYTHON_SCRIPT`,
+`financial_operations=0`, `files_changed=0`,
+`services_restarted=0`. **Ten wynik dotyczy wyłącznie starego SHA;**
+nie jest odbiorem najnowszej poprawki po review.
+
+Bieżące prace odbywają się wyłącznie w Draft PR #87. **Brak
+zezwolenia na merge, restart, zmianę LaunchAgent, zapis do Neon
+lub operacje finansowe.** Do decyzji G3 pozostaje niezależny
+re-review najnowszego commitu, aktualny lokalny preflight
+i odczytowe potwierdzenie rzeczywistych kopii rollbacku.
