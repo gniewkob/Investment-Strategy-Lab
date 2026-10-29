@@ -148,6 +148,29 @@ class PrivateDashboardTests(unittest.TestCase):
                         ratio(token(theme, name), background), 4.5,
                         "Supporting text needs at least 4.5:1 on its surface")
 
+    def test_rpc_table_network_labels_are_kept_readable_on_mobile(self):
+        report = self.make_report()
+        counters = {
+            "requests": 7, "http_200": 7, "http_429": 0,
+            "http_other": 0, "network_errors": 0,
+            "rpc_capacity_errors": 0, "rpc_other_errors": 0,
+            "rejected_responses": 0, "retries": 0,
+        }
+        report["rpc_diagnostics"] = {
+            "mode": "SCOPED_RPC_TRANSPORT_METADATA_V1",
+            "scope": "ETHEREUM_BASE_RPC_ONLY",
+            "chains": {"1": dict(counters), "8453": dict(counters)},
+        }
+        page = portfolio.render(report)
+        self.assertIn("class='rpc-table'", page)
+        self.assertIn("Tabela RPC jest przewijana poziomo.", page)
+        self.assertIn("white-space:nowrap; overflow-wrap:normal; min-width:114px;", page)
+        self.assertIn("tbody th[scope='row']", page)
+        self.assertIn("<th scope='row'>Ethereum</th>", page)
+        self.assertIn("<th scope='row'>Base</th>", page)
+        # All mobile navigation destinations stay discoverable without hidden scroll.
+        self.assertIn("overflow-x:visible; flex-wrap:wrap;", page)
+
     def test_design_does_not_make_unknown_holding_or_status_falsely_current(self):
         report = self.make_report()
         report["known_priced_subtotal_pln"] = None
