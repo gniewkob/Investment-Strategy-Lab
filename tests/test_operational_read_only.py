@@ -326,8 +326,26 @@ class OperationalTests(unittest.TestCase):
         self.assertEqual(base['positions'][0]['quantity'], '0.1')
         self.assertIsNone(base['history']['event_count'])
         self.assertEqual(base['history']['status'], 'UNAVAILABLE')
+        self.assertEqual(base['history']['failure_category'], 'UNKNOWN')
         self.assertEqual(result['wallets'][1]['history']['event_count'], 1)
         self.assertNotIn(ADDR, json.dumps(result))
+
+    def test_partial_history_preserves_only_known_local_failure_codes(self):
+        def validator_failure(chain, method, params):
+            if method == 'eth_getLogs':
+                raise m.ReadOnlyError('UNCONFIRMED_OR_INVALID_LOG')
+            return fake_rpc(chain, method, params)
+        result = m.observe_wallets(watch(), NOW, rpc=validator_failure,
+                                  history_blocks=10, allow_partial_history=True)
+        history = result['wallets'][0]['history']
+        self.assertEqual(history['status'], 'UNAVAILABLE')
+        self.assertEqual(history['failure_category'], 'UNCONFIRMED_OR_INVALID_LOG')
+        self.assertEqual(history['error_code'], 'READ_ONLY_HISTORY_SOURCE_UNAVAILABLE')
+        self.assertNotIn(ADDR, str(history))
+        self.assertEqual(m.history_failure_category(m.ReadOnlyError('RPC_HTTP_FAILURE')),
+                         'RPC_HTTP_FAILURE')
+        self.assertEqual(m.history_failure_category(
+            m.ReadOnlyError('PRIVATE_' + ADDR)), 'UNKNOWN')
 
     def test_partial_history_cli_writes_private_report_and_returns_exit_three(self):
         from unittest.mock import patch
