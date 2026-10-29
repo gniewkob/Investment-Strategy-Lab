@@ -365,46 +365,9 @@ def cycle(config, state, clock, *, signer_factory=history.make_sdk_signer,
 
 
 def render(report):
-    def safe(v): return escape("Dane niedostępne" if v is None else str(v))
-    fx = report.get("reference_fx") or {}
-    fx_note = ("Kurs średni NBP USD/PLN: " + safe(fx["usdpln_mid_reference"]) +
-               " · data tabeli: " + safe(fx["nbp_effective_date"]) +
-               ". Kurs referencyjny, nie kurs wymiany walut.") if fx else "Kurs NBP niedostępny — wycena w PLN niedostępna."
-    rows = "".join("<tr>" + "".join("<td>" + safe(row.get(k, "—")) + "</td>"
-        for k in ("location", "asset", "quantity", "reference_value_pln")) + "</tr>" for row in report["holdings"])
-    sources = "".join("<li>" + safe(k) + ": " + safe(v["status"]) + "</li>" for k,v in report["sources"].items())
-    coverage = report.get("history_coverage") or {}
-    gaps = coverage.get("gap_range_count")
-    continuity = ("Dane niedostępne" if gaps is None else
-                  "Wykryto przerwę w pokryciu" if coverage.get("historical_gap_detected") else
-                  "Bez wykrytej przerwy od pierwszego pełnego odczytu")
-    coverage_note = ("Pokrycie historii ERC20: " + continuity +
-                     "; przedziały brakujących bloków: " + safe(gaps) +
-                     ". Nie oznacza to kompletnej historii blockchain.")
-    backfill = report.get("history_backfill") or {}
-    backfill_note = ("Odzyskiwanie: " + safe(backfill.get("status")) +
-                     "; bloki w tym cyklu: " + safe(backfill.get("recovered_block_count")) +
-                     ". Obejmuje tylko zarejestrowane ERC20.")
-    return ("<!doctype html><html lang=pl><meta charset=utf-8><meta http-equiv=refresh content=60>"
-        "<meta http-equiv=Content-Security-Policy content=\"default-src 'none'; style-src 'unsafe-inline'\">"
-        "<title>Investment Strategy Lab</title><style>body{font:17px system-ui;background:#101827;color:#e5eaf3;"
-        "max-width:1100px;margin:40px auto;padding:20px}td,th{padding:12px;text-align:left}"
-        "table{width:100%;border-collapse:collapse}tr{border-bottom:1px solid #334155}</style>"
-        "<h1>Investment Strategy Lab</h1><p>Tryb obserwacji · operacje finansowe: 0</p>"
-        "<p>Aktualizacja: " + safe(report["checked_at_utc"]) + " · ważne do: " + safe(report["expires_at_utc"]) +
-        "</p><p>Status: " + safe(report["status"]) + "</p><h2>Znane pozycje</h2>"
-        "<p>Wycena częściowa PLN: " + safe(report.get("known_priced_subtotal_pln")) +
-        ". Brak wyceny części aktywów nie oznacza wartości zero. Pozycje DeFi i NFT nie są w pełni objęte.</p>"
-        "<p>" + fx_note + "</p><table><tr><th>Miejsce</th><th>Aktywo</th><th>Ilość</th><th>Wartość referencyjna PLN</th></tr>" + rows +
-        "</table><h2>Źródła</h2><ul>" + sources + "</ul><h2>Pokrycie historii</h2><p>" +
-        escape(coverage_note) + "</p><p>" + escape(backfill_note) +
-        "</p><h2>Uzgadnianie</h2>"
-        "<h2>Symulacja referencyjna</h2><p>Wycena w PLN: 50% BTC i 50% ETH, "
-        "koszt wejścia 20 pb + poślizg 10 pb. Symulacja zachowuje bazę USD; "
-        "wartość przeliczana jest na PLN po podanym kursie NBP.</p><p>" +
-        safe((report.get("paper_simulation", {}).get("data") or {}).get("reference_value_pln")) +
-        " PLN</p><p>Historia konta nie zapewnia jeszcze powiązania z transakcją blockchain. "
-        "Zgodność kwoty i czasu nie potwierdza wpłaty. Wynik strategii: nieustalony.</p></html>")
+    """Render the local observation using the isolated, testable HTML view."""
+    from scripts.private_portfolio_dashboard import render as render_private_dashboard
+    return render_private_dashboard(report)
 
 
 def private_html(path, content):
