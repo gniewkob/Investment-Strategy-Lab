@@ -229,3 +229,38 @@ Następny krok to ponowny jednorazowy preflight z nowym dokładnym SHA
 PR #87, bez zmieniania nawet jednej definicji launchd. Zachować wynik
 próby w Issue #80. **Nie obchodzić testu przez dopasowywanie pinu,
 usuwanie próbek, tworzenie plików w katalogu stanu lub restart.**
+
+
+## M1.1 — drugi rzeczywisty odczyt: definicje watchdog/kolektor
+
+Operator wykonał dokładny izolowany checkout
+`d5e192d18b32138d464db20100284be89d272dd4`. Zwrócono
+`M1_CANDIDATE_SHA=VERIFIED`,
+`M1_PREDEPLOY_READONLY_REJECTED` i
+**`M1_FAILURE_STAGE=CHECK_WATCHDOG_COLLECTOR_DEFINITIONS`**.
+
+Jest to dowód rozbieżności co najmniej jednego **założenia preflightu**
+w następującej grupie, a nie dowód awarii pracującego procesu:
+
+- obecność flagi `--check-health` w argv watchdoga;
+- `StartInterval==300` w jego zapisanej definicji;
+- obecność modułu `scripts.unattended_acceptance` jako osobnego
+  argumentu programu kolektora;
+- `StartInterval==60` w jego zapisanej definicji.
+
+Wszystkie cztery sprawdzenia były wcześniej połączone w jednym warunku.
+Nie ma dowodu, które jest niezgodne ani czy rzeczywisty
+harmonogram launchd jest uszkodzony. **Nie wolno zmieniać konfiguracji
+w celu sztucznego PASS**.
+
+Kolejny read-only preflight rozdziela grupę na osobne bezpieczne
+kody `CHECK_WATCHDOG_COMMAND`,
+`CHECK_WATCHDOG_INTERVAL`, `CHECK_COLLECTOR_COMMAND`,
+`CHECK_COLLECTOR_INTERVAL`. Niezależne testy syntetyczne obejmują
+każdy przypadek. Wyświetlane są tylko z góry zdefiniowane nazwy
+bramek; nigdy surowa lista argumentów, ścieżki ani zawartość plist.
+Po uzyskaniu dokładnego kodu należy sprawdzić zgodność
+z udokumentowanym, **obecnym** sposobem uruchamiania, zanim
+zaproponujemy jakąkolwiek poprawkę w kodzie albo plan release.
+
+M1 G2 nadal `NO-GO`; G3 deploy nieautoryzowany i niewykonany.
