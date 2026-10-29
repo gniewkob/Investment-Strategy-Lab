@@ -73,22 +73,22 @@ def command(*args, cwd=None):
 
 
 def verified_collector_entrypoint(arguments, *, approved_source=None, uid=None):
-    """Accept only an exact approved Python collector script by source bytes.
+    """Require Python isolated mode and an exact approved collector source.
 
-    The deployed collector is a separate private .py file on macOS, not
-    necessarily named unattended_acceptance.py. A module name is insufficient
-    to attest Python import resolution; reject -m to prevent false PASS.
-    No code execution, no provider access and no local writes.
+    -I ignores PYTHON* environment variables, user site packages, and
+    script-directory import resolution. This prevents an untrusted argparse
+    (or another stdlib module) next to the copied file or in PYTHONPATH.
+    No code execution, provider access, state write, or service restart.
     """
     require(type(arguments) is list and all(type(a) is str for a in arguments))
-    require(len(arguments) >= 2 and Path(arguments[0]).is_absolute())
+    require(len(arguments) >= 3 and Path(arguments[0]).is_absolute())
     exe = Path(arguments[0]).name.lower()
     require(re.fullmatch(r"(?:python(?:3(?:\.\d+)?)?|pypy(?:3(?:\.\d+)?)?)", exe) is not None)
-    # A bare -m token is NOT an attestation: an alternate collector
-    # WorkingDirectory or PYTHONPATH can resolve arbitrary module code.
-    # This gate deliberately accepts only exact source-attested files.
-    require(arguments[1].endswith(".py"))
-    script = Path(arguments[1])
+    # A source hash proves only this script, not its imports. The -I
+    # interpreter flag must precede the script. All other interpreter
+    # modes (including bare script, -m, -c, or extra flags) fail closed.
+    require(arguments[1] == "-I" and arguments[2].endswith(".py"))
+    script = Path(arguments[2])
     require(script.is_absolute())
     if uid is None:
         uid = os.getuid()
@@ -116,7 +116,7 @@ def verified_collector_entrypoint(arguments, *, approved_source=None, uid=None):
     require(signature == APPROVED_COLLECTOR_GIT_BLOB)
     deployed = trusted_bytes(script)
     require(sha256(deployed).digest() == sha256(approved).digest())
-    return "REVIEWED_COPIED_PYTHON_SCRIPT"
+    return "REVIEWED_ISOLATED_COPIED_PYTHON_SCRIPT"
 
 
 def check(expected, *, home=None, uid=None, reader=read_launchagent,
@@ -208,7 +208,7 @@ def check(expected, *, home=None, uid=None, reader=read_launchagent,
     collector_output = option(collector_args, "--output")
     collector_expected = option(collector_args, "--expected-commit")
     collector_runtime = option(collector_args, "--runtime")
-    require(len(collector_args) == 10
+    require(len(collector_args) == 11
             and Path(collector_state).is_absolute()
             and Path(collector_output).is_absolute()
             and Path(collector_runtime).is_absolute()
@@ -241,6 +241,7 @@ def check(expected, *, home=None, uid=None, reader=read_launchagent,
         "collector_expected_sha_matches_existing_runtime": True,
         "collector_runtime_path_matches_supervisor": True,
         "collector_entrypoint_verified": collector_mode,
+        "collector_isolated_python_imports": True,
         "current_runtime_checkout_clean": True,
         "candidate_private_release_canary": "PASS",
         "candidate_is_active_on_disk_revision": current == expected,
