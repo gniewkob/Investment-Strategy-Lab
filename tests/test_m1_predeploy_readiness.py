@@ -17,6 +17,8 @@ ROOT = "/private/only-running-service"
 CONFIG = "/private/only-config"
 STATE = "/private/only-state"
 OUT = "/private/only-evidence"
+COLLECTOR_FILE = str(Path(__file__).resolve().parents[1] /
+                     "scripts" / "unattended_acceptance.py")
 
 
 def fixtures():
@@ -34,9 +36,9 @@ def fixtures():
             "StartInterval": 300,
         },
         m.LABEL_COLLECTOR: {
-            "ProgramArguments": ["/usr/bin/python3", "-m",
-                "scripts.unattended_acceptance", "--state-directory", STATE,
-                "--output", OUT, "--expected-commit", OLD],
+            "ProgramArguments": ["/usr/bin/python3", COLLECTOR_FILE,
+                "--state-directory", STATE, "--output", OUT,
+                "--expected-commit", OLD, "--runtime", ROOT],
             "StartInterval": 60,
         },
     }
@@ -119,8 +121,8 @@ class PreflightTests(unittest.TestCase):
             ("CHECK_WATCHDOG_INTERVAL",
              lambda d: d[m.LABEL_HEALTH].update(StartInterval=60)),
             ("CHECK_COLLECTOR_CODE_IDENTITY",
-             lambda d: d[m.LABEL_COLLECTOR]["ProgramArguments"].remove(
-                 "scripts.unattended_acceptance")),
+             lambda d: d[m.LABEL_COLLECTOR]["ProgramArguments"].__setitem__(
+                 1, "/private/unapproved_entrypoint.py")),
             ("CHECK_COLLECTOR_INTERVAL",
              lambda d: d[m.LABEL_COLLECTOR].update(StartInterval=300)),
         )
@@ -151,12 +153,12 @@ class PreflightTests(unittest.TestCase):
             args = ["/usr/bin/python3", str(script)]
             self.assertEqual(m.verified_collector_entrypoint(args),
                              "REVIEWED_COPIED_PYTHON_SCRIPT")
-            self.assertEqual(m.verified_collector_entrypoint([
-                "/usr/bin/python3", "-m", "scripts.unattended_acceptance"]),
-                "REVIEWED_PYTHON_MODULE")
+            with self.assertRaises(m.PreflightRejected):
+                m.verified_collector_entrypoint([
+                    "/usr/bin/python3", "-m", "scripts.unattended_acceptance"])
 
             defs = fixtures()
-            defs[m.LABEL_COLLECTOR]["ProgramArguments"][:3] = args
+            defs[m.LABEL_COLLECTOR]["ProgramArguments"][:2] = args
             result = self.verify(definitions=defs)
             self.assertEqual(result["collector_entrypoint_verified"],
                              "REVIEWED_COPIED_PYTHON_SCRIPT")
@@ -202,6 +204,34 @@ class PreflightTests(unittest.TestCase):
                 m.verified_collector_entrypoint(
                     ["/usr/bin/python3", str(altered_script)],
                     approved_source=altered_source)
+
+    def test_required_runtime_arg_must_be_single_and_match_supervisor(self):
+        cases = (
+            lambda d: d[m.LABEL_COLLECTOR]["ProgramArguments"].pop(),
+            lambda d: d[m.LABEL_COLLECTOR]["ProgramArguments"].pop(-2),
+            lambda d: d[m.LABEL_COLLECTOR]["ProgramArguments"].__setitem__(-1, "/wrong/runtime"),
+            lambda d: d[m.LABEL_COLLECTOR]["ProgramArguments"].extend(
+                ["--runtime", ROOT]),
+        )
+        for change in cases:
+            with self.subTest(change=str(change)):
+                d = fixtures()
+                change(d)
+                stages = []
+                with self.assertRaises(m.PreflightRejected):
+                    m.check(NEW, reader=lambda _home, label, _uid: d[label],
+                            command_fn=commands, probe=probe, stage=stages.append)
+                self.assertEqual(stages[-1], "CHECK_COLLECTOR_EXPECTED_SHA")
+
+    def test_module_name_cannot_trick_code_attestation(self):
+        d = fixtures()
+        d[m.LABEL_COLLECTOR]["ProgramArguments"][:2] = [
+            "/usr/bin/python3", "-m", "scripts.unattended_acceptance"]
+        stages = []
+        with self.assertRaises(m.PreflightRejected):
+            m.check(NEW, reader=lambda _home, label, _uid: d[label],
+                    command_fn=commands, probe=probe, stage=stages.append)
+        self.assertEqual(stages[-1], "CHECK_COLLECTOR_CODE_IDENTITY")
 
     def test_live_process_not_in_approved_working_directory_is_blocked(self):
         def moved(*args, **kwargs):
