@@ -47,14 +47,19 @@ def fixtures():
     }
 
 
-def commands(*args, cwd=None):
+def commands(*args, cwd=None, definitions=None):
     if args[:2] == ("launchctl", "print"):
         if args[-1].endswith(m.LABEL_PORTFOLIO):
             return "pid = 123\nworking directory = " + ROOT
         if args[-1].endswith(m.LABEL_HEALTH):
             return "run interval = 300 seconds"
         if args[-1].endswith(m.LABEL_COLLECTOR):
-            return "run interval = 60 seconds"
+            argv = (definitions or fixtures())[m.LABEL_COLLECTOR]["ProgramArguments"]
+            return ("run interval = 60 seconds\n"
+                    + "program = " + argv[0] + "\n"
+                    + "arguments = {\n"
+                    + "\n".join("    " + arg for arg in argv)
+                    + "\n}")
     if args[:3] == ("ps", "-p", "123"):
         return "/usr/bin/python3 -m scripts.autonomous_portfolio --enable-live-read"
     if args[:2] == ("git", "-C") and "rev-parse" in args:
@@ -82,6 +87,9 @@ class PreflightTests(unittest.TestCase):
         definitions = definitions or fixtures()
         def read(_home, label, _uid):
             return deepcopy(definitions[label])
+        if command_fn is commands:
+            command_fn = lambda *args, **kwargs: commands(
+                *args, definitions=definitions, **kwargs)
         return m.check(NEW, reader=read, command_fn=command_fn,
                        probe=canary,
                        now=datetime(2026, 10, 29, tzinfo=timezone.utc))
@@ -268,6 +276,47 @@ class PreflightTests(unittest.TestCase):
                 env=env, capture_output=True, text=True, check=True, timeout=8)
             self.assertNotIn(folder, isolated.stdout)
             self.assertNotIn("UNTRUSTED_SHADOW_LOADED", isolated.stderr)
+
+    def test_loaded_collector_must_match_approved_plist_args(self):
+        def outdated(*args, **kwargs):
+            if args[:2] == ("launchctl", "print") and args[-1].endswith(
+                    m.LABEL_COLLECTOR):
+                argv = fixtures()[m.LABEL_COLLECTOR]["ProgramArguments"][:]
+                argv.remove("-I")  # simulated old loaded job still non-isolated
+                return ("run interval = 60 seconds\n"
+                        + "program = " + argv[0] + "\n"
+                        + "arguments = {\n"
+                        + "\n".join("    " + x for x in argv)
+                        + "\n}")
+            return commands(*args, **kwargs)
+        stages = []
+        with self.assertRaises(m.PreflightRejected):
+            m.check(NEW, reader=lambda _home, label, _uid: fixtures()[label],
+                    command_fn=outdated, probe=probe, stage=stages.append)
+        self.assertEqual(stages[-1], "CHECK_LOADED_COLLECTOR_COMMAND")
+
+    def test_explicit_program_override_is_not_trusted(self):
+        d = fixtures()
+        d[m.LABEL_COLLECTOR]["Program"] = "/usr/bin/false"
+        stages = []
+        with self.assertRaises(m.PreflightRejected):
+            m.check(NEW, reader=lambda _home, label, _uid: d[label],
+                    command_fn=commands, probe=probe, stage=stages.append)
+        self.assertEqual(stages[-1], "CHECK_COLLECTOR_EXECUTABLE")
+        d[m.LABEL_COLLECTOR]["Program"] = d[m.LABEL_COLLECTOR]["ProgramArguments"][0]
+        self.assertTrue(self.verify(definitions=d)["loaded_collector_executable_arguments_attested"])
+
+    def test_missing_loaded_arguments_block_fails_closed(self):
+        def missing(*args, **kwargs):
+            if args[:2] == ("launchctl", "print") and args[-1].endswith(
+                    m.LABEL_COLLECTOR):
+                return "run interval = 60 seconds\nprogram = /usr/bin/python3"
+            return commands(*args, **kwargs)
+        stages = []
+        with self.assertRaises(m.PreflightRejected):
+            m.check(NEW, reader=lambda _home, label, _uid: fixtures()[label],
+                    command_fn=missing, probe=probe, stage=stages.append)
+        self.assertEqual(stages[-1], "CHECK_LOADED_COLLECTOR_COMMAND")
 
     def test_live_process_not_in_approved_working_directory_is_blocked(self):
         def moved(*args, **kwargs):
