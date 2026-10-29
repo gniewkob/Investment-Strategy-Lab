@@ -73,19 +73,21 @@ def command(*args, cwd=None):
 
 
 def verified_collector_entrypoint(arguments, *, approved_source=None, uid=None):
-    """Only accepted entrypoints: reviewed -m module or exact approved copied code.
+    """Accept only an exact approved Python collector script by source bytes.
 
     The deployed collector is a separate private .py file on macOS, not
-    necessarily named unattended_acceptance.py. Require exact source bytes
-    before treating a direct script invocation as authorized. No execution.
+    necessarily named unattended_acceptance.py. A module name is insufficient
+    to attest Python import resolution; reject -m to prevent false PASS.
+    No code execution, no provider access and no local writes.
     """
     require(type(arguments) is list and all(type(a) is str for a in arguments))
-    require(len(arguments) >= 2)
+    require(len(arguments) >= 2 and Path(arguments[0]).is_absolute())
     exe = Path(arguments[0]).name.lower()
-    require(exe.startswith(("python", "pypy")))
-    if arguments[1:3] == ["-m", "scripts.unattended_acceptance"]:
-        return "REVIEWED_PYTHON_MODULE"
-    require(len(arguments) >= 2 and arguments[1].endswith(".py"))
+    require(re.fullmatch(r"(?:python(?:3(?:\.\d+)?)?|pypy(?:3(?:\.\d+)?)?)", exe) is not None)
+    # A bare -m token is NOT an attestation: an alternate collector
+    # WorkingDirectory or PYTHONPATH can resolve arbitrary module code.
+    # This gate deliberately accepts only exact source-attested files.
+    require(arguments[1].endswith(".py"))
     script = Path(arguments[1])
     require(script.is_absolute())
     if uid is None:
@@ -201,8 +203,12 @@ def check(expected, *, home=None, uid=None, reader=read_launchagent,
     collector_state = option(collector_args, "--state-directory")
     collector_output = option(collector_args, "--output")
     collector_expected = option(collector_args, "--expected-commit")
-    require(Path(collector_state).is_absolute()
+    collector_runtime = option(collector_args, "--runtime")
+    require(len(collector_args) == 10
+            and Path(collector_state).is_absolute()
             and Path(collector_output).is_absolute()
+            and Path(collector_runtime).is_absolute()
+            and Path(collector_runtime) == Path(active_root)
             and SHA_RE.fullmatch(collector_expected) is not None)
     require(collector_expected == current)
 
@@ -229,6 +235,7 @@ def check(expected, *, home=None, uid=None, reader=read_launchagent,
         "active_process_command_matches_supervisor": True,
         "loaded_periodic_health_and_collector": True,
         "collector_expected_sha_matches_existing_runtime": True,
+        "collector_runtime_path_matches_supervisor": True,
         "collector_entrypoint_verified": collector_mode,
         "current_runtime_checkout_clean": True,
         "candidate_private_release_canary": "PASS",
