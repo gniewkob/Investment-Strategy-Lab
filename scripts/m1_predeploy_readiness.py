@@ -80,7 +80,7 @@ def verified_collector_entrypoint(arguments, *, approved_source=None, uid=None):
     before treating a direct script invocation as authorized. No execution.
     """
     require(type(arguments) is list and all(type(a) is str for a in arguments))
-    require(len(arguments) >= 3)
+    require(len(arguments) >= 2)
     exe = Path(arguments[0]).name.lower()
     require(exe.startswith(("python", "pypy")))
     if arguments[1:3] == ["-m", "scripts.unattended_acceptance"]:
