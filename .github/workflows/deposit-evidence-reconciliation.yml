@@ -2,6 +2,8 @@ name: Deposit evidence reconciliation
 on:
   pull_request:
     paths:
+      - 'scripts/m1_predeploy_readiness.py'
+      - 'tests/test_m1_predeploy_readiness.py'
       - 'scripts/m1_readonly_evidence.py'
       - 'tests/test_m1_readonly_evidence.py'
       - 'docs/M1_RELEASE_READINESS_2026_10_29_PL.md'
