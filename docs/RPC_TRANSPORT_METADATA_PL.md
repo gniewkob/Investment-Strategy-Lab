@@ -53,3 +53,32 @@ utrwalić liczniki i poprawnie ograniczyć braki. Nie certyfikować nowej doby z
 Rollback: powrót supervisora do zachowanego c0b5430 i poprzedniej definicji,
 bez cofania danych. Zachować nowe pola/liczniki i dotychczasowy dziennik; stare
 wydanie pomija dodatkowe pole. Nie zmieniać ntfy, poświadczeń ani watchlisty.
+
+
+## Uzupełnienie diagnostyki ERC-20 w PR #87 (29.10.2026)
+
+Rzeczywista doba na Macu 28–29.10 dała pięć odrębnych cykli historii
+Ethereum PARTIAL w ostatnim wycinku diagnostycznym; w tych pięciu cyklach
+liczniki HTTP429, network i JSON-RPC capacity wyniosły 0, a liczba
+HTTP200 wynosiła 5–6. Nie wolno z tego wywnioskować konkretnej przyczyny
+bez danych o lokalnej walidacji logów i etapie niepowodzenia.
+
+Kod `observe_wallets(...allow_partial_history=True)` pozostawia poprawnie
+potwierdzone salda i oznacza historię UNAVAILABLE. Teraz dodaje do tej
+historii **tylko** `failure_category`: stałą wartość z zamkniętej listy
+kodów `ReadOnlyError`, m.in. `UNCONFIRMED_OR_INVALID_LOG`,
+`HISTORY_BLOCK_EVIDENCE_MISMATCH`, `RPC_HTTP_FAILURE` lub
+`RPC_UPSTREAM_ERROR`. Nieznana wartość, wyjątek z danymi źródłowymi lub
+niestandardowy komunikat daje `UNKNOWN`, bez zapisu oryginału.
+`error_code=READ_ONLY_HISTORY_SOURCE_UNAVAILABLE` jest zachowany dla
+zgodności. Supervisor dodaje do źródła PARTIAL jedynie
+`history_failure_categories`, również zwalidowane względem listy.
+Nie ma nowych żądań, uprawnień, metod, zmian w harmonogramie ani operacji
+finansowych.
+
+Dopiero **kolejny rzeczywisty** cykl po świadomie zatwierdzonym wdrożeniu
+tej wersji może dostarczyć wiarygodnej kategorii. Stare historyczne
+checkpointy nie zawierają tej kategorii i nie będą retroaktywnie
+poprawiane. Bieżący supervisor na Macu pozostaje przypięty do #85;
+ten projektowy PR #87 nie jest wdrożeniem. Odbiór pozostaje PARTIAL,
+bez certyfikacji historii EVM lub całego majątku.
