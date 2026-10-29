@@ -180,7 +180,7 @@ class PreflightTests(unittest.TestCase):
             script.chmod(0o600)
             link = Path(folder) / "alias.py"
             link.symlink_to(script)
-            with self.assertRaises(OSError):
+            with self.assertRaises(m.PreflightRejected):
                 m.verified_collector_entrypoint(["/usr/bin/python3", str(link)])
             with self.assertRaises(m.PreflightRejected):
                 m.verified_collector_entrypoint(["/usr/bin/python3", "relative.py"])
