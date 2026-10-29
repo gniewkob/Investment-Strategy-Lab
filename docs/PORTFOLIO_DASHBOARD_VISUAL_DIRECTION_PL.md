@@ -78,3 +78,51 @@ paper benchmark → alerty.
 Dopiero po kontroli rzeczywistego renderu można twierdzić,
 że layout został przetestowany wizualnie; zielone CI Python nie
 certyfikuje zgodności WCAG ani poprawności we wszystkich przeglądarkach.
+
+
+## Odbiór Chromium — rzeczywisty render syntetycznego HTML (2026-10-29)
+
+Dodano `scripts/private_dashboard_browser_qa.py` i odizolowany workflow
+`.github/workflows/private-dashboard-browser-qa.yml`, uruchamiany w
+Playwright/Chromium na Ubuntu 24.04. Jest to **automatyczny test browserowy**
+bez podłączenia rzeczywistego `portfolio.json`, Coinbase, Neon, RPC
+lub jakichkolwiek poświadczeń. Artefakt z sześcioma zrzutami i
+`browser-qa.json`:
+https://github.com/gniewkob/Investment-Strategy-Lab/actions/runs/40946330926
+
+Przebadane rzeczywiste renderingi: 375×812 dark, 768×1024 dark,
+1280×800 dark, 1440×900 dark, 1280×800 light,
+375×812 light/reduced-motion. **6/6 PASS**: szerokość dokumentu
+nie przekracza viewportu, wszystkie kotwice nawigacji działają i są
+widoczne, cele dotykowe >=44 px, brak JS/pageerror i zewnętrznych
+HTTP requestów, wskazówki przewijania tabel na małych viewportach,
+prawidłowy tryb reduced-motion oraz komplet źródeł.
+
+### Dwie znalezione i naprawione usterki
+
+1. Na pierwotnym renderze przy szerokości 375 px link do
+   „Symulacji” był poza widoczną częścią przewijanej poziomo
+   nawigacji, bez wskazówki. Menu mobilne zawija się obecnie do
+   kolejnego wiersza, wszystkie pięć linków jest widocznych.
+   Nowy test `all_nav_links_visible` sprawdza położenie linków
+   względem dostępnego obszaru nawigacji.
+2. Na pierwotnym renderze 375 px w tabeli RPC nazwy sieci
+   „Ethereum” i „Base” zawijały się niemal znak po znaku.
+   Dodano `rpc-table`, kolumnę sieci z `white-space:nowrap`,
+   `min-width:114px`, przyklejoną do lewej krawędzi przy
+   przewijaniu, oraz wyraźną wskazówkę przewijania tabeli.
+   Nowy test `rpc_network_names_unwrapped` potwierdza
+   jednowierszowe etykiety w sześciu konfiguracjach przeglądarki.
+
+Dokładny commit zamykający te poprawki:
+`0966009e6daff8234b0d82ba75d663e60fc00ec2`.
+CI pełna regresja offline **597/597 PASS**:
+https://github.com/gniewkob/Investment-Strategy-Lab/actions/runs/40946330929 .
+Trzy pozostałe workflowy, poza Chromium, również SUCCESS.
+
+Po dodatkowym manualnym obejrzeniu wygenerowanych screenshotów
+mobile/desktop/light potwierdzono poprawne ułożenie kart i tabel
+w tych przykładach. Ten odbiór nie stanowi certyfikacji WCAG 2.2 AA:
+VoiceOver, zoom 200%, forced colors i rzeczywiste urządzenia
+Apple pozostają **NOT TESTED**. Lokalna produkcja, usługi launchd,
+checkpointy i finanse nie były zmieniane. Status 24h pozostaje PARTIAL.
