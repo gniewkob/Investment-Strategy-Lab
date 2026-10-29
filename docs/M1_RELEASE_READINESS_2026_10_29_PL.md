@@ -361,3 +361,44 @@ zezwolenia na merge, restart, zmianę LaunchAgent, zapis do Neon
 lub operacje finansowe.** Do decyzji G3 pozostaje niezależny
 re-review najnowszego commitu, aktualny lokalny preflight
 i odczytowe potwierdzenie rzeczywistych kopii rollbacku.
+
+
+## M1.2 — trzecia uwaga review P2: importy Pythona poza atestowanym skryptem
+
+Po re-review commitu `101047ea1b821cb3ac82789ecc8f1ee9929956df`
+zgłoszono kolejny przypadek fałszywego PASS: zatwierdzony bajtowo
+plik kolektora może wykonać obcy moduł `argparse.py` (lub inny import)
+przez `PYTHONPATH`, mimo że jego własny SHA pozostaje poprawny.
+Review z tego commitu nie stanowi więc akceptacji security.
+
+**Nowa kontrola:** wyłącznie bezpośredni, zatwierdzony skrypt Python
+uruchamiany w postaci
+`python3 -I /absolutna/prywatna/kopia-kolektora.py`,
+z czystą pozycją `-I` przed plikiem.
+Flaga `-I` wyłącza importy z katalogu skryptu, ignoruje `PYTHON*`
+oraz wyłącza pakiety z user-site. Kod źródłowy musi nadal spełniać
+warunki przypiętego blobu Git, właściciela i uprawnień pliku.
+`python3 script.py`, `python3 -E script.py`,
+`python3 -s script.py`, `python3 -m ...` i inne formy są
+odrzucane (fail-closed). Oczekujemy **11 zamiast 10** argumentów
+`ProgramArguments` w przyszłej zatwierdzonej definicji.
+
+Dodatkowe testy syntetyczne wykazują:
+1. odrzucenie nieizolowanego, choć identycznego, zatwierdzonego kodu;
+2. uruchomienie Pythona z `-I` ignoruje syntetyczny
+   `PYTHONPATH` wskazujący plik `argparse.py` zawierający wyjątek.
+
+**Ważna konsekwencja odbiorowa:** operator wcześniej potwierdził
+`M1_PREFIX_COUNT=2` i `M1_ENTRYPOINT_LAYOUT=PYTHON|SCRIPT_FILE`,
+a historyczny PASS G2 pochodzi z **poprzedniego** preflightu
+`4d406bb...`. Obecne LaunchAgent tego parametru jeszcze nie mają,
+więc najnowsze zaostrzone G2 **nie może** uzyskać PASS na Macu bez
+zmiany definicji i jej kontrolowanego przeładowania. To **zamierzona
+blokada bezpieczeństwa**, nie błąd wykryty w runtime.
+
+Aktualny plan G3 zakłada zachowanie dotychczasowego pełnego
+prywatnego ledgeru, osobnej kopii pliku plist i znanego dobrego SHA,
+a dopiero po **nowej, osobnej zgodzie operatora** kontrolowane
+dodanie `-I` i test postflight. Nie zmieniać LaunchAgentów, PID,
+harmonogramu ani kodu działającej produkcji w ramach audytu GitHub.
+Do tego czasu cel M1.2 pozostaje `NO-GO`.
