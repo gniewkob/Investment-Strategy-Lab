@@ -140,3 +140,53 @@ i nie tworzy plików. Wypisuje wyłącznie agregaty i stałe kody błędów.
 **Decyzja:** M1 po audycie kodowym i przygotowaniu testów może
 przejść do *kontrolowanej bramki release*, ale **nie** do deklaracji
 `OPERATIONAL_24H_PASS` bez G3–G6 i formalnej decyzji operatora.
+
+
+## M1.1 — dodatkowy preflight macOS: aktywny proces ≠ kod na dysku
+
+Nowy `scripts/m1_predeploy_readiness.py` działa **wyłącznie odczytowo** na Macu.
+Zadaniem jest skojarzenie metadanych z trzech **już istniejących** macOS
+LaunchAgents (`portfolio`, `portfolio-health`, `acceptance`) z aktualnym
+checkoutem aktywnej usługi i z preflightem **nowego, izolowanego** commitu.
+Nie odczytuje zawartości poświadczeń, nie wywołuje providerów i nie restartuje
+procesów. Sprawdza:
+
+- `launchctl print` i `ps` dla aktywnego supervisora, zgodność PID, modułu
+  i `WorkingDirectory` w metadanych załadowanego zadania;
+- `git rev-parse HEAD` i brak lokalnych zmian w checkoutcie istniejącego
+  supervisora; tylko kod **na dysku**, bez twierdzenia o wersji modułów
+  załadowanych do pamięci wcześniej uruchomionego procesu;
+- istniejący watchdog co 300 sekund i kolektor co 60 sekund, z poprawnie
+  przypiętym SHA kolektora do starego checkoutu;
+- `portfolio_release_canary --phase before` uruchomiony na zatwierdzonej
+  wersji kandydata, z zachowaniem prywatnych uprawnień konfiguracji.
+
+### Wykonanie z czystego, odizolowanego katalogu
+
+```bash
+set +x
+# Pracujemy w czystej kopii WYŁĄCZNIE do audytu.
+git clone --depth 1 --branch codex/integrate-portfolio-81-85-86-20261029 \
+  https://github.com/gniewkob/Investment-Strategy-Lab.git "$ISOLATED_CLEAN_DIRECTORY"
+cd "$ISOLATED_CLEAN_DIRECTORY"
+expected="$(git rev-parse HEAD)"
+python3 -B -m scripts.m1_predeploy_readiness --expected-commit "$expected"
+```
+
+`READY_FOR_RELEASE_REVIEW_NOT_DEPLOYED` oznacza wyłącznie, że kod kandydata,
+prywatne metadane i obecna działająca usługa spełniają wstępne wymagania.
+**Nie** potwierdza wersji modułów w pamięci, utworzenia backupu ani
+zrestartowania usług. Raport celowo zwraca
+`active_process_code_in_memory_attested=false` oraz
+`rollback_backup_created=false`; bez zatwierdzonego wdrożenia nie mogą
+zmienić się na `true`.
+
+`M1_PREDEPLOY_READONLY_REJECTED` oznacza fail-closed, na przykład inny pin
+kolektora, brak któregoś z załadowanych LaunchAgentów, niezgodne definicje,
+nieczysty stary checkout albo niepoprawne uprawnienia. Tego nie wolno obchodzić
+usuwaniem lub resetem stanu. Wtedy potrzebna jest kolejna odczytowa analiza
+na konkretnym Macu.
+
+**Zakres niepotwierdzony:** rzeczywiste cykle po nowym deploy,
+przywrócenie rollbacku, dostarczenie ntfy na iPhone oraz 24h naturalnej
+obserwacji. Preflight nie jest zezwoleniem na transfer ani realny trading.
