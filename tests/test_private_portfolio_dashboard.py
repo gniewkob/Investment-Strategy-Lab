@@ -46,6 +46,23 @@ class PrivateDashboardTests(unittest.TestCase):
         self.assertNotIn("<script", page)
         self.assertNotIn("<iframe", page)
 
+    def test_history_failure_reason_is_visible_without_untrusted_source_text(self):
+        report = self.make_report()
+        report["sources"]["chain_primary_1"] = {
+            "status": "PARTIAL",
+            "checked_at_utc": "2026-10-29T12:00:00+00:00",
+            "history_failure_categories": ["UNCONFIRMED_OR_INVALID_LOG"],
+        }
+        page = portfolio.render(report)
+        self.assertIn("Powód niepełnej historii ERC-20", page)
+        self.assertIn("UNCONFIRMED_OR_INVALID_LOG", page)
+        report["sources"]["chain_primary_1"]["history_failure_categories"] = [
+            "<img src=invalid onerror=alert(1)>"]
+        page = portfolio.render(report)
+        self.assertNotIn("<img", page)
+        self.assertIn("<td>UNKNOWN</td>", page)
+        self.assertNotIn("&lt;img", page)
+
     def test_unavailable_paper_does_not_replay_old_success(self):
         report = self.make_report()
         report["paper_simulation"] = {"status": "PARTIAL", "data": {
