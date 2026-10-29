@@ -402,3 +402,42 @@ a dopiero po **nowej, osobnej zgodzie operatora** kontrolowane
 dodanie `-I` i test postflight. Nie zmieniać LaunchAgentów, PID,
 harmonogramu ani kodu działającej produkcji w ramach audytu GitHub.
 Do tego czasu cel M1.2 pozostaje `NO-GO`.
+
+
+## M1.2 — czwarta i piąta uwaga P2: definicja załadowana ≠ plik plist
+
+Kolejny niezależny przegląd commitu
+`78080ebb10a1466b6627850c054c25afaaa2f525` ujawnił dwa
+mechanizmy fałszywego `READY`:
+
+1. Plik plist na dysku mógł już zawierać wymagane `python -I`,
+   ale `launchd` mógł nadal korzystać z poprzedniej,
+   **nieizolowanej** listy argumentów (job nie przeładowany).
+   Sam `StartInterval=60` nie dowodził tożsamości polecenia.
+2. `launchd` pozwala podać osobne `Program`; jeśli nie zgadza się
+   z `ProgramArguments[0]`, wykonana zostaje inna binarka.
+   Wcześniejszy preflight atestował tylko argumenty.
+
+**Zmiany w walidatorze**: jawnie obecne `Program` musi być identyczne
+z zatwierdzonym interpreterem; dodatkowo preflight odczytuje
+`launchctl print` dla istniejącego kolektora i żąda pełnej zgodności
+załadowanego `program` i **całego** bloku `arguments` z dokładnie
+sprawdzoną definicją plist. Nieznany format danych launchctl, brak
+bloku, inna binarka lub stare argumenty oznaczają
+`CHECK_LOADED_COLLECTOR_COMMAND` i `NO-GO`.
+Tekst polecenia z launchd **nie** jest drukowany, cytowany w błędach
+ani utrwalany w publicznym dowodzie.
+
+Testy syntetyczne obejmują stary załadowany job bez `-I`
+pomimo zaktualizowanego plist, osobny niezgodny `Program`,
+nieczytelny format argumentów oraz spójność zmodyfikowanych
+fixture'ów. To nie jest odbiór realnej konfiguracji na Macu:
+załadowanego formatu launchctl nie zebrano w tej gałęzi,
+a poprzedni odczyt z Maca miał `PYTHON|SCRIPT_FILE`
+**bez `-I`**.
+
+**Bramki pozostają zamknięte** do niezależnego review bieżącego SHA,
+potwierdzenia rollbacku, osobnej zgody operatora na kontrolowaną
+zmianę wyłącznie kolektora i nowego realnego preflight/postflight.
+Nie wolno wykonywać restartów, przeładowań, zmian LaunchAgent,
+operacji finansowych, ani nadpisywać historycznych próbek w celu PASS.
