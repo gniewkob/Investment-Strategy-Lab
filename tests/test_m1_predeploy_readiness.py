@@ -111,6 +111,34 @@ class PreflightTests(unittest.TestCase):
                 with self.assertRaises(m.PreflightRejected):
                     self.verify(definitions=d)
 
+    def test_each_schedule_definition_has_distinct_safe_failure_stage(self):
+        cases = (
+            ("CHECK_WATCHDOG_COMMAND",
+             lambda d: d[m.LABEL_HEALTH]["ProgramArguments"].remove("--check-health")),
+            ("CHECK_WATCHDOG_INTERVAL",
+             lambda d: d[m.LABEL_HEALTH].update(StartInterval=60)),
+            ("CHECK_COLLECTOR_COMMAND",
+             lambda d: d[m.LABEL_COLLECTOR]["ProgramArguments"].remove(
+                 "scripts.unattended_acceptance")),
+            ("CHECK_COLLECTOR_INTERVAL",
+             lambda d: d[m.LABEL_COLLECTOR].update(StartInterval=300)),
+        )
+        for expected_stage, mutate in cases:
+            with self.subTest(expected_stage=expected_stage):
+                definitions = fixtures()
+                mutate(definitions)
+                stages = []
+                with self.assertRaises(m.PreflightRejected):
+                    m.check(NEW,
+                            reader=lambda _home, label, _uid: deepcopy(
+                                definitions[label]),
+                            command_fn=commands, probe=probe,
+                            now=datetime(2026, 10, 29, tzinfo=timezone.utc),
+                            stage=stages.append)
+                self.assertEqual(stages[-1], expected_stage)
+                self.assertNotIn(ROOT, stages[-1])
+                self.assertNotIn(CONFIG, stages[-1])
+
     def test_live_process_not_in_approved_working_directory_is_blocked(self):
         def moved(*args, **kwargs):
             if args[0] == "launchctl" and args[-1].endswith(m.LABEL_PORTFOLIO):
