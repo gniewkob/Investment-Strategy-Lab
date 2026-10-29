@@ -63,6 +63,40 @@ class PrivateDashboardTests(unittest.TestCase):
         self.assertIn("<td>UNKNOWN</td>", page)
         self.assertNotIn("&lt;img", page)
 
+    def test_apple_inspired_dashboard_is_accessible_and_responsive_without_js(self):
+        page = portfolio.render(self.make_report())
+        self.assertIn("href='#main'>Przejdź do treści", page)
+        self.assertIn("id='overview'", page)
+        self.assertIn("id='holdings'", page)
+        self.assertIn("id='sources'", page)
+        self.assertIn("id='quality'", page)
+        self.assertIn("id='research'", page)
+        self.assertIn("aria-label='Sekcje panelu'", page)
+        self.assertIn("prefers-color-scheme:light", page)
+        self.assertIn("prefers-reduced-motion:reduce", page)
+        self.assertIn("@media (max-width:620px)", page)
+        self.assertIn("tabindex='0'", page)
+        self.assertIn("system-ui", page)
+        self.assertIn("ostatni zapisany cykl", page.lower())
+        self.assertNotIn("<script", page)
+        self.assertNotIn("<iframe", page)
+        self.assertNotIn("https://", page)
+        self.assertIn("default-src 'none'", page)
+
+    def test_design_does_not_make_unknown_holding_or_status_falsely_current(self):
+        report = self.make_report()
+        report["known_priced_subtotal_pln"] = None
+        report["paper_simulation"] = {
+            "status": "UNAVAILABLE",
+            "data": {"reference_value_pln": "SENSITIVE_STALE_FIGURE"},
+        }
+        page = portfolio.render(report)
+        self.assertIn("Brak wyceny", page)
+        self.assertIn("Po terminie ważności status", page)
+        self.assertIn("Nie jest to wartość całego portfela", page)
+        self.assertIn("Bieżąca symulacja niedostępna", page)
+        self.assertNotIn("SENSITIVE_STALE_FIGURE", page)
+
     def test_unavailable_paper_does_not_replay_old_success(self):
         report = self.make_report()
         report["paper_simulation"] = {"status": "PARTIAL", "data": {
