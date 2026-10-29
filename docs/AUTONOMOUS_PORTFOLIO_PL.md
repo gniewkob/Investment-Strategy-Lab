@@ -129,6 +129,21 @@ zachowuje dotychczasowe API i deleguje generację HTML do tego renderer-a.
   chronologii publikacji historycznych cen. Referencyjne NBP PLN nie jest
   ceną wykonania ani historyczną stopą zwrotu PLN.
 
+Po scaleniu osobnej poprawki telemetrycznej #85 panel może pokazywać
+`rpc_diagnostics` z ostatniego cyklu dla Ethereum (1) i Base (8453):
+żądania, HTTP 200/429/inne, błędy sieci, JSON-RPC capacity/inne, odrzucone
+odpowiedzi i ponowienia. Bez pola, ze złym typem albo ze zmienionym
+schematem panel pokazuje **UNKNOWN**, nigdy zero. Liczniki HTTP429 obejmują
+także nieudaną próbę poprzedzającą udany retry. Mierzą tylko odczyty
+Ethereum/Base w konkretnym cyklu; nie obejmują Coinbase/CDP/NBP ani
+poprzednich cykli i nie dowodzą 24-godzinnej niezawodności. Nie czytamy
+identyfikatorów, URL ani treści zewnętrznych błędów z tej telemetryki.
+
+CI uruchamia pełen offline unittest po zmianie dedykowanego renderer-a lub
+jego testów (uzupełnione path filters w `deposit-evidence-reconciliation.yml`).
+Wdrożenie producenta #85 i aktualizację panelu należy odbierać oddzielnie;
+bez #85 panel nadal poprawnie wyświetla telemetrykę jako UNKNOWN.
+
 **Granica odbioru:** gałąź i PR to wyłącznie zmiana kodu. CI syntetyczne nie
 certyfikuje rzeczywistego procesu na Macu, odbioru 24h, aktywów, sald, P&L,
 autentycznego PIT ani sprawności alertów iOS. Przed ewentualnym wdrożeniem:
