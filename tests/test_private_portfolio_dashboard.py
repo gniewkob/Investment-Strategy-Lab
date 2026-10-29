@@ -83,6 +83,40 @@ class PrivateDashboardTests(unittest.TestCase):
         self.assertNotIn("https://", page)
         self.assertIn("default-src 'none'", page)
 
+    def test_static_navigation_targets_and_mobile_touch_affordances(self):
+        from html.parser import HTMLParser
+
+        class Outline(HTMLParser):
+            def __init__(self):
+                super().__init__()
+                self.ids = set()
+                self.links = []
+                self.unexpected = []
+
+            def handle_starttag(self, tag, attrs):
+                data = dict(attrs)
+                if "id" in data:
+                    self.ids.add(data["id"])
+                if tag == "a":
+                    self.links.append(data.get("href"))
+                if tag in ("script", "iframe", "form", "input", "button"):
+                    self.unexpected.append(tag)
+                if any(key.startswith("on") for key in data):
+                    self.unexpected.append("inline-handler")
+
+        page = portfolio.render(self.make_report())
+        outline = Outline()
+        outline.feed(page)
+        self.assertFalse(outline.unexpected)
+        self.assertTrue(outline.links)
+        self.assertTrue(all(isinstance(link, str) and link.startswith("#")
+                            and link[1:] in outline.ids for link in outline.links))
+        self.assertIn("#main", outline.links)
+        self.assertIn("min-height:44px", page)
+        self.assertIn("class='scroll-hint'", page)
+        self.assertIn("Tabela jest przewijana poziomo", page)
+        self.assertIn("aria-label='Tabela znanych pozycji, przewijana poziomo'", page)
+
     def test_design_does_not_make_unknown_holding_or_status_falsely_current(self):
         report = self.make_report()
         report["known_priced_subtotal_pln"] = None
