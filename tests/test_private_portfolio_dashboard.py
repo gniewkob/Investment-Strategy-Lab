@@ -118,7 +118,12 @@ class PrivateDashboardTests(unittest.TestCase):
         self.assertNotIn("<script>", page)
         self.assertNotIn("<img", page)
         self.assertNotIn("<svg", page)
-        self.assertNotIn("<a href=", page)
+        # Internal fragment navigation is trusted static HTML; injected
+        # external links must remain text, never a real actionable anchor.
+        self.assertIn("<a href='#overview'>", page)
+        self.assertNotIn("<a href='https://evil.invalid'", page)
+        self.assertNotIn('<a href="https://evil.invalid"', page)
+        self.assertIn("&lt;a href=", page)
         self.assertIn("&lt;script&gt;", page)
 
     def test_missing_data_are_unknown_not_zero(self):
