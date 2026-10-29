@@ -369,7 +369,7 @@ def render(report):
     @media(prefers-color-scheme:light) {
       :root { color-scheme:light; --bg:#f4f6fb; --surface:#ffffff;
         --surface-2:#f7f9fc; --surface-3:#f1f4fb; --text:#1c2840;
-        --secondary:#4d5c73; --muted:#69788f; --border:#dfe5ef;
+        --secondary:#4d5c73; --muted:#64748b; --border:#dfe5ef;
         --accent:#315bad; --accent-faint:rgba(49,91,173,.07);
         --good:#17684d; --good-faint:rgba(23,104,77,.09);
         --warn:#865618; --warn-faint:rgba(162,112,44,.08);
