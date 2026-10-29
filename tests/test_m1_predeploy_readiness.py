@@ -4,6 +4,9 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from io import StringIO
 import json
+import os
+import subprocess
+import sys
 import tempfile
 from pathlib import Path
 import unittest
@@ -36,7 +39,7 @@ def fixtures():
             "StartInterval": 300,
         },
         m.LABEL_COLLECTOR: {
-            "ProgramArguments": ["/usr/bin/python3", COLLECTOR_FILE,
+            "ProgramArguments": ["/usr/bin/python3", "-I", COLLECTOR_FILE,
                 "--state-directory", STATE, "--output", OUT,
                 "--expected-commit", OLD, "--runtime", ROOT],
             "StartInterval": 60,
@@ -122,7 +125,7 @@ class PreflightTests(unittest.TestCase):
              lambda d: d[m.LABEL_HEALTH].update(StartInterval=60)),
             ("CHECK_COLLECTOR_CODE_IDENTITY",
              lambda d: d[m.LABEL_COLLECTOR]["ProgramArguments"].__setitem__(
-                 1, "/private/unapproved_entrypoint.py")),
+                 2, "/private/unapproved_entrypoint.py")),
             ("CHECK_COLLECTOR_INTERVAL",
              lambda d: d[m.LABEL_COLLECTOR].update(StartInterval=300)),
         )
@@ -150,18 +153,19 @@ class PreflightTests(unittest.TestCase):
             script.write_bytes(approved.read_bytes())
             script.chmod(0o600)
 
-            args = ["/usr/bin/python3", str(script)]
+            args = ["/usr/bin/python3", "-I", str(script)]
             self.assertEqual(m.verified_collector_entrypoint(args),
-                             "REVIEWED_COPIED_PYTHON_SCRIPT")
+                             "REVIEWED_ISOLATED_COPIED_PYTHON_SCRIPT")
             with self.assertRaises(m.PreflightRejected):
                 m.verified_collector_entrypoint([
                     "/usr/bin/python3", "-m", "scripts.unattended_acceptance"])
 
             defs = fixtures()
-            defs[m.LABEL_COLLECTOR]["ProgramArguments"][:2] = args
+            defs[m.LABEL_COLLECTOR]["ProgramArguments"][:3] = args
             result = self.verify(definitions=defs)
             self.assertEqual(result["collector_entrypoint_verified"],
-                             "REVIEWED_COPIED_PYTHON_SCRIPT")
+                             "REVIEWED_ISOLATED_COPIED_PYTHON_SCRIPT")
+            self.assertTrue(result["collector_isolated_python_imports"])
             self.assertNotIn(str(script), json.dumps(result))
 
     def test_copied_script_rejects_content_drift_or_untrusted_path(self):
@@ -172,20 +176,20 @@ class PreflightTests(unittest.TestCase):
             script.write_bytes(pristine + b"# extra line\n")
             script.chmod(0o600)
             with self.assertRaises(m.PreflightRejected):
-                m.verified_collector_entrypoint(["/usr/bin/python3", str(script)])
+                m.verified_collector_entrypoint(["/usr/bin/python3", "-I", str(script)])
             script.write_bytes(pristine)
             script.chmod(0o666)
             with self.assertRaises(m.PreflightRejected):
-                m.verified_collector_entrypoint(["/usr/bin/python3", str(script)])
+                m.verified_collector_entrypoint(["/usr/bin/python3", "-I", str(script)])
             script.chmod(0o600)
             link = Path(folder) / "alias.py"
             link.symlink_to(script)
             with self.assertRaises(m.PreflightRejected):
-                m.verified_collector_entrypoint(["/usr/bin/python3", str(link)])
+                m.verified_collector_entrypoint(["/usr/bin/python3", "-I", str(link)])
             with self.assertRaises(m.PreflightRejected):
-                m.verified_collector_entrypoint(["/usr/bin/python3", "relative.py"])
+                m.verified_collector_entrypoint(["/usr/bin/python3", "-I", "relative.py"])
             with self.assertRaises(m.PreflightRejected):
-                m.verified_collector_entrypoint(["/bin/bash", str(script)])
+                m.verified_collector_entrypoint(["/bin/bash", "-I", str(script)])
             with self.assertRaises(m.PreflightRejected):
                 m.verified_collector_entrypoint(["/usr/bin/python3", "-c",
                                                    "import os"])
@@ -202,7 +206,7 @@ class PreflightTests(unittest.TestCase):
             altered_script.chmod(0o600)
             with self.assertRaises(m.PreflightRejected):
                 m.verified_collector_entrypoint(
-                    ["/usr/bin/python3", str(altered_script)],
+                    ["/usr/bin/python3", "-I", str(altered_script)],
                     approved_source=altered_source)
 
     def test_required_runtime_arg_must_be_single_and_match_supervisor(self):
@@ -225,13 +229,45 @@ class PreflightTests(unittest.TestCase):
 
     def test_module_name_cannot_trick_code_attestation(self):
         d = fixtures()
-        d[m.LABEL_COLLECTOR]["ProgramArguments"][:2] = [
+        d[m.LABEL_COLLECTOR]["ProgramArguments"][:3] = [
             "/usr/bin/python3", "-m", "scripts.unattended_acceptance"]
         stages = []
         with self.assertRaises(m.PreflightRejected):
             m.check(NEW, reader=lambda _home, label, _uid: d[label],
                     command_fn=commands, probe=probe, stage=stages.append)
         self.assertEqual(stages[-1], "CHECK_COLLECTOR_CODE_IDENTITY")
+
+    def test_python_isolation_required_even_for_approved_script(self):
+        for replacement in (
+            ["/usr/bin/python3", COLLECTOR_FILE],
+            ["/usr/bin/python3", "-E", COLLECTOR_FILE],
+            ["/usr/bin/python3", "-s", COLLECTOR_FILE],
+            ["/usr/bin/python3", "-m", "scripts.unattended_acceptance"],
+            ["/usr/bin/python3", "-c", "import argparse"],
+        ):
+            with self.subTest(replacement=replacement[1]):
+                d = fixtures()
+                d[m.LABEL_COLLECTOR]["ProgramArguments"][:3] = replacement
+                stages = []
+                with self.assertRaises(m.PreflightRejected):
+                    m.check(NEW, reader=lambda _home, label, _uid: d[label],
+                            command_fn=commands, probe=probe, stage=stages.append)
+                self.assertEqual(stages[-1], "CHECK_COLLECTOR_CODE_IDENTITY")
+
+    def test_isolated_python_ignores_synthetic_pythonpath_shadow(self):
+        with tempfile.TemporaryDirectory() as folder:
+            shadow = Path(folder) / "argparse.py"
+            shadow.write_text("raise RuntimeError('UNTRUSTED_SHADOW_LOADED')\n",
+                              encoding="utf-8")
+            env = dict(os.environ)
+            env["PYTHONPATH"] = folder
+            code = ("import argparse, pathlib; "
+                    "print(pathlib.Path(argparse.__file__).resolve())")
+            isolated = subprocess.run(
+                [sys.executable, "-I", "-c", code],
+                env=env, capture_output=True, text=True, check=True, timeout=8)
+            self.assertNotIn(folder, isolated.stdout)
+            self.assertNotIn("UNTRUSTED_SHADOW_LOADED", isolated.stderr)
 
     def test_live_process_not_in_approved_working_directory_is_blocked(self):
         def moved(*args, **kwargs):
