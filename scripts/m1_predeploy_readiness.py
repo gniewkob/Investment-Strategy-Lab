@@ -70,8 +70,13 @@ def command(*args, cwd=None):
 
 
 def check(expected, *, home=None, uid=None, reader=read_launchagent,
-          command_fn=command, probe=None, now=None):
+          command_fn=command, probe=None, now=None, stage=None):
     """Inspect metadata of the existing job; no mutation or financial access."""
+    def step(code):
+        if stage is not None:
+            stage(code)
+
+    step("VALIDATE_EXPECTED_SHA")
     require(type(expected) is str and SHA_RE.fullmatch(expected) is not None)
     if uid is None:
         uid = os.getuid()
@@ -81,9 +86,11 @@ def check(expected, *, home=None, uid=None, reader=read_launchagent,
         now = datetime.now(timezone.utc)
     if probe is None:
         probe = canary.inspect
+    step("READ_LAUNCHAGENT_DEFINITIONS")
     configs = {label: reader(home, label, uid) for label in
                (LABEL_PORTFOLIO, LABEL_HEALTH, LABEL_COLLECTOR)}
 
+    step("CHECK_SUPERVISOR_DEFINITION")
     supervisor = configs[LABEL_PORTFOLIO]
     watchdog = configs[LABEL_HEALTH]
     collector = configs[LABEL_COLLECTOR]
@@ -98,6 +105,7 @@ def check(expected, *, home=None, uid=None, reader=read_launchagent,
     require(type(active_root) is str and Path(active_root).is_absolute()
             and supervisor.get("KeepAlive") is True
             and supervisor.get("RunAtLoad") is True)
+    step("CHECK_WATCHDOG_COLLECTOR_DEFINITIONS")
     watchdog_args = watchdog.get("ProgramArguments")
     collector_args = collector.get("ProgramArguments")
     require(type(watchdog_args) is list and "--check-health" in watchdog_args
@@ -108,20 +116,24 @@ def check(expected, *, home=None, uid=None, reader=read_launchagent,
 
     # 'launchctl print' proves loaded service metadata, not how old Python
     # bytecode or modules in an existing running process were initialized.
+    step("CHECK_SUPERVISOR_LAUNCHCTL")
     loaded = command_fn("launchctl", "print", f"gui/{uid}/{LABEL_PORTFOLIO}")
     match = re.search(r"^\s*pid = (\d+)$", loaded, flags=re.MULTILINE)
     require(match is not None and int(match[1]) > 1)
     directory = re.search(r"^\s*working directory = (.+)$",
                           loaded, flags=re.MULTILINE)
     require(directory is not None and directory[1] == active_root)
+    step("CHECK_SUPERVISOR_PROCESS")
     cmd = command_fn("ps", "-p", match[1], "-o", "command=")
     require(re.search(r"-m\s+scripts\.autonomous_portfolio(?:\s|$)", cmd) is not None
             and "--once" not in cmd)
+    step("CHECK_LOADED_PERIODIC_SCHEDULES")
     loaded_health = command_fn("launchctl", "print", f"gui/{uid}/{LABEL_HEALTH}")
     loaded_collector = command_fn("launchctl", "print", f"gui/{uid}/{LABEL_COLLECTOR}")
     require("run interval = 300 seconds" in loaded_health
             and "run interval = 60 seconds" in loaded_collector)
 
+    step("CHECK_EXISTING_RUNTIME_GIT")
     current = command_fn("git", "-C", active_root, "rev-parse", "--verify", "HEAD")
     require(SHA_RE.fullmatch(current) is not None)
     current_clean = (command_fn("git", "-C", active_root, "status",
@@ -129,6 +141,7 @@ def check(expected, *, home=None, uid=None, reader=read_launchagent,
     require(current_clean)
 
     # Check the collector's read-only scope before trusting its evidence.
+    step("CHECK_COLLECTOR_EXPECTED_SHA")
     collector_state = option(collector_args, "--state-directory")
     collector_output = option(collector_args, "--output")
     collector_expected = option(collector_args, "--expected-commit")
@@ -139,6 +152,7 @@ def check(expected, *, home=None, uid=None, reader=read_launchagent,
 
     # The already-existing private configuration is consumed by the
     # existing canary, whose outputs contain no private fields.
+    step("CHECK_CANDIDATE_RELEASE_CANARY")
     result = probe(config_file, expected, "before", now)
     require(result.get("result") == "READY_FOR_CONTROLLED_READ_ONLY_CANARY"
             and result.get("source_commit_matches_clean_checkout") is True
@@ -175,12 +189,20 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--expected-commit", required=True)
     args = parser.parse_args(argv)
+    failure_stage = ["VALIDATE_EXPECTED_SHA"]
+
+    def note(code):
+        # Codes come only from fixed source-code literals, never user data.
+        failure_stage[0] = code
+
     try:
-        output = check(args.expected_commit)
+        output = check(args.expected_commit, stage=note)
         print(json.dumps(output, sort_keys=True, separators=(",", ":")))
         return 0
     except Exception:
+        # Never echo untrusted OS / provider exceptions or private paths.
         print("M1_PREDEPLOY_READONLY_REJECTED")
+        print("M1_FAILURE_STAGE=" + failure_stage[0])
         return 2
 
 
