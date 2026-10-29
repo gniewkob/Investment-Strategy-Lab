@@ -96,7 +96,11 @@ def verified_collector_entrypoint(arguments, *, approved_source=None, uid=None):
                "unattended_acceptance.py")
     # Read only the audited source file, after rejecting symlink/path tricks.
     def trusted_bytes(path):
-        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+        try:
+            fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+        except OSError:
+            # Do not leak private script paths in low-level exceptions.
+            raise PreflightRejected("M1_PREDEPLOY_READONLY_REJECTED") from None
         with os.fdopen(fd, "rb") as stream:
             st = os.fstat(stream.fileno())
             require(stat.S_ISREG(st.st_mode) and st.st_uid == uid
