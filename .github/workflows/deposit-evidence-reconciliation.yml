@@ -2,6 +2,9 @@ name: Deposit evidence reconciliation
 on:
   pull_request:
     paths:
+      - 'scripts/m1_readonly_evidence.py'
+      - 'tests/test_m1_readonly_evidence.py'
+      - 'docs/M1_RELEASE_READINESS_2026_10_29_PL.md'
       - 'scripts/unattended_acceptance.py'
       - 'tests/test_unattended_acceptance.py'
       - 'docs/UNATTENDED_ACCEPTANCE_ISSUE80_PL.md'
