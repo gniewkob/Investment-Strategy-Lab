@@ -264,3 +264,55 @@ z udokumentowanym, **obecnym** sposobem uruchamiania, zanim
 zaproponujemy jakąkolwiek poprawkę w kodzie albo plan release.
 
 M1 G2 nadal `NO-GO`; G3 deploy nieautoryzowany i niewykonany.
+
+
+## M1.1 — rozpoznany punkt wejścia kolektora (29.10.2026)
+
+Operator potwierdził **jedynie bezpieczne metadane** aktualnego LaunchAgenta:
+
+```text
+M1_COLLECTOR_COMMAND_SHAPE=OTHER_ENTRYPOINT
+M1_COLLECTOR_INTERVAL_60=True
+M1_COLLECTOR_ARG_COUNT=10
+M1_FLAG_STATE_DIRECTORY=True
+M1_FLAG_OUTPUT=True
+M1_FLAG_EXPECTED_COMMIT=True
+M1_PREFIX_COUNT=2
+M1_ENTRYPOINT_LAYOUT=PYTHON|SCRIPT_FILE
+M1_DIAGNOSTIC=READ_ONLY
+```
+
+To jednoznacznie wskazuje, że preflight G2 miał niepoprawne założenie
+o wyłącznym uruchamianiu `python -m scripts.unattended_acceptance`.
+Zainstalowany kolektor działa jako **Python + odrębna kopia pliku .py**.
+Nie jest to dowód awarii źródła danych ani procesu, ale też sama
+obecność pliku .py nie jest wystarczającą atestacją.
+
+Nowy walidator dopuszcza dokładnie dwie formy:
+
+1. `python -m scripts.unattended_acceptance` — zatwierdzony moduł.
+2. `python /absolutna/prywatna/kopia.py` — tylko jeśli zwykły plik
+   bez symlinków należy do aktualnego użytkownika, nie ma praw zapisu
+   dla grupy/innych, ma bezpieczny limit rozmiaru, a jego **pełne bajty**
+   są identyczne z zatwierdzonym `scripts/unattended_acceptance.py`
+   (SHA-256 obu plików). Zatwierdzona referencja musi dodatkowo
+   posiadać przypięty Git blob `41a8ca1e40af5697f6661b5e158bc205b4fe48ff`,
+   zweryfikowany dla PR #81, SHA
+   `3122b571b0e5e562ab58dce9981971a122570540`.
+   Również plik referencyjny musi być zwykły, należeć do użytkownika
+   i nie być zapisywalny przez innych.
+
+W tej formie preflight **nie wykonuje, nie kopiuje ani nie publikuje**
+żadnego kodu kolektora. Odczytuje jedynie dwa pliki kodu, nie
+konfigurację finansową czy historię. Jeżeli zawartość prywatnej
+kopii różni się od wcześniej zatwierdzonego kodu, raportuje wyłącznie
+`M1_FAILURE_STAGE=CHECK_COLLECTOR_CODE_IDENTITY`. Nie zmieniamy jej
+automatycznie w celu uzyskania PASS.
+
+Testy obejmują prawidłową kopię o innej nazwie, nieznany kod,
+niepoprawne prawa zapisu, link symboliczny, względną ścieżkę,
+niezatwierdzony interpreter i zmodyfikowaną referencję.
+Kolejne kroki G2 (np. odczyt statusu `launchctl`, potwierdzenie
+kolektora oraz weryfikacja nowego checkoutu przez canary) mogą nadal
+zwrócić NO-GO. Nawet kompletne G2 PASS nie stanowi zgody na restart,
+merge, deploy ani automatyczny trading.
