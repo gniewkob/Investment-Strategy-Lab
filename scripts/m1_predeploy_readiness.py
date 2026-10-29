@@ -72,6 +72,31 @@ def command(*args, cwd=None):
     return result.stdout.strip()
 
 
+def loaded_collector_arguments(payload):
+    """Parse one recognized launchctl-print argument block, never log its text.
+
+    Unknown launcher formats fail closed. The result is compared with the
+    already validated plist; neither the arguments nor paths are reported.
+    """
+    require(type(payload) is str and len(payload) <= 128_000)
+    lines = payload.splitlines()
+    program_rows = [line.strip().partition(" = ")[2] for line in lines
+                    if line.strip().startswith("program = ")]
+    require(len(program_rows) == 1 and bool(program_rows[0]))
+    openers = [i for i, line in enumerate(lines)
+               if line.strip() == "arguments = {"]
+    require(len(openers) == 1)
+    start = openers[0]
+    enders = [i for i in range(start + 1, len(lines))
+              if lines[i].strip() == "}"]
+    require(bool(enders))
+    end = enders[0]
+    tokens = [line.strip() for line in lines[start + 1:end]]
+    require(bool(tokens) and all(bool(x) and not any(
+        ord(ch) < 32 for ch in x) for x in tokens))
+    return program_rows[0], tokens
+
+
 def verified_collector_entrypoint(arguments, *, approved_source=None, uid=None):
     """Require Python isolated mode and an exact approved collector source.
 
@@ -170,6 +195,13 @@ def check(expected, *, home=None, uid=None, reader=read_launchagent,
     step("CHECK_COLLECTOR_COMMAND")
     require(type(collector_args) is list and all(type(arg) is str
             for arg in collector_args))
+    step("CHECK_COLLECTOR_EXECUTABLE")
+    # LaunchAgent Program overrides ProgramArguments[0] when supplied.
+    # A mismatched explicit Program would make the collector execute
+    # something other than the code whose bytes were attested.
+    if "Program" in collector:
+        require(type(collector["Program"]) is str
+                and collector["Program"] == collector_args[0])
     step("CHECK_COLLECTOR_CODE_IDENTITY")
     collector_mode = verified_collector_entrypoint(collector_args, uid=uid)
     step("CHECK_COLLECTOR_INTERVAL")
@@ -194,6 +226,11 @@ def check(expected, *, home=None, uid=None, reader=read_launchagent,
     loaded_collector = command_fn("launchctl", "print", f"gui/{uid}/{LABEL_COLLECTOR}")
     require("run interval = 300 seconds" in loaded_health
             and "run interval = 60 seconds" in loaded_collector)
+    step("CHECK_LOADED_COLLECTOR_COMMAND")
+    # Reading an on-disk plist is NOT proof that launchd has reloaded it.
+    loaded_program, loaded_arguments = loaded_collector_arguments(loaded_collector)
+    require(loaded_program == collector_args[0]
+            and loaded_arguments == collector_args)
 
     step("CHECK_EXISTING_RUNTIME_GIT")
     current = command_fn("git", "-C", active_root, "rev-parse", "--verify", "HEAD")
@@ -238,6 +275,7 @@ def check(expected, *, home=None, uid=None, reader=read_launchagent,
         "loaded_supervisor_metadata_matches_plist": True,
         "active_process_command_matches_supervisor": True,
         "loaded_periodic_health_and_collector": True,
+        "loaded_collector_executable_arguments_attested": True,
         "collector_expected_sha_matches_existing_runtime": True,
         "collector_runtime_path_matches_supervisor": True,
         "collector_entrypoint_verified": collector_mode,
