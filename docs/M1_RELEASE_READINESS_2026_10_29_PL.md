@@ -190,3 +190,42 @@ na konkretnym Macu.
 **Zakres niepotwierdzony:** rzeczywiste cykle po nowym deploy,
 przywrócenie rollbacku, dostarczenie ntfy na iPhone oraz 24h naturalnej
 obserwacji. Preflight nie jest zezwoleniem na transfer ani realny trading.
+
+
+## Reakcja na blokadę M1 preflight na Macu (29.10.2026)
+
+Operator wykonał pierwszy odczyt na Macu z SHA
+`2493a28ae743b93d10592ecac6c93e095ba9cd66`, uzyskując
+`M1_CANDIDATE_SHA=VERIFIED` i `M1_PREDEPLOY_READONLY_REJECTED`.
+Brak `M1_PREDEPLOY_AUDIT_COMPLETE` wynika z `set -e` w izolowanym
+podprocesie. **Nie jest to dowód awarii działającego supervisora ani
+wystąpienia transakcji.** Żaden plik produkcyjny nie był zmieniany.
+
+W wersji preflightu dostępnej przy tym odbiorze każdy błąd ze stanu
+launchd, pliku plist, pinu kolektora lub `portfolio_release_canary`
+dawał identyczny komunikat. Następna wersja skryptu publikuje
+wyłącznie `M1_FAILURE_STAGE` z poniższej zamkniętej listy:
+
+| Etap | Kontrola |
+| --- | --- |
+| `VALIDATE_EXPECTED_SHA` | Format pełnego commitu |
+| `READ_LAUNCHAGENT_DEFINITIONS` | Obecność, własność i prawa plików plist |
+| `CHECK_SUPERVISOR_DEFINITION` | Program, parametry, konfiguracja i katalog procesu |
+| `CHECK_WATCHDOG_COLLECTOR_DEFINITIONS` | Moduły i częstotliwości health/acceptance |
+| `CHECK_SUPERVISOR_LAUNCHCTL` | Załadowany proces i jego metadane |
+| `CHECK_SUPERVISOR_PROCESS` | Rzeczywisty PID i moduł w `ps` |
+| `CHECK_LOADED_PERIODIC_SCHEDULES` | Stan i częstotliwości dwóch zadań okresowych |
+| `CHECK_EXISTING_RUNTIME_GIT` | Wersja i czystość aktywnego checkoutu na dysku |
+| `CHECK_COLLECTOR_EXPECTED_SHA` | Spójność założeń o starym pinie i katalogach kolektora |
+| `CHECK_CANDIDATE_RELEASE_CANARY` | Niezależny preflight prywatnej konfiguracji nowego commitu |
+
+Komunikat `M1_PREDEPLOY_READONLY_REJECTED` pozostaje fail-closed;
+skrypt **nie** pokazuje tekstu wyjątku, ścieżek, historii, adresów,
+sald ani danych z konfiguracji. W szczególności
+`CHECK_COLLECTOR_EXPECTED_SHA` oznacza niezgodność z *założeniem
+audytu*, a nie dowód, że obecna usługa operacyjna działa błędnie.
+
+Następny krok to ponowny jednorazowy preflight z nowym dokładnym SHA
+PR #87, bez zmieniania nawet jednej definicji launchd. Zachować wynik
+próby w Issue #80. **Nie obchodzić testu przez dopasowywanie pinu,
+usuwanie próbek, tworzenie plików w katalogu stanu lub restart.**
