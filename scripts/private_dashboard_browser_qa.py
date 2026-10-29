@@ -130,10 +130,27 @@ def run(output):
                         };
                     });
                     const tableContainers = [...document.querySelectorAll('.table-wrap')];
+                    const navBounds = document.querySelector('.nav').getBoundingClientRect();
+                    const navFullyVisible = navLinks.every(el => {
+                        const r = el.getBoundingClientRect();
+                        return r.left >= navBounds.left - 1 &&
+                            r.right <= navBounds.right + 1 &&
+                            r.top >= navBounds.top - 1 &&
+                            r.bottom <= navBounds.bottom + 1;
+                    });
+                    const rpcLabels = [...document.querySelectorAll(
+                        '.rpc-table tbody th[scope="row"]')].map(el => ({
+                            name: el.textContent.trim(),
+                            width: el.getBoundingClientRect().width,
+                            height: el.getBoundingClientRect().height,
+                            whiteSpace: getComputedStyle(el).whiteSpace,
+                        }));
                     return {
                         documentWidth: doc.scrollWidth,
                         viewportWidth: window.innerWidth,
                         nav: targetChecks,
+                        navFullyVisible,
+                        rpcLabels,
                         tableOverflowCount: tableContainers.filter(
                             el => el.scrollWidth > el.clientWidth + 1).length,
                         scrollHintVisible: [...document.querySelectorAll('.scroll-hint')]
@@ -151,6 +168,11 @@ def run(output):
                         x["targetFound"] for x in metrics["nav"]),
                     "nav_touch_height_44": all(
                         x["height"] >= 43.5 for x in metrics["nav"]),
+                    "all_nav_links_visible": metrics["navFullyVisible"],
+                    "rpc_network_names_unwrapped": (
+                        [x["name"] for x in metrics["rpcLabels"]] == ["Ethereum", "Base"]
+                        and all(x["height"] < 70 and x["whiteSpace"] == "nowrap"
+                                for x in metrics["rpcLabels"])),
                     "hero_visible": metrics["heroVisible"],
                     "source_rows": metrics["sourceRows"] == 8,
                     "financial_operations_zero": "0." in metrics["financialOperations"],
