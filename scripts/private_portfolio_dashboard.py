@@ -5,6 +5,7 @@ data, use network access, or infer permission to trade from a source status.
 All dynamic HTML text is escaped. This file is safe for offline synthetic tests.
 """
 from html import escape
+import re
 
 
 _RPC_COUNTS = (
@@ -73,14 +74,28 @@ def render(report):
     sources = report.get("sources") or {}
     ok_sources = sum(1 for source in sources.values()
                      if isinstance(source, dict) and source.get("status") == "OK")
+    def source_failure(source):
+        if not isinstance(source, dict):
+            return "—"
+        categories = source.get("history_failure_categories")
+        if categories is None:
+            return "—"
+        if (not isinstance(categories, list) or not 1 <= len(categories) <= 8
+                or any(type(code) is not str or
+                       re.fullmatch(r"[A-Z0-9_]{1,80}", code) is None
+                       for code in categories)):
+            return "UNKNOWN"
+        return ", ".join(categories)
+
     source_rows = "".join(
         "<tr><th scope='row'>" + safe(name) + "</th><td>" +
         safe(source.get("status", "UNKNOWN") if isinstance(source, dict) else "UNKNOWN") +
         "</td><td>" + safe(source.get("checked_at_utc") if isinstance(source, dict) else None) +
+        "</td><td>" + safe(source_failure(source)) +
         "</td></tr>" for name, source in sorted(sources.items())
     )
     if not source_rows:
-        source_rows = "<tr><td colspan='3'>Brak zweryfikowanych odczytów źródeł.</td></tr>"
+        source_rows = "<tr><td colspan='4'>Brak zweryfikowanych odczytów źródeł.</td></tr>"
 
     holding_rows = "".join(
         "<tr><td>" + safe(row.get("location")) + "</td><td>" +
@@ -220,7 +235,7 @@ def render(report):
         "<section class='panel'><h2>Jakość i świeżość źródeł</h2>"
         "<p class='fine'>Czas kontroli potwierdza wykonanie odczytu, nie kompletność historii źródła.</p>"
         "<div class='table-wrap'><table><thead><tr><th>Źródło</th><th>Status</th>"
-        "<th>Czas kontroli UTC</th></tr></thead><tbody>" + source_rows +
+        "<th>Czas kontroli UTC</th><th>Powód niepełnej historii ERC-20</th></tr></thead><tbody>" + source_rows +
         "</tbody></table></div></section>"
         "<section class='panel'><h2>Pokrycie historii i uzgadnianie</h2><p>" +
         safe(coverage_note) + "</p><p>" + safe(reconciliation_note) + "</p></section>"
