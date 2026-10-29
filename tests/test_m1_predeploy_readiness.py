@@ -232,7 +232,9 @@ class PreflightTests(unittest.TestCase):
                 stages = []
                 with self.assertRaises(m.PreflightRejected):
                     m.check(NEW, reader=lambda _home, label, _uid: d[label],
-                            command_fn=commands, probe=probe, stage=stages.append)
+                            command_fn=lambda *args, **kw: commands(
+                                *args, definitions=d, **kw),
+                            probe=probe, stage=stages.append)
                 self.assertEqual(stages[-1], "CHECK_COLLECTOR_EXPECTED_SHA")
 
     def test_module_name_cannot_trick_code_attestation(self):
