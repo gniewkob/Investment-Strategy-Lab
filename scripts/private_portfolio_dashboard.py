@@ -48,7 +48,8 @@ def _rpc_metadata_table(metadata):
         "Błędy sieci", "RPC capacity", "Inne błędy RPC",
         "Odrzucone odpowiedzi", "Ponowienia",
     )
-    return ("<div class='table-wrap'><table><thead><tr><th>Sieć</th>" +
+    return ("<p class='scroll-hint'>Tabela RPC jest przewijana poziomo.</p>" +
+            "<div class='table-wrap'><table class='rpc-table'><thead><tr><th scope='col'>Sieć</th>" +
             "".join("<th scope='col'>" + h + "</th>" for h in headers) +
             "</tr></thead><tbody>" + rows + "</tbody></table></div>" +
             "<p class='fine'>Liczniki dotyczą tylko RPC Ethereum/Base w ostatnim "
@@ -308,6 +309,13 @@ def render(report):
     .table-wrap { max-width:100%; overflow-x:auto; border:1px solid var(--border);
       border-radius:13px; scrollbar-width:thin; }
     table { width:100%; border-collapse:collapse; min-width:580px; }
+    .rpc-table { min-width:990px; }
+    .rpc-table tbody th[scope='row'],
+    .rpc-table thead th:first-child {
+      white-space:nowrap; overflow-wrap:normal; min-width:114px;
+      position:sticky; left:0; background:var(--surface); z-index:1;
+    }
+    .rpc-table thead th:first-child { background:var(--surface-2); z-index:2; }
     th,td { padding:13px 14px; text-align:left; vertical-align:top;
       border-bottom:1px solid var(--border); overflow-wrap:anywhere; }
     thead th { background:var(--surface-2); color:var(--secondary);
@@ -350,7 +358,8 @@ def render(report):
     @media (max-width:620px) {
       .shell { padding:0 14px 38px; }
       .masthead { gap:12px; }
-      .nav { width:100%; overflow-x:auto; flex-wrap:nowrap; padding-bottom:2px; }
+      .nav { width:100%; overflow-x:visible; flex-wrap:wrap;
+        gap:2px 4px; padding-bottom:2px; }
       .nav a { flex:none; white-space:nowrap; padding:9px 12px; min-height:44px; }
       .intro { padding:29px 2px 17px; }
       .hero { gap:12px; margin-top:12px; }
