@@ -4,6 +4,7 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from io import StringIO
 import json
+import tempfile
 from pathlib import Path
 import unittest
 from unittest.mock import patch
@@ -117,7 +118,7 @@ class PreflightTests(unittest.TestCase):
              lambda d: d[m.LABEL_HEALTH]["ProgramArguments"].remove("--check-health")),
             ("CHECK_WATCHDOG_INTERVAL",
              lambda d: d[m.LABEL_HEALTH].update(StartInterval=60)),
-            ("CHECK_COLLECTOR_COMMAND",
+            ("CHECK_COLLECTOR_CODE_IDENTITY",
              lambda d: d[m.LABEL_COLLECTOR]["ProgramArguments"].remove(
                  "scripts.unattended_acceptance")),
             ("CHECK_COLLECTOR_INTERVAL",
@@ -138,6 +139,69 @@ class PreflightTests(unittest.TestCase):
                 self.assertEqual(stages[-1], expected_stage)
                 self.assertNotIn(ROOT, stages[-1])
                 self.assertNotIn(CONFIG, stages[-1])
+
+    def test_reviewed_copied_script_attested_by_content_not_filename(self):
+        with tempfile.TemporaryDirectory() as folder:
+            approved = (Path(__file__).resolve().parents[1] /
+                        "scripts" / "unattended_acceptance.py")
+            script = Path(folder) / "collector-deployed-private.py"
+            script.write_bytes(approved.read_bytes())
+            script.chmod(0o600)
+
+            args = ["/usr/bin/python3", str(script)]
+            self.assertEqual(m.verified_collector_entrypoint(args),
+                             "REVIEWED_COPIED_PYTHON_SCRIPT")
+            self.assertEqual(m.verified_collector_entrypoint([
+                "/usr/bin/python3", "-m", "scripts.unattended_acceptance"]),
+                "REVIEWED_PYTHON_MODULE")
+
+            defs = fixtures()
+            defs[m.LABEL_COLLECTOR]["ProgramArguments"][:3] = args
+            result = self.verify(definitions=defs)
+            self.assertEqual(result["collector_entrypoint_verified"],
+                             "REVIEWED_COPIED_PYTHON_SCRIPT")
+            self.assertNotIn(str(script), json.dumps(result))
+
+    def test_copied_script_rejects_content_drift_or_untrusted_path(self):
+        with tempfile.TemporaryDirectory() as folder:
+            approved = Path(__file__).resolve().parents[1] / "scripts" / "unattended_acceptance.py"
+            script = Path(folder) / "collector.py"
+            pristine = approved.read_bytes()
+            script.write_bytes(pristine + b"# extra line\n")
+            script.chmod(0o600)
+            with self.assertRaises(m.PreflightRejected):
+                m.verified_collector_entrypoint(["/usr/bin/python3", str(script)])
+            script.write_bytes(pristine)
+            script.chmod(0o666)
+            with self.assertRaises(m.PreflightRejected):
+                m.verified_collector_entrypoint(["/usr/bin/python3", str(script)])
+            script.chmod(0o600)
+            link = Path(folder) / "alias.py"
+            link.symlink_to(script)
+            with self.assertRaises(OSError):
+                m.verified_collector_entrypoint(["/usr/bin/python3", str(link)])
+            with self.assertRaises(m.PreflightRejected):
+                m.verified_collector_entrypoint(["/usr/bin/python3", "relative.py"])
+            with self.assertRaises(m.PreflightRejected):
+                m.verified_collector_entrypoint(["/bin/bash", str(script)])
+            with self.assertRaises(m.PreflightRejected):
+                m.verified_collector_entrypoint(["/usr/bin/python3", "-c",
+                                                   "import os"])
+
+    def test_reviewed_source_mutation_cannot_be_approved(self):
+        with tempfile.TemporaryDirectory() as folder:
+            altered_source = Path(folder) / "unattended_acceptance.py"
+            altered_script = Path(folder) / "deployed.py"
+            content = (Path(__file__).resolve().parents[1] /
+                       "scripts" / "unattended_acceptance.py").read_bytes()
+            altered_source.write_bytes(content + b"# injected change\n")
+            altered_script.write_bytes(content + b"# injected change\n")
+            altered_source.chmod(0o600)
+            altered_script.chmod(0o600)
+            with self.assertRaises(m.PreflightRejected):
+                m.verified_collector_entrypoint(
+                    ["/usr/bin/python3", str(altered_script)],
+                    approved_source=altered_source)
 
     def test_live_process_not_in_approved_working_directory_is_blocked(self):
         def moved(*args, **kwargs):
