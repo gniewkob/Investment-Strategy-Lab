@@ -1,0 +1,151 @@
+"""No Mac/LaunchAgent access: fake commands and preflight metadata only."""
+from contextlib import redirect_stdout
+from copy import deepcopy
+from datetime import datetime, timezone
+from io import StringIO
+import json
+from pathlib import Path
+import unittest
+from unittest.mock import patch
+
+from scripts import m1_predeploy_readiness as m
+
+OLD = "9"*40
+NEW = "a"*40
+ROOT = "/private/only-running-service"
+CONFIG = "/private/only-config"
+STATE = "/private/only-state"
+OUT = "/private/only-evidence"
+
+
+def fixtures():
+    return {
+        m.LABEL_PORTFOLIO: {
+            "ProgramArguments": [
+                "/usr/bin/python3", "-m", "scripts.autonomous_portfolio",
+                "--enable-live-read", "--config", CONFIG,
+            ],
+            "WorkingDirectory": ROOT, "KeepAlive": True, "RunAtLoad": True,
+        },
+        m.LABEL_HEALTH: {
+            "ProgramArguments": ["/usr/bin/python3", "-m",
+                                 "scripts.autonomous_portfolio", "--check-health"],
+            "StartInterval": 300,
+        },
+        m.LABEL_COLLECTOR: {
+            "ProgramArguments": ["/usr/bin/python3", "-m",
+                "scripts.unattended_acceptance", "--state-directory", STATE,
+                "--output", OUT, "--expected-commit", OLD],
+            "StartInterval": 60,
+        },
+    }
+
+
+def commands(*args, cwd=None):
+    if args[:2] == ("launchctl", "print"):
+        if args[-1].endswith(m.LABEL_PORTFOLIO):
+            return "pid = 123\nworking directory = " + ROOT
+        if args[-1].endswith(m.LABEL_HEALTH):
+            return "run interval = 300 seconds"
+        if args[-1].endswith(m.LABEL_COLLECTOR):
+            return "run interval = 60 seconds"
+    if args[:3] == ("ps", "-p", "123"):
+        return "/usr/bin/python3 -m scripts.autonomous_portfolio --enable-live-read"
+    if args[:2] == ("git", "-C") and "rev-parse" in args:
+        return OLD
+    if args[:2] == ("git", "-C") and "status" in args:
+        return ""
+    raise AssertionError("UNEXPECTED_SYNTETHIC_CALL")
+
+
+def probe(config_path, expected, phase, now):
+    if config_path != CONFIG or expected != NEW or phase != "before":
+        raise AssertionError("BAD_PREFLIGHT_CONTRACT")
+    return {
+        "result": "READY_FOR_CONTROLLED_READ_ONLY_CANARY",
+        "source_commit_matches_clean_checkout": True,
+        "private_config_permissions_valid": True,
+        "financial_operations": 0,
+        "network_requests": 0,
+        "credentials_opened": False,
+    }
+
+
+class PreflightTests(unittest.TestCase):
+    def verify(self, definitions=None, command_fn=commands, canary=probe):
+        definitions = definitions or fixtures()
+        def read(_home, label, _uid):
+            return deepcopy(definitions[label])
+        return m.check(NEW, reader=read, command_fn=command_fn,
+                       probe=canary,
+                       now=datetime(2026, 10, 29, tzinfo=timezone.utc))
+
+    def test_valid_readonly_preflight_only_confirms_metadata(self):
+        report = self.verify()
+        self.assertEqual(report["status"], "READY_FOR_RELEASE_REVIEW_NOT_DEPLOYED")
+        self.assertEqual(report["candidate_sha"], NEW)
+        self.assertEqual(report["current_on_disk_runtime_sha"], OLD)
+        self.assertFalse(report["candidate_is_active_on_disk_revision"])
+        self.assertFalse(report["active_process_code_in_memory_attested"])
+        self.assertFalse(report["rollback_backup_created"])
+        self.assertEqual(report["financial_operations"], 0)
+        self.assertEqual(report["files_changed"], 0)
+        self.assertEqual(report["services_restarted"], 0)
+        dumped = json.dumps(report)
+        for private in (ROOT, CONFIG, STATE, OUT):
+            self.assertNotIn(private, dumped)
+
+    def test_unsafe_or_mismatched_collector_and_watchdog_are_blocked(self):
+        for change in (
+            lambda d: d[m.LABEL_COLLECTOR].update(StartInterval=15),
+            lambda d: d[m.LABEL_HEALTH].update(StartInterval=60),
+            lambda d: d[m.LABEL_PORTFOLIO].update(KeepAlive=False),
+            lambda d: d[m.LABEL_COLLECTOR]["ProgramArguments"].extend(
+                ["--expected-commit", NEW]),
+            lambda d: d[m.LABEL_PORTFOLIO]["ProgramArguments"].append("--once"),
+            lambda d: d[m.LABEL_PORTFOLIO].update(WorkingDirectory="relative"),
+        ):
+            with self.subTest(change=str(change)):
+                d = fixtures()
+                change(d)
+                with self.assertRaises(m.PreflightRejected):
+                    self.verify(definitions=d)
+
+    def test_live_process_not_in_approved_working_directory_is_blocked(self):
+        def moved(*args, **kwargs):
+            if args[0] == "launchctl" and args[-1].endswith(m.LABEL_PORTFOLIO):
+                return "pid = 123\nworking directory = /unapproved"
+            return commands(*args, **kwargs)
+        with self.assertRaises(m.PreflightRejected):
+            self.verify(command_fn=moved)
+
+    def test_invalid_canary_and_bad_revision_fail_closed(self):
+        with self.assertRaises(m.PreflightRejected):
+            m.check("not-sha", reader=lambda *_: None)
+        def fake(*args):
+            report = probe(*args)
+            report["credentials_opened"] = True
+            return report
+        with self.assertRaises(m.PreflightRejected):
+            self.verify(canary=fake)
+
+    def test_cli_never_leaks_errors_or_private_paths(self):
+        out = StringIO()
+        with patch.object(m, "check", side_effect=RuntimeError(
+                "credential content /private/DO_NOT_OUTPUT")):
+            with redirect_stdout(out):
+                self.assertEqual(m.main(["--expected-commit", NEW]), 2)
+        self.assertEqual(out.getvalue().strip(), "M1_PREDEPLOY_READONLY_REJECTED")
+        self.assertNotIn("DO_NOT_OUTPUT", out.getvalue())
+
+    def test_command_line_option_rejects_duplicate_or_missing_values(self):
+        self.assertEqual(m.option(["--output", OUT], "--output"), OUT)
+        self.assertEqual(m.option(["--output="+OUT], "--output"), OUT)
+        for args in (["--output"], [], ["--output", OUT, "--output", OUT]):
+            with self.subTest(args=args):
+                with self.assertRaises(m.PreflightRejected):
+                    m.option(args, "--output")
+
+
+if __name__ == "__main__":
+    unittest.main()
