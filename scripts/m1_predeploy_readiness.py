@@ -105,14 +105,25 @@ def check(expected, *, home=None, uid=None, reader=read_launchagent,
     require(type(active_root) is str and Path(active_root).is_absolute()
             and supervisor.get("KeepAlive") is True
             and supervisor.get("RunAtLoad") is True)
-    step("CHECK_WATCHDOG_COLLECTOR_DEFINITIONS")
+    # Four independent gates distinguish a genuine drift in launchd
+    # definitions from an overly strict expectation about CLI layout.
+    # Never echo the actual ProgramArguments: they may contain local paths.
     watchdog_args = watchdog.get("ProgramArguments")
     collector_args = collector.get("ProgramArguments")
-    require(type(watchdog_args) is list and "--check-health" in watchdog_args
-            and watchdog.get("StartInterval") == 300
-            and type(collector_args) is list
-            and "scripts.unattended_acceptance" in collector_args
-            and collector.get("StartInterval") == 60)
+    step("CHECK_WATCHDOG_COMMAND")
+    require(type(watchdog_args) is list
+            and all(type(arg) is str for arg in watchdog_args)
+            and "--check-health" in watchdog_args)
+    step("CHECK_WATCHDOG_INTERVAL")
+    require(type(watchdog.get("StartInterval")) is int
+            and watchdog["StartInterval"] == 300)
+    step("CHECK_COLLECTOR_COMMAND")
+    require(type(collector_args) is list
+            and all(type(arg) is str for arg in collector_args)
+            and "scripts.unattended_acceptance" in collector_args)
+    step("CHECK_COLLECTOR_INTERVAL")
+    require(type(collector.get("StartInterval")) is int
+            and collector["StartInterval"] == 60)
 
     # 'launchctl print' proves loaded service metadata, not how old Python
     # bytecode or modules in an existing running process were initialized.
