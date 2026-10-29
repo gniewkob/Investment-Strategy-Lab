@@ -220,7 +220,8 @@ def render(report):
     .brand-subtitle { color:var(--muted); font-size:11px; letter-spacing:.09em;
       font-weight:700; text-transform:uppercase; }
     .nav { display:flex; align-items:center; flex-wrap:wrap; gap:5px; }
-    .nav a { font-size:12px; color:var(--secondary); padding:9px 11px;
+    .nav a { display:inline-flex; align-items:center; justify-content:center;
+      min-height:44px; font-size:12px; color:var(--secondary); padding:9px 12px;
       border-radius:9px; transition:background .16s ease,color .16s ease; }
     .nav a:hover { color:var(--text); background:var(--surface-2); }
     .intro { padding:42px 0 23px; }
@@ -302,6 +303,8 @@ def render(report):
     .wide { grid-column:1/-1; }
     .mini-label { border:1px solid var(--border); border-radius:999px;
       padding:5px 10px; color:var(--secondary); font-size:11px; }
+    .scroll-hint { display:none; font-size:11px; color:var(--muted);
+      margin:0 0 9px; }
     .table-wrap { max-width:100%; overflow-x:auto; border:1px solid var(--border);
       border-radius:13px; scrollbar-width:thin; }
     table { width:100%; border-collapse:collapse; min-width:580px; }
@@ -348,7 +351,7 @@ def render(report):
       .shell { padding:0 14px 38px; }
       .masthead { gap:12px; }
       .nav { width:100%; overflow-x:auto; flex-wrap:nowrap; padding-bottom:2px; }
-      .nav a { white-space:nowrap; padding:8px 10px; }
+      .nav a { flex:none; white-space:nowrap; padding:9px 12px; min-height:44px; }
       .intro { padding:29px 2px 17px; }
       .hero { gap:12px; margin-top:12px; }
       .hero-main,.hero-side { border-radius:19px; padding:21px; }
@@ -359,6 +362,9 @@ def render(report):
       .panel { padding:18px; border-radius:17px; margin-bottom:12px; }
       h1 { font-size:2.08rem; }
       .decision { margin:14px 0 25px; }
+    }
+    @media(max-width:740px) {
+      .scroll-hint { display:block; }
     }
     @media(prefers-color-scheme:light) {
       :root { color-scheme:light; --bg:#f4f6fb; --surface:#ffffff;
@@ -471,6 +477,7 @@ def render(report):
         ". Dotyczy tylko obsługiwanych i wycenionych aktywów. "
         "Brak wartości nie oznacza zera. NFT, DeFi i zobowiązania pozostają "
         "poza kompletną wyceną.</p>"
+        "<p class='scroll-hint'>Tabela jest przewijana poziomo.</p>"
         "<div class='table-wrap' role='region' tabindex='0' "
         "aria-label='Tabela znanych pozycji, przewijana poziomo'>"
         "<table><thead><tr><th scope='col'>Miejsce</th>"
@@ -496,6 +503,7 @@ def render(report):
         "<p class='panel-note'>Czas kontroli potwierdza wykonanie odczytu, "
         "nie kompletność historii źródła. Powody niepełnej historii ERC-20 "
         "są dostępne dopiero po ich zapisaniu przez diagnostykę.</p>"
+        "<p class='scroll-hint'>Tabela jest przewijana poziomo.</p>"
         "<div class='table-wrap' role='region' tabindex='0' "
         "aria-label='Tabela statusów źródeł, przewijana poziomo'>"
         "<table><thead><tr><th scope='col'>Źródło</th>"
