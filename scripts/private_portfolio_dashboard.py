@@ -172,81 +172,359 @@ def render(report):
         "Odczyt techniczny zgłasza dostępność uzgadniania; nie stanowi to zgody na transfer."
     )
 
+    # Design direction: quiet finance workspace, explicit uncertainty and evidence.
+    # System fonts, local CSS, useful anchor navigation, and no client-side script.
     styles = """
-    :root{color-scheme:dark;font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
-    *{box-sizing:border-box}body{background:#0b1220;color:#e7edf7;max-width:1180px;
-    margin:0 auto;padding:28px 22px 70px;line-height:1.55}
-    h1{font-size:clamp(1.8rem,4vw,2.7rem);margin:8px 0}
-    h2{font-size:1.25rem;margin:0 0 12px}
-    p{margin:8px 0}.lead{color:#b9c7d9;max-width:850px}
-    .eyebrow{color:#93b8e7;letter-spacing:.12em;text-transform:uppercase;font-size:.75rem;font-weight:700}
-    .notice{border-left:4px solid #f5c36b;background:#242336;padding:12px 16px;border-radius:6px;margin:22px 0}
-    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;margin:22px 0}
-    .metric,.panel{background:#142036;border:1px solid #2b3d58;border-radius:14px;padding:18px}
-    .metric .name{font-size:.84rem;color:#aebdd0}.metric .value{font-size:1.45rem;
-    font-weight:750;overflow-wrap:anywhere;margin-top:8px}
-    .good{color:#7ce0b2}.warn{color:#ffd18b}.muted{color:#aab7c7}
-    .panel{margin:18px 0}.panel p{color:#d0d9e7}
-    .table-wrap{overflow-x:auto}table{width:100%;border-collapse:collapse;min-width:580px}
-    th,td{text-align:left;padding:12px;border-bottom:1px solid #30425b;vertical-align:top}
-    th{font-weight:650;color:#d7e5f6}td{overflow-wrap:anywhere}
-    .number{font-variant-numeric:tabular-nums}
-    details summary{cursor:pointer;font-weight:650}
-    ul{margin:12px 0 0;padding-left:21px}.fine{font-size:.85rem;color:#aabbd1}
-    footer{margin-top:24px;border-top:1px solid #30425b;padding-top:18px;color:#aabbd1}
-    @media(max-width:600px){body{padding:18px 12px 50px}.metric,.panel{padding:14px}}
+    :root {
+      color-scheme: dark;
+      --bg:#090e18; --surface:#111a2a; --surface-2:#172237;
+      --surface-3:#1b2940; --text:#eef3fc; --secondary:#b1bdd0;
+      --muted:#8d9bb0; --border:#2a3851; --accent:#9bb8ff;
+      --accent-faint:rgba(155,184,255,.10); --good:#89e2bf;
+      --good-faint:rgba(137,226,191,.10); --warn:#f6c98e;
+      --warn-faint:rgba(246,201,142,.10); --shadow:0 22px 80px rgba(0,0,0,.16);
+      font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display",
+        "Segoe UI",system-ui,sans-serif;
+      font-synthesis:none;
+    }
+    * { box-sizing:border-box; }
+    html { scroll-behavior:smooth; }
+    body {
+      margin:0; min-height:100vh; color:var(--text);
+      background:radial-gradient(ellipse 880px 550px at 90% -10%,
+        rgba(96,130,228,.14),transparent 70%),
+        radial-gradient(ellipse 700px 520px at 0% 50%,
+        rgba(71,128,155,.07),transparent 70%),var(--bg);
+      line-height:1.55; -webkit-font-smoothing:antialiased;
+      font-size:15px;
+    }
+    .shell { max-width:1240px; margin:0 auto;
+      padding:0 clamp(16px,4vw,52px) 64px; }
+    .skip-link { position:absolute; top:-100px; left:12px;
+      background:var(--text); color:var(--bg); padding:12px 16px;
+      z-index:10; border-radius:10px; }
+    .skip-link:focus { top:12px; }
+    a { color:inherit; text-decoration:none; }
+    a:focus-visible, summary:focus-visible, .table-wrap:focus-visible {
+      outline:3px solid var(--accent); outline-offset:4px;
+    }
+    .masthead { display:flex; align-items:center; justify-content:space-between;
+      gap:24px; flex-wrap:wrap; min-height:102px;
+      border-bottom:1px solid var(--border); }
+    .brand { display:flex; align-items:center; gap:13px; min-width:0; }
+    .brand-mark { display:grid; place-items:center; width:42px; height:42px;
+      flex:none; border:1px solid rgba(155,184,255,.4); border-radius:13px;
+      background:linear-gradient(145deg,#354f87,#1b2948); color:#f4f7ff;
+      font-size:13px; font-weight:850; letter-spacing:-.04em; }
+    .brand-title { font-weight:750; font-size:15px; letter-spacing:-.02em; }
+    .brand-subtitle { color:var(--muted); font-size:11px; letter-spacing:.09em;
+      font-weight:700; text-transform:uppercase; }
+    .nav { display:flex; align-items:center; flex-wrap:wrap; gap:5px; }
+    .nav a { font-size:12px; color:var(--secondary); padding:9px 11px;
+      border-radius:9px; transition:background .16s ease,color .16s ease; }
+    .nav a:hover { color:var(--text); background:var(--surface-2); }
+    .intro { padding:42px 0 23px; }
+    .eyebrow { font-size:11px; color:var(--accent); font-weight:780;
+      text-transform:uppercase; letter-spacing:.17em; }
+    h1,h2,h3,p { margin-top:0; }
+    h1 { font-size:clamp(2rem,5vw,3.25rem); line-height:1.09;
+      letter-spacing:-.055em; font-weight:760; margin:12px 0 13px; }
+    h2 { font-size:clamp(1.15rem,2.5vw,1.46rem); line-height:1.2;
+      letter-spacing:-.03em; margin:0; }
+    .lead { color:var(--secondary); max-width:690px; margin:0;
+      font-size:clamp(13px,1.6vw,15px); }
+    .hero { display:grid; grid-template-columns:minmax(0,1.45fr) minmax(290px,.9fr);
+      gap:16px; margin:16px 0; }
+    .hero-main { position:relative; overflow:hidden;
+      background:linear-gradient(135deg,#1b2d52 0%,#142139 58%,#101c31 100%);
+      border:1px solid #35486b; border-radius:25px; padding:29px 32px 27px;
+      box-shadow:var(--shadow); }
+    .hero-main:after { content:""; position:absolute; width:280px;
+      height:280px; right:-145px; top:-135px; border-radius:50%;
+      border:1px solid rgba(195,212,255,.16); box-shadow:0 0 0 42px
+      rgba(155,184,255,.025),0 0 0 88px rgba(155,184,255,.018);
+      pointer-events:none; }
+    .hero-label { color:#c4d2ed; font-size:13px; font-weight:620; }
+    .hero-value { color:#fff; font-size:clamp(2rem,4.5vw,3.5rem);
+      font-weight:770; line-height:1.18; letter-spacing:-.06em;
+      margin:17px 0 6px; overflow-wrap:anywhere; }
+    .hero-unit { font-size:.40em; letter-spacing:-.03em; font-weight:650;
+      color:#b5c9ef; }
+    .hero-main .hero-explain { color:#b5c3da; font-size:12px;
+      max-width:450px; margin:8px 0 0; }
+    .hero-side { display:flex; flex-direction:column; justify-content:space-between;
+      gap:18px; border:1px solid var(--border); border-radius:25px;
+      background:var(--surface); padding:27px 26px; }
+    .overline { font-size:11px; text-transform:uppercase; font-weight:750;
+      letter-spacing:.13em; color:var(--muted); }
+    .status-line { display:flex; align-items:center; flex-wrap:wrap;
+      gap:9px; margin:12px 0 12px; }
+    .status-dot { display:inline-block; width:9px; height:9px;
+      border-radius:50%; background:currentColor; box-shadow:0 0 0 5px
+      var(--accent-faint); }
+    .status-line strong { font-size:clamp(17px,2.4vw,23px);
+      letter-spacing:-.025em; overflow-wrap:anywhere; }
+    .good { color:var(--good); } .warn { color:var(--warn); }
+    .status-line.warn .status-dot { box-shadow:0 0 0 5px var(--warn-faint); }
+    .status-line.good .status-dot { box-shadow:0 0 0 5px var(--good-faint); }
+    .hero-side p { margin:0; color:var(--secondary); font-size:13px; }
+    .timestamp { border-top:1px solid var(--border); padding-top:15px; }
+    .timestamp strong { display:block; color:var(--text); font-size:12px;
+      overflow-wrap:anywhere; font-weight:620; margin:5px 0; }
+    .metric-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr));
+      gap:14px; margin-bottom:17px; }
+    .metric { background:var(--surface); border:1px solid var(--border);
+      border-radius:19px; padding:20px 22px; min-width:0; }
+    .metric-label { color:var(--secondary); font-size:12px; font-weight:580; }
+    .metric-value { font-size:clamp(21px,3vw,30px); font-weight:740;
+      letter-spacing:-.045em; line-height:1.2; margin:10px 0 7px;
+      overflow-wrap:anywhere; }
+    .metric-note { color:var(--muted); font-size:11px; margin:0; }
+    .decision { display:flex; align-items:flex-start; justify-content:space-between;
+      flex-wrap:wrap; gap:12px; margin:19px 0 31px; padding:16px 20px;
+      background:var(--warn-faint); border:1px solid rgba(246,201,142,.24);
+      border-radius:15px; }
+    .decision strong { color:var(--warn); font-size:13px; }
+    .decision p { color:var(--secondary); font-size:12px;
+      margin:5px 0 0; max-width:820px; }
+    .decision-icon { border:1px solid rgba(246,201,142,.36);
+      color:var(--warn); border-radius:999px; font-size:11px;
+      font-weight:750; padding:5px 10px; }
+    .content-grid { display:grid; grid-template-columns:minmax(0,1.45fr)
+      minmax(290px,.9fr); gap:16px; }
+    .panel { min-width:0; background:var(--surface); border:1px solid var(--border);
+      border-radius:20px; padding:24px; margin:0 0 16px; }
+    .panel-head { display:flex; flex-wrap:wrap; align-items:flex-start;
+      justify-content:space-between; gap:11px; margin-bottom:19px; }
+    .section-kicker { font-size:10px; font-weight:760; letter-spacing:.15em;
+      color:var(--muted); text-transform:uppercase; margin:0 0 7px; }
+    .panel-note { color:var(--secondary); font-size:12px; margin:7px 0 15px; }
+    .wide { grid-column:1/-1; }
+    .mini-label { border:1px solid var(--border); border-radius:999px;
+      padding:5px 10px; color:var(--secondary); font-size:11px; }
+    .table-wrap { max-width:100%; overflow-x:auto; border:1px solid var(--border);
+      border-radius:13px; scrollbar-width:thin; }
+    table { width:100%; border-collapse:collapse; min-width:580px; }
+    th,td { padding:13px 14px; text-align:left; vertical-align:top;
+      border-bottom:1px solid var(--border); overflow-wrap:anywhere; }
+    thead th { background:var(--surface-2); color:var(--secondary);
+      font-size:11px; font-weight:720; white-space:nowrap; }
+    tbody th { font-weight:680; } tbody tr:last-child td,
+    tbody tr:last-child th { border-bottom:0; }
+    tbody tr:hover { background:var(--accent-faint); }
+    td { font-size:12px; color:var(--text); } .number { font-variant-numeric:tabular-nums; }
+    .muted { color:var(--muted); }
+    .body-copy { font-size:13px; line-height:1.7; color:var(--secondary);
+      margin:0 0 13px; }
+    .rule { height:1px; border:0; background:var(--border); margin:20px 0; }
+    .fine { font-size:11px; color:var(--muted); line-height:1.7; }
+    .detail-list { margin:0; padding:0; list-style:none; }
+    .detail-list li { position:relative; padding:11px 10px 11px 21px;
+      border-bottom:1px solid var(--border); overflow-wrap:anywhere; font-size:12px; }
+    .detail-list li:last-child { border-bottom:0; }
+    .detail-list li:before { content:""; position:absolute; width:5px;
+      height:5px; left:5px; top:19px; background:var(--accent);
+      border-radius:50%; }
+    .paper-line { padding:16px 18px; border:1px solid var(--border);
+      border-radius:12px; background:var(--surface-2);
+      font-size:13px; color:var(--text); }
+    details { border:1px solid var(--border); border-radius:13px;
+      padding:0 16px; background:var(--surface-2); }
+    summary { cursor:pointer; padding:15px 0; font-weight:650;
+      font-size:13px; color:var(--text); }
+    details ul { margin:0 0 16px; padding-left:21px; color:var(--secondary);
+      font-size:12px; }
+    details li { padding:5px 0; overflow-wrap:anywhere; }
+    .bottom-note { border-top:1px solid var(--border); padding:20px 0 0;
+      color:var(--muted); font-size:11px; line-height:1.8; }
+    section[id] { scroll-margin-top:24px; }
+    @media (max-width:900px) {
+      .masthead { padding:16px 0; min-height:auto; }
+      .hero,.content-grid { grid-template-columns:minmax(0,1fr); }
+      .metric-grid { grid-template-columns:repeat(3,minmax(0,1fr)); }
+      .wide { grid-column:auto; }
+    }
+    @media (max-width:620px) {
+      .shell { padding:0 14px 38px; }
+      .masthead { gap:12px; }
+      .nav { width:100%; overflow-x:auto; flex-wrap:nowrap; padding-bottom:2px; }
+      .nav a { white-space:nowrap; padding:8px 10px; }
+      .intro { padding:29px 2px 17px; }
+      .hero { gap:12px; margin-top:12px; }
+      .hero-main,.hero-side { border-radius:19px; padding:21px; }
+      .hero-main:after { width:140px; height:140px; right:-75px; top:-60px; }
+      .metric-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+      .metric { padding:17px; }
+      .metric:last-child { grid-column:1/-1; }
+      .panel { padding:18px; border-radius:17px; margin-bottom:12px; }
+      h1 { font-size:2.08rem; }
+      .decision { margin:14px 0 25px; }
+    }
+    @media(prefers-color-scheme:light) {
+      :root { color-scheme:light; --bg:#f4f6fb; --surface:#ffffff;
+        --surface-2:#f7f9fc; --surface-3:#f1f4fb; --text:#1c2840;
+        --secondary:#4d5c73; --muted:#69788f; --border:#dfe5ef;
+        --accent:#315bad; --accent-faint:rgba(49,91,173,.07);
+        --good:#17684d; --good-faint:rgba(23,104,77,.09);
+        --warn:#865618; --warn-faint:rgba(162,112,44,.08);
+        --shadow:0 20px 70px rgba(25,42,76,.08); }
+      body { background:radial-gradient(ellipse 950px 480px at 95% -5%,
+        rgba(141,171,231,.15),transparent 70%),var(--bg); }
+      .hero-main { background:linear-gradient(130deg,#244073,#1a315c);
+        border-color:#3a5b8e; }
+      .hero-main .hero-explain,.hero-label { color:#cfdbf1; }
+      .hero-unit { color:#d1def4; }
+      .brand-mark { background:linear-gradient(145deg,#3a61a0,#22395e); }
+      .nav a:hover { background:var(--surface-2); }
+    }
+    @media(prefers-contrast:more) {
+      :root { --border:#7e90ab; }
+      .panel,.metric,.hero-side,.table-wrap { border-width:2px; }
+    }
+    @media(prefers-reduced-motion:reduce) {
+      html { scroll-behavior:auto; }
+      .nav a { transition:none; }
+    }
+    @media print {
+      :root { color-scheme:light; --bg:#fff; --surface:#fff;
+        --text:#111; --secondary:#444; --muted:#555; --border:#bbb; }
+      body { background:#fff; color:#111; }
+      .shell { padding:0; }
+      .masthead { min-height:auto; }
+      .nav,.skip-link { display:none; }
+      .hero-main { box-shadow:none; }
+      .panel,.metric,.hero-side,.hero-main { break-inside:avoid; }
+    }
     """
 
+    alert_count = str(len(alerts)) if isinstance(alerts, list) else "—"
     return (
         "<!doctype html><html lang='pl'><head><meta charset='utf-8'>"
         "<meta name='viewport' content='width=device-width,initial-scale=1'>"
         "<meta http-equiv='refresh' content='60'>"
         "<meta http-equiv='Content-Security-Policy' "
         "content=\"default-src 'none'; style-src 'unsafe-inline'\">"
-        "<title>Investment Strategy Lab — portfolio</title><style>" + styles + "</style></head><body>"
-        "<header><div class='eyebrow'>Private observation · research only</div>"
-        "<h1>Investment Strategy Lab</h1>"
+        "<meta name='theme-color' content='#090e18'>"
+        "<title>Investment Strategy Lab — portfolio</title><style>" + styles + "</style>"
+        "</head><body><a class='skip-link' href='#main'>Przejdź do treści</a>"
+        "<div class='shell'><header class='masthead'>"
+        "<div class='brand'><div class='brand-mark' aria-hidden='true'>ISL</div>"
+        "<div><div class='brand-title'>Investment Strategy Lab</div>"
+        "<div class='brand-subtitle'>Private research workspace</div></div></div>"
+        "<nav class='nav' aria-label='Sekcje panelu'>"
+        "<a href='#overview'>Przegląd</a><a href='#holdings'>Aktywa</a>"
+        "<a href='#sources'>Źródła</a><a href='#quality'>Jakość danych</a>"
+        "<a href='#research'>Symulacja</a></nav></header>"
+        "<main id='main'>"
+        "<section class='intro' id='overview' aria-labelledby='page-title'>"
+        "<div class='eyebrow'>Obserwacja lokalna / ostatni zapis</div>"
+        "<h1 id='page-title'>Portfel pod kontrolą danych.</h1>"
         "<p class='lead'>Coinbase Exchange i własne portfele Ethereum/Base. "
-        "Dane odnoszą się do ostatniego zapisanego cyklu, nie są certyfikacją "
-        "pełnego majątku ani rekomendacją inwestycyjną.</p></header>"
-        "<div class='notice'><strong>HOLD_NO_CHANGE · Brak autoryzowanej decyzji inwestycyjnej.</strong>"
+        "Widok pokazuje ostatni zapisany cykl i jego ograniczenia — bez "
+        "certyfikacji pełnego majątku ani rekomendacji inwestycyjnych.</p>"
+        "</section>"
+        "<div class='hero'>"
+        "<section class='hero-main' aria-labelledby='valuation-title'>"
+        "<div class='hero-label' id='valuation-title'>Znana wycena częściowa</div>"
+        "<div class='hero-value number'>" +
+        cell(report.get("known_priced_subtotal_pln")) +
+        " <span class='hero-unit'>PLN</span></div>"
+        "<p class='hero-explain'>To suma wyłącznie rozpoznanych i wycenionych "
+        "aktywów. Nie jest to wartość całego portfela ani pełny P&amp;L.</p>"
+        "</section>"
+        "<section class='hero-side' aria-label='Stan ostatniego odczytu'>"
+        "<div><div class='overline'>Status ostatniego cyklu</div>"
+        "<div class='status-line " + status_class + "'>"
+        "<span class='status-dot' aria-hidden='true'></span>"
+        "<strong>" + safe(status) + "</strong></div>"
+        "<p>To status zapisany w pliku lokalnym, a nie bieżący test połączenia.</p>"
+        "</div><div class='timestamp'><div class='overline'>Ostatni zapis UTC</div>"
+        "<strong>" + safe(report.get("checked_at_utc")) + "</strong>"
+        "<p>ważne do: " + safe(report.get("expires_at_utc")) +
+        ". Po terminie ważności status nie potwierdza pracy usługi.</p>"
+        "</div></section></div>"
+        "<div class='metric-grid' aria-label='Kluczowe wskaźniki'>"
+        "<div class='metric'><div class='metric-label'>Źródła ze statusem OK</div>"
+        "<div class='metric-value number'>" + safe(ok_sources) + " / " +
+        safe(len(sources)) + "</div>"
+        "<p class='metric-note'>Tylko ostatni zapisany cykl</p></div>"
+        "<div class='metric'><div class='metric-label'>Pozycje bez wyceny</div>"
+        "<div class='metric-value number'>" +
+        safe(report.get("unpriced_position_count")) + "</div>"
+        "<p class='metric-note'>Brak wyceny nie oznacza wartości zero</p></div>"
+        "<div class='metric'><div class='metric-label'>Alerty w raporcie</div>"
+        "<div class='metric-value number'>" + safe(alert_count) + "</div>"
+        "<p class='metric-note'>Znane ostrzeżenia i braki</p></div></div>"
+        "<aside class='decision' aria-label='Zakres operacji'>"
+        "<div><strong>HOLD_NO_CHANGE · Brak autoryzowanej decyzji inwestycyjnej.</strong>"
         "<p>Odczyty i symulacja nie wykonują kupna, sprzedaży ani transferów. "
-        "Operacje finansowe w ostatnim cyklu: " + safe(report.get("financial_operations")) + ".</p></div>"
-        "<div class='grid' aria-label='Kluczowe wskaźniki'>"
-        "<div class='metric'><div class='name'>Status ostatniego cyklu</div><div class='value " +
-        status_class + "'>" + safe(status) + "</div></div>"
-        "<div class='metric'><div class='name'>Wycena częściowa PLN</div><div class='value number'>" +
-        cell(report.get("known_priced_subtotal_pln")) + "</div></div>"
-        "<div class='metric'><div class='name'>Źródła ze statusem OK</div><div class='value number'>" +
-        safe(ok_sources) + " / " + safe(len(sources)) + "</div></div>"
-        "<div class='metric'><div class='name'>Pozycje bez wyceny</div><div class='value number'>" +
-        safe(report.get("unpriced_position_count")) + "</div></div></div>"
-        "<p class='fine'>Aktualizacja: " + safe(report.get("checked_at_utc")) +
-        " · ważne do: " + safe(report.get("expires_at_utc")) +
-        ". Po terminie ważności ostatni status nie oznacza, że usługa nadal działa.</p>"
-        "<section class='panel'><h2>Znane pozycje</h2>"
-        "<p>Wycena częściowa PLN: " + cell(report.get("known_priced_subtotal_pln")) +
+        "Operacje finansowe w ostatnim cyklu: " +
+        safe(report.get("financial_operations")) + ".</p></div>"
+        "<span class='decision-icon'>RESEARCH ONLY</span></aside>"
+        "<div class='content-grid'>"
+        "<section id='holdings' class='panel' aria-labelledby='holdings-title'>"
+        "<div class='panel-head'><div><div class='section-kicker'>01 / Aktywa</div>"
+        "<h2 id='holdings-title'>Znane pozycje</h2></div>"
+        "<span class='mini-label'>Wycena częściowa · PLN</span></div>"
+        "<p class='panel-note'>Wycena częściowa PLN: " +
+        cell(report.get("known_priced_subtotal_pln")) +
         ". Dotyczy tylko obsługiwanych i wycenionych aktywów. "
-        "Brak wartości nie oznacza zera. NFT, DeFi i zobowiązania pozostają poza kompletną wyceną.</p>"
-        "<p class='fine'>" + fx_note + "</p>"
-        "<div class='table-wrap'><table><thead><tr><th>Miejsce</th><th>Aktywo</th>"
-        "<th>Ilość</th><th>Wartość referencyjna PLN</th></tr></thead><tbody>" +
-        holding_rows + "</tbody></table></div></section>"
-        "<section class='panel'><h2>Jakość i świeżość źródeł</h2>"
-        "<p class='fine'>Czas kontroli potwierdza wykonanie odczytu, nie kompletność historii źródła.</p>"
-        "<div class='table-wrap'><table><thead><tr><th>Źródło</th><th>Status</th>"
-        "<th>Czas kontroli UTC</th><th>Powód niepełnej historii ERC-20</th></tr></thead><tbody>" + source_rows +
-        "</tbody></table></div></section>"
-        "<section class='panel'><h2>Pokrycie historii i uzgadnianie</h2><p>" +
-        safe(coverage_note) + "</p><p>" + safe(reconciliation_note) + "</p></section>"
-        "<section class='panel'><h2>Diagnostyka Ethereum/Base RPC</h2>" +
-        rpc_table + "</section>"
-        "<section class='panel'><h2>Symulacja referencyjna</h2><p>" +
-        safe(paper_note) + "</p></section>"
-        "<section class='panel'><details><summary>Alerty i wyjątki</summary><ul>" +
+        "Brak wartości nie oznacza zera. NFT, DeFi i zobowiązania pozostają "
+        "poza kompletną wyceną.</p>"
+        "<div class='table-wrap' role='region' tabindex='0' "
+        "aria-label='Tabela znanych pozycji, przewijana poziomo'>"
+        "<table><thead><tr><th scope='col'>Miejsce</th>"
+        "<th scope='col'>Aktywo</th><th scope='col'>Ilość</th>"
+        "<th scope='col'>Wartość referencyjna PLN</th></tr></thead><tbody>" +
+        holding_rows + "</tbody></table></div>"
+        "<p class='fine'>" + fx_note + "</p></section>"
+        "<section class='panel' aria-labelledby='integrity-title'>"
+        "<div class='panel-head'><div><div class='section-kicker'>02 / Ograniczenia</div>"
+        "<h2 id='integrity-title'>Jakość wyceny</h2></div></div>"
+        "<p class='body-copy'>Dane służą do obserwacji. Historia EVM, "
+        "uzgadnianie między giełdą a portfelem i część cen mogą być niepełne.</p>"
+        "<hr class='rule'><div class='section-kicker'>Powiązanie źródeł</div>"
+        "<p class='body-copy'>" + safe(reconciliation_note) + "</p>"
+        "<hr class='rule'><div class='section-kicker'>Zakres historii</div>"
+        "<p class='body-copy'>Pokrycie historii ERC20: dane opisują tylko "
+        "monitorowany zakres i nie potwierdzają całego blockchaina.</p>"
+        "</section>"
+        "<section id='sources' class='panel wide' aria-labelledby='sources-title'>"
+        "<div class='panel-head'><div><div class='section-kicker'>03 / Dane</div>"
+        "<h2 id='sources-title'>Jakość i świeżość źródeł</h2></div>"
+        "<span class='mini-label'>Ostatni cykl</span></div>"
+        "<p class='panel-note'>Czas kontroli potwierdza wykonanie odczytu, "
+        "nie kompletność historii źródła. Powody niepełnej historii ERC-20 "
+        "są dostępne dopiero po ich zapisaniu przez diagnostykę.</p>"
+        "<div class='table-wrap' role='region' tabindex='0' "
+        "aria-label='Tabela statusów źródeł, przewijana poziomo'>"
+        "<table><thead><tr><th scope='col'>Źródło</th>"
+        "<th scope='col'>Status</th><th scope='col'>Czas kontroli UTC</th>"
+        "<th scope='col'>Powód niepełnej historii ERC-20</th>"
+        "</tr></thead><tbody>" + source_rows + "</tbody></table></div></section>"
+        "<section id='quality' class='panel wide' aria-labelledby='quality-title'>"
+        "<div class='panel-head'><div><div class='section-kicker'>04 / Monitoring</div>"
+        "<h2 id='quality-title'>Pokrycie historii i diagnostyka RPC</h2></div>"
+        "<span class='mini-label'>Ethereum + Base</span></div>"
+        "<p class='body-copy'>" + safe(coverage_note) + "</p>"
+        "<hr class='rule'><div class='section-kicker'>Transport RPC</div>"
+        "<h3 style='font-size:15px;letter-spacing:-.02em;margin:7px 0 16px;'>"
+        "Diagnostyka Ethereum/Base RPC</h3>"
+        + rpc_table + "</section>"
+        "<section id='research' class='panel' aria-labelledby='research-title'>"
+        "<div class='panel-head'><div><div class='section-kicker'>05 / Badania</div>"
+        "<h2 id='research-title'>Symulacja referencyjna</h2></div>"
+        "<span class='mini-label'>PAPER ONLY</span></div>"
+        "<div class='paper-line'>" + safe(paper_note) + "</div></section>"
+        "<section class='panel' aria-labelledby='alert-title'>"
+        "<div class='panel-head'><div><div class='section-kicker'>06 / Kontrola</div>"
+        "<h2 id='alert-title'>Alerty i wyjątki</h2></div>"
+        "<span class='mini-label'>" + safe(alert_count) + " alertów</span></div>"
+        "<details open><summary>Lista z ostatniego cyklu</summary><ul>" +
         alert_rows + "</ul></details></section>"
-        "<footer>Panel prywatny, statyczny, bez zewnętrznych skryptów i zasobów. "
+        "</div></main><footer class='bottom-note'>"
+        "Panel prywatny, statyczny, bez zewnętrznych skryptów i zasobów. "
         "Odświeżenie strony wczytuje ostatni zapis; nie odpytuje automatycznie giełdy. "
-        "Brak potwierdzonej przewagi strategii, pełnego P&amp;L i zgody na wykonanie transakcji.</footer>"
-        "</body></html>"
+        "Brak potwierdzonej przewagi strategii, pełnego P&amp;L i zgody na "
+        "wykonanie transakcji.</footer></div></body></html>"
     )
