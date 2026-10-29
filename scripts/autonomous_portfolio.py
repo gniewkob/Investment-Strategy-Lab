@@ -24,6 +24,7 @@ from scripts import ntfy_notifications
 from scripts.coinbase_deposit_history import _cursor
 from scripts.operational_read_only import read_private, write_private, observe_wallets, TOKENS, reconcile_events
 from scripts.operational_read_only import capture_rpc_metadata, rpc_metadata_snapshot
+from scripts.operational_read_only import HISTORY_FAILURE_CODES
 from scripts.read_only_portfolio_monitor import fetch_markets, fetch_usdpln
 
 NETWORKS = {1: "ethereum", 8453: "base"}
@@ -273,6 +274,13 @@ def _cycle(config, state, clock, *, signer_factory=history.make_sdk_signer,
                     chain_source["data"].get("history_complete_for_requested_range") is not True):
                 chain_source["status"] = "PARTIAL"
                 chain_source["reason"] = "REQUESTED_TOKEN_HISTORY_UNAVAILABLE"
+                failure_categories = set()
+                for wallet in chain_source["data"].get("wallets", []):
+                    history_report = wallet.get("history") or {}
+                    category = history_report.get("failure_category")
+                    failure_categories.add(category if type(category) is str
+                                           and category in HISTORY_FAILURE_CODES else "UNKNOWN")
+                chain_source["history_failure_categories"] = sorted(failure_categories or {"UNKNOWN"})
             sources[f"chain_{label}_{chain}"] = chain_source
             sources[f"cdp_{label}_{chain}"] = source_read(lambda: CdpBalances(
                 cdp_factory(config["credentials_file"])).collect(chain, address), clock)
