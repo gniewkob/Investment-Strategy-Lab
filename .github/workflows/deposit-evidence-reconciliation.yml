@@ -31,6 +31,8 @@ on:
       - 'docs/AUTONOMOUS_READ_ONLY_HISTORY_PL.md'
       - 'requirements-autonomous-history.txt'
       - 'docs/DEPOSIT_EVIDENCE_RECONCILIATION_PL.md'
+      - 'scripts/private_portfolio_dashboard.py'
+      - 'tests/test_private_portfolio_dashboard.py'
       - '.github/workflows/deposit-evidence-reconciliation.yml'
   workflow_dispatch:
 permissions:
