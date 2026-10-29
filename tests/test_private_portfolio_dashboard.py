@@ -117,6 +117,37 @@ class PrivateDashboardTests(unittest.TestCase):
         self.assertIn("Tabela jest przewijana poziomo", page)
         self.assertIn("aria-label='Tabela znanych pozycji, przewijana poziomo'", page)
 
+    def test_supporting_text_contrast_in_both_system_themes(self):
+        # Source-level color check, not a browser or WCAG certification.
+        import re
+
+        def token(css, name):
+            match = re.search(r"--" + name + r":(#[0-9a-fA-F]{6})", css)
+            self.assertIsNotNone(match, name)
+            return match.group(1)
+
+        def luminance(color):
+            channels = [int(color[i:i+2], 16)/255 for i in (1, 3, 5)]
+            linear = [v/12.92 if v <= .04045 else ((v+.055)/1.055)**2.4
+                      for v in channels]
+            return .2126*linear[0] + .7152*linear[1] + .0722*linear[2]
+
+        def ratio(fg, bg):
+            x, y = sorted((luminance(fg), luminance(bg)))
+            return (y+.05)/(x+.05)
+
+        page = portfolio.render(self.make_report())
+        self.assertIn("@media(prefers-color-scheme:light)", page)
+        dark, light = page.split("@media(prefers-color-scheme:light)", 1)
+        light = light.split("body {", 1)[0]
+        for theme in (dark, light):
+            with self.subTest(theme="light" if theme is light else "dark"):
+                background = token(theme, "surface")
+                for name in ("text", "secondary", "muted", "accent"):
+                    self.assertGreaterEqual(
+                        ratio(token(theme, name), background), 4.5,
+                        "Supporting text needs at least 4.5:1 on its surface")
+
     def test_design_does_not_make_unknown_holding_or_status_falsely_current(self):
         report = self.make_report()
         report["known_priced_subtotal_pln"] = None
