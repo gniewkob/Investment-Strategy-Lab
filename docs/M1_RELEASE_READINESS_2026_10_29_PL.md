@@ -690,3 +690,66 @@ nie interpretowano tego nieudanego przebiegu jako PASS.
 lecz nie testowano przywrócenia; interpreter i działanie izolowanego
 kolektora nie zostały atestowane. G3 pozostaje `NO-GO`, bez
 modyfikacji LaunchAgent, restartów, transferów i transakcji.
+
+
+## M1.4 — collector v3: własne bezpieczne Git i próba odtworzenia w izolacji
+
+Code review dokładnego SHA `33c1ab26c484aba0db0e971358b3de622b9a534f`
+zidentyfikował **P1**: `scripts/unattended_acceptance.py` w
+`inspect_runtime()` oraz `watchdog_attestation()` nadal używał
+niechronionych poleceń `git`. Nawet po naprawie canary źródłem
+wykonania zewnętrznego kodu mógł być inherited `GIT_CONFIG_COUNT`,
+`core.fsmonitor` lub `filter.*` w wykonywanym kolektorze.
+
+**Rozwiązanie:** kolektor v3 ma własną, samodzielną kontrolę
+`_trusted_git_checkout()` (bez importów z repozytorium, ponieważ
+`python -I` uruchamia prywatną kopię skryptu). W obydwu kontrolach
+Git wymaga bezpiecznego standalone `.git`, dopuszczalnej konfiguracji,
+braku `commondir`/worktree redirect i wykonuje polecenia przez
+`/usr/bin/git` z oczyszczonym `GIT_*`, bez `core.fsmonitor`,
+hooków, submodułów i opcjonalnych zapisów indeksu.
+Nowe testy sprawdzają fałszywe konfiguracje Git oraz izolację
+wywołań runtime i watchdoga.
+
+**NIE mieszać nowej wersji z historycznym backupem:**
+
+- stary kolektor, blob Git
+  `41a8ca1e40af5697f6661b5e158bc205b4fe48ff`;
+- nowy, nie wdrożony kolektor v3, blob Git
+  `4e4f8e1c1d3eed87b4a6a7b9b5410ab2b3eeeb19`;
+- istniejący prywatny bundle `m1-msmkv_0i` zachowuje trzy
+  pliki poprzedniego formatu V2 — może zostać zweryfikowany
+  jako kopia rollbacku, lecz **nie** zawiera nowego kolektora;
+- nowe bundle V3 zawierają cztery odrębne pliki: stare
+  `plist`, stary kod, projekt `plist` z `-I` oraz
+  osobno zatwierdzony nowy kod kolektora. Samo dodanie
+  `-I` do starego skryptu nie naprawia jego niezabezpieczonych
+  poleceń Git. Testy sprawdzają kompatybilność V2 i V3.
+
+**Izolowana próba przywrócenia plików:** nowy
+`scripts/m1_isolated_restore_rehearsal.py` potrafi odczytać
+zweryfikowany bundle, utworzyć *nowy* katalog 0700 w lokalnym
+obszarze backupów i odtworzyć tam stary `plist` i kod 0600,
+porównać SHA-256 i strukturę, bez wejścia do
+`~/Library/LaunchAgents`. Odmowa przy błędnym ID, hashach,
+uprawnieniach lub symlinkach. Repo ma syntetyczne testy
+tego procesu.
+
+Wynik `isolated_file_copy_rehearsal_completed=true` może oznaczać
+**wyłącznie** poprawną rekonstrukcję dwóch plików.
+`actual_launchagent_restore_tested=false`,
+`interpreter_binary_attested=false`,
+`isolated_collector_executed=false`,
+`launchagents_reloaded=false`,
+`financial_operations=0` pozostają jawne; nie nazywać tego
+produkcyjnym odbiorem rollbacku.
+
+**Nadal G3 NO-GO:** nowy kod v3 nie jest zainstalowany na Macu,
+stara definicja kolektora używa polecenia bez `-I`.
+Wydanie musi zmienić zarówno plik skryptu na nową zatwierdzoną
+wersję, jak i konfigurację uruchomienia w sposób atomowy
+i z kontrolowanym wycofaniem. Wcześniejszy backup `m1-msmkv_0i`
+pozostaje nienaruszony, a pełen restore z przeładowaniem usługi
+nie został wykonany. Wymagane pozostają niezależny review,
+lokalny preflight/atestacja interpretera, próba przywrócenia
+oraz nowy postflight i 24-godzinny pomiar.
