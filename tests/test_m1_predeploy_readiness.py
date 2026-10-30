@@ -454,26 +454,50 @@ class PreflightTests(unittest.TestCase):
                 m.assert_trusted_git_checkout(root, os.getuid())
 
     def test_system_git_invocation_scrubs_inherited_config_and_disables_hooks(self):
-        with patch.dict(os.environ, {
-                "GIT_CONFIG_COUNT": "1",
-                "GIT_CONFIG_KEY_0": "core.fsmonitor",
-                "GIT_CONFIG_VALUE_0": "/untrusted/exec",
-                "GIT_DIR": "/untrusted/repo"}):
-            with patch.object(m.subprocess, "run",
-                    return_value=SimpleNamespace(returncode=0, stdout="")) as mocked:
-                self.assertEqual(m.command(
-                    "git", "-C", "/safe/repo", "status", "--porcelain"), "")
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder) / "trusted"
+            git = root / ".git"
+            git.mkdir(parents=True)
+            (git / "config").write_text("[core]\nrepositoryformatversion = 0\n")
+            with patch.dict(os.environ, {
+                    "GIT_CONFIG_COUNT": "1",
+                    "GIT_CONFIG_KEY_0": "core.fsmonitor",
+                    "GIT_CONFIG_VALUE_0": "/untrusted/exec",
+                    "GIT_DIR": "/untrusted/repo"}):
+                with patch.object(m.subprocess, "run",
+                        return_value=SimpleNamespace(returncode=0, stdout="")) as mocked:
+                    self.assertEqual(m.command(
+                        "git", "-C", str(root), "status", "--porcelain"), "")
             argv = mocked.call_args.args[0]
-            env = mocked.call_args.kwargs["env"]
+            opts = mocked.call_args.kwargs
+            env = opts["env"]
             self.assertEqual(argv[0], "/usr/bin/git")
             self.assertIn("--no-optional-locks", argv)
             self.assertIn("core.fsmonitor=false", argv)
             self.assertIn("core.hooksPath=/dev/null", argv)
             self.assertIn("core.untrackedCache=false", argv)
+            self.assertIn("-C", argv)
+            self.assertTrue(argv[argv.index("-C")+1].startswith("/dev/fd/"))
+            self.assertEqual(len(opts["pass_fds"]), 1)
             self.assertNotIn("GIT_DIR", env)
             self.assertNotIn("GIT_CONFIG_COUNT", env)
             self.assertEqual(env["GIT_OPTIONAL_LOCKS"], "0")
             self.assertEqual(env["GIT_CONFIG_NOSYSTEM"], "1")
+
+    def test_checkout_ancestor_rejects_symlinks_and_writable_parent(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder) / "untrusted"
+            root.mkdir()
+            (root / "repo").mkdir()
+            fd = m.open_trusted_checkout(root / "repo", os.getuid())
+            os.close(fd)
+            root.chmod(0o777)
+            with self.assertRaises(m.PreflightRejected):
+                m.open_trusted_checkout(root / "repo", os.getuid())
+            root.chmod(0o700)
+            (root / "link").symlink_to(root / "repo", target_is_directory=True)
+            with self.assertRaises(OSError):
+                m.open_trusted_checkout(root / "link", os.getuid())
 
     def test_command_line_option_rejects_duplicate_or_missing_values(self):
         self.assertEqual(m.option(["--output", OUT], "--output"), OUT)
