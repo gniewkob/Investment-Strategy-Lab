@@ -132,6 +132,43 @@ class AcceptanceTests(unittest.TestCase):
                 m.command(['git', 'rev-parse', 'HEAD'], cwd=root)
             self.assertNotIn('--ignore-submodules=all', out.call_args.args[0])
 
+    def test_git_checkout_fd_blocks_swapped_ancestors(self):
+        with tempfile.TemporaryDirectory() as directory:
+            outer = Path(directory) / 'outer'
+            repo = outer / 'runtime'
+            git = repo / '.git'
+            git.mkdir(parents=True)
+            (git / 'config').write_text(
+                '[core]\nrepositoryformatversion = 0\n')
+            fd = m._open_checkout_fd(repo)
+            os.close(fd)
+            outer.chmod(0o777)
+            with patch.object(m.subprocess, 'check_output') as invoked:
+                with self.assertRaises(ValueError):
+                    m.command(['git', 'rev-parse', 'HEAD'], cwd=repo)
+                invoked.assert_not_called()
+            outer.chmod(0o700)
+            link = outer / 'redirect'
+            link.symlink_to(repo, target_is_directory=True)
+            with self.assertRaises(OSError):
+                m._open_checkout_fd(link)
+
+    def test_git_checkout_invocation_preserves_fd_until_command_completes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / 'checked'
+            git = root / '.git'
+            git.mkdir(parents=True)
+            (git / 'config').write_text(
+                '[core]\nrepositoryformatversion = 0\n')
+            with patch.object(m.subprocess, 'check_output',
+                              return_value='') as process:
+                m.command(['git', 'status', '--porcelain'], cwd=root)
+            args, options = process.call_args
+            self.assertEqual(args[0][0], '/usr/bin/git')
+            self.assertEqual(len(options['pass_fds']), 1)
+            self.assertTrue(options['cwd'].startswith('/dev/fd/'))
+            self.assertIn('--ignore-submodules=all', args[0])
+
     def test_transport_metadata_keeps_unknown_and_rejects_extra_private_fields(self):
         p,h,w=fixture()
         self.assertIsNone(m.transport_metadata(p))
