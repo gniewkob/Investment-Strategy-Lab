@@ -1,6 +1,7 @@
 """Synthetic-only tests: M1 collector backup preparation never edits LaunchAgents."""
 from contextlib import redirect_stdout
 from io import StringIO
+from hashlib import sha256
 import json
 import os
 from pathlib import Path
@@ -23,7 +24,7 @@ class PrepareTests(unittest.TestCase):
         runtime = root / "active-supervisor"
         runtime.mkdir()
         source = (Path(__file__).resolve().parents[1] /
-                  "scripts" / "unattended_acceptance.py")
+                  "tests" / "fixtures" / "collector_legacy_v2.txt")
         copied = root / "private-collector.py"
         copied.write_bytes(source.read_bytes())
         copied.chmod(0o600)
@@ -74,8 +75,11 @@ class PrepareTests(unittest.TestCase):
             self.assertEqual(code.read_bytes(), old_source)
             folder = bundle_root / result["rollback_bundle_id"]
             self.assertEqual(folder.stat().st_mode & 0o777, 0o700)
-            for name in (*m.FILES, "manifest.json"):
+            for name in (*m.FILES_UPGRADE, "manifest.json"):
                 self.assertEqual((folder/name).stat().st_mode & 0o777, 0o600)
+            staged_code = (folder / m.NEW_FILE).read_bytes()
+            self.assertEqual(m.source_blob(staged_code), m.NEW_GIT_BLOB)
+            self.assertTrue(result["staged_isolated_collector_code_verified"])
             staged = plistlib.loads((folder / m.FILES[2]).read_bytes())
             source = plistlib.loads(old_plist)
             self.assertEqual(staged["ProgramArguments"],
@@ -230,6 +234,41 @@ class PrepareTests(unittest.TestCase):
                     with self.assertRaises(m.preflight.PreflightRejected):
                         m.plan(home, OLD_SHA, os.getuid())
                     fake_git.assert_not_called()
+
+    def test_legacy_v2_bundle_remains_verifiable_after_v3_source_pin(self):
+        with tempfile.TemporaryDirectory() as d:
+            home, plist, code, sup, commands = self.fixture(d)
+            with patch.object(m.preflight, "read_launchagent", return_value=sup):
+                plan = m.plan(home, OLD_SHA, os.getuid(), commands=commands)
+                root = m.backup_base(home)
+                new = m.store(home, os.getuid(), plan, backup_root=root)
+            new_dir = root / new["rollback_bundle_id"]
+            old_dir = root / "m1-legacycompatible"
+            old_dir.mkdir(mode=0o700)
+            files = {}
+            for filename in m.FILES:
+                payload = (new_dir / filename).read_bytes()
+                output = old_dir / filename
+                output.write_bytes(payload)
+                output.chmod(0o600)
+                files[filename] = sha256(payload).hexdigest()
+            manifest = {
+                "kind": "ISL_M1_COLLECTOR_BACKUP",
+                "original_collector_git_blob": m.GIT_BLOB,
+                "running_supervisor_sha": OLD_SHA,
+                "file_hashes": files,
+                "collector_launchagent_modified": False,
+                "collector_reloaded": False,
+                "financial_operations": 0,
+            }
+            name = old_dir / "manifest.json"
+            name.write_text(json.dumps(manifest))
+            name.chmod(0o600)
+            check = m.verify(old_dir, os.getuid())
+            self.assertEqual(check["status"], "ROLLBACK_BUNDLE_VERIFIED_NO_DEPLOY")
+            self.assertEqual(check["mode"], "M1_COLLECTOR_RELEASE_PREPARE_V2")
+            self.assertFalse(check["staged_isolated_collector_code_verified"])
+            self.assertFalse(check["restore_rehearsal_completed"])
 
     def test_output_redaction_on_failure(self):
         buffer = StringIO()
