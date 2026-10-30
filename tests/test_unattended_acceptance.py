@@ -166,7 +166,8 @@ class AcceptanceTests(unittest.TestCase):
             args, options = process.call_args
             self.assertEqual(args[0][0], '/usr/bin/git')
             self.assertEqual(len(options['pass_fds']), 1)
-            self.assertTrue(options['cwd'].startswith('/dev/fd/'))
+            self.assertNotIn('cwd', options)
+            self.assertTrue(callable(options['preexec_fn']))
             self.assertIn('--ignore-submodules=all', args[0])
 
     def test_transport_metadata_keeps_unknown_and_rejects_extra_private_fields(self):
