@@ -893,3 +893,36 @@ kontroli załadowanego `launchctl` na Macu ani 24h obserwacji.
 pełnego CI, bezpiecznego odczytu Maca i weryfikacji planu odtworzenia.
 Istniejący bundle `m1-msmkv_0i` i produkcja pozostają poza
 zakresem zmian.
+
+
+## M1.4.3 — linked worktree: osobna atestacja metadanych Git (30.10.2026)
+
+Odczytowa diagnostyka na Macu: WorkingDirectory supervisora oraz
+ancestors = PASS; .git = zwykly plik 0644, wlasciciel aktualny uzytkownik;
+gitdir pointer absolutny; prywatne metadata i common gitdir = PASS;
+commondir i gitdir backlink pasuja; config.worktree nieobecny;
+common/config meta = PASS. Stary G2 odrzucal poprawny linked worktree,
+poniewaz wymagal katalogu .git w trybie standalone.
+
+Zrodla pierwotne: https://git-scm.com/docs/git-worktree (DETAILS) oraz
+https://git-scm.com/docs/gitrepository-layout (commondir, worktrees/<id>/gitdir).
+
+Nowy walidator w M1 i samodzielnym kolektorze (Python -I):
+- Nie zmienia restrykcji dla standalone .git; dla regularnego pliku
+  .git wymaga jednoznacznego gitdir: ABS_PATH i bezpiecznego O_NOFOLLOW.
+- Sprawdza kazdy ancestor gitdir i common, uprawnienia, owner,
+  inode, kanoniczna strukture common/worktrees/id i komplementarne
+  wskazniki commondir ../.. oraz zwrotny gitdir do worktree .git.
+- Odrzuca config.worktree, nested commondir, przekierowania i
+  nieznane sekcje lub klucze w common/config.
+- Uruchamia jedynie system Git w procesie potomnym zwiazanym
+  z zaufanym deskryptorem przez os.fchdir(fd), z wyczyszczonym
+  srodowiskiem Git, wylaczonymi fsmonitor/hook/filter.
+- Testy tworza faktyczne syntetyczne linked worktree przez git
+  worktree add; potwierdzaja prawdziwy Git status/HEAD, odrzucenie
+  zlego backlinku, niebezpiecznego config i config.worktree.
+
+CI macOS i Linux oraz niezalezny review wymagane dla dokladnego SHA.
+Mac G2 musi byc ponowiony osobno: sukces CI nie jest PASS hosta.
+Przed G3: interpreter trust, kopia rollbacku i oddzielna zgoda.
+Brak migracji repo, zmian LaunchAgent, zmian backupu i operacji finansowych.
