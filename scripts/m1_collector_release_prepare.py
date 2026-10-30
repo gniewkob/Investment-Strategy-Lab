@@ -34,13 +34,17 @@ def require(condition):
         raise ValueError("M1_COLLECTOR_ROLLBACK_PREPARE_REJECTED")
 
 
-def private_read(path, uid, *, limit=200_000):
+def private_read(path, uid, *, limit=200_000, backup=False):
     """Read a bounded, owned non-symlink file with no group/world access."""
     fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
     with os.fdopen(fd, "rb") as stream:
         s = os.fstat(stream.fileno())
+        # Installed LaunchAgents and checked-out Git source can be
+        # group/world readable. They must NEVER be writable by others.
+        # New private rollback files are owner-only (0600).
+        forbidden = 0o077 if backup else 0o022
         require(stat.S_ISREG(s.st_mode) and s.st_uid == uid
-                and not (s.st_mode & 0o077) and 0 < s.st_size <= limit)
+                and not (s.st_mode & forbidden) and 0 < s.st_size <= limit)
         data = stream.read(limit + 1)
     require(len(data) == s.st_size)
     return data
@@ -58,7 +62,7 @@ def write_new(path, payload, uid):
         stream.write(payload)
         stream.flush()
         os.fsync(stream.fileno())
-    require(private_read(path, uid, limit=400_000) == payload)
+    require(private_read(path, uid, limit=400_000, backup=True) == payload)
 
 
 def source_blob(content):
@@ -78,7 +82,7 @@ def plan(home, expected_runtime_sha, uid, *, commands=None, check_help=None):
     plist_path = home / "Library" / "LaunchAgents" / (LABEL + ".plist")
     s = plist_path.lstat()
     require(stat.S_ISREG(s.st_mode) and s.st_uid == uid
-            and not s.st_mode & 0o077 and 0 < s.st_size <= 64_000)
+            and not s.st_mode & 0o022 and 0 < s.st_size <= 64_000)
     old_bytes = private_read(plist_path, uid, limit=64_000)
     definition = plistlib.loads(old_bytes)
     require(type(definition) is dict and definition.get("StartInterval") == 60)
@@ -153,7 +157,7 @@ def store(home, uid, plan_tuple, *, backup_root=None):
                                  / "InvestmentStrategyLab" / "M1Rollback"))
     # Parents are under the user's HOME; no system-wide modifications.
     root.mkdir(parents=True, exist_ok=True, mode=0o700)
-    root.chmod(0o700)
+    # Never chmod an existing directory that could be a symlink/redirect.
     secure_folder(root, uid)
     bundle = Path(tempfile.mkdtemp(prefix="m1-", dir=root))
     bundle.chmod(0o700)
@@ -187,12 +191,12 @@ def store(home, uid, plan_tuple, *, backup_root=None):
 def verify(bundle, uid):
     bundle = Path(bundle)
     secure_folder(bundle, uid)
-    manifest = json.loads(private_read(bundle / "manifest.json", uid))
+    manifest = json.loads(private_read(bundle / "manifest.json", uid, backup=True))
     require(manifest.get("kind") == "ISL_M1_COLLECTOR_BACKUP")
     require(manifest.get("collector_launchagent_modified") is False
             and manifest.get("collector_reloaded") is False
             and manifest.get("financial_operations") == 0)
-    data = {name: private_read(bundle / name, uid, limit=400_000)
+    data = {name: private_read(bundle / name, uid, limit=400_000, backup=True)
             for name in FILES}
     require(manifest.get("file_hashes") == {
         name: sha256(payload).hexdigest()
