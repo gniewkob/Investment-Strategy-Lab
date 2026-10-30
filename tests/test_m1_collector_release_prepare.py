@@ -132,6 +132,32 @@ class PrepareTests(unittest.TestCase):
                            check_help=lambda _argv: True)
             self.assertEqual(plist.read_bytes(), old)
 
+    def test_bundle_reverification_and_reject_traversal_id(self):
+        with tempfile.TemporaryDirectory() as d:
+            home, plist, code, sup, commands = self.fixture(d)
+            with patch.object(m.preflight, "read_launchagent",
+                              return_value=sup):
+                plan = m.plan(home, OLD_SHA, os.getuid(), commands=commands,
+                              check_help=lambda args: True)
+                bundle_root = m.backup_base(home)
+                result = m.store(home, os.getuid(), plan,
+                                 backup_root=bundle_root)
+            new_check = m.verify(bundle_root/result["rollback_bundle_id"],
+                                 os.getuid())
+            self.assertEqual(new_check["status"],
+                             "ROLLBACK_BUNDLE_VERIFIED_NO_DEPLOY")
+            with patch.object(m.Path, "home", return_value=home):
+                with redirect_stdout(StringIO()) as output:
+                    self.assertEqual(m.main(["--verify-bundle-id",
+                                              result["rollback_bundle_id"]]), 0)
+                self.assertEqual(json.loads(output.getvalue())["status"],
+                                 "ROLLBACK_BUNDLE_VERIFIED_NO_DEPLOY")
+                with redirect_stdout(StringIO()) as rejected:
+                    self.assertEqual(m.main(["--verify-bundle-id",
+                                              "../../other"]), 2)
+                self.assertEqual(rejected.getvalue().strip(),
+                                 "M1_COLLECTOR_ROLLBACK_PREPARE_REJECTED")
+
     def test_output_redaction_on_failure(self):
         buffer = StringIO()
         with patch.object(m, "plan", side_effect=OSError(
