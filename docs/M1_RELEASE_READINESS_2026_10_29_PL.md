@@ -508,3 +508,59 @@ zapisów i gwarancji zachowania starych dowodów.
 `-I` nie może zostać dopisane wyłącznie do pliku plist bez
 przeładowania załadowanej definicji. Nowy odbiór 24h zaczyna się
 dopiero po pomyślnym G3/G4.
+
+
+## M1.3 — po realnym przygotowaniu backupu i niezależnym review P1/P2 (30.10.2026)
+
+Operator na Macu wykonał pierwotny etap przygotowania, otrzymując
+`ROLLBACK_BUNDLE_VERIFIED_NO_DEPLOY` dla backupu
+`m1-msmkv_0i`. Kopia zawiera stary `plist`, oryginalny kod
+kolektora i staged `plist` z `-I`; raport potwierdził brak
+przeładowania i modyfikacji aktywnej definicji. Oznacza to
+**zgodność zapisanych plików**, a nie gotowość do wykonania G3.
+
+Niezależny review poprzedniego SHA
+`36050db7f9694980bf7d4e14a24e8682038292e4` ujawnił
+**2 × P1 i 1 × P2** w skrypcie przygotowania rollbacku:
+
+1. Wcześniejszy `python --help` korzystał z nazwy binarki
+   w niezatwierdzonym pliku `plist`; jej podmiana mogła
+   wykonać dowolny program z uprawnieniami użytkownika.
+2. Skrypt kolektora mógł zostać podmieniony między sprawdzeniem
+   jego hashy a rzeczywistym uruchomieniem przez `--help`.
+3. Rodzic katalogu backupu mógł być przekierowany przez symlink
+   do katalogu, który da się podmienić i utracić kopię.
+
+**Poprawki fail-closed w nowym kodzie:**
+
+- Skrypt przygotowania **NIE wykonuje** ani interpretera wskazanego
+  przez `plist`, ani kopii kolektora. Test `--help` został
+  usunięty. Zastępuje go statyczne `compile` zatwierdzonych
+  bajtów kodu — bez wykonywania importów czy logiki modułu.
+  Nie traktujemy tego jako runtime/isolated-mode smoke test.
+- Każdy składnik ścieżki do katalogu backupu jest otwierany
+  przez `dir_fd` z `O_NOFOLLOW`, sprawdzany pod kątem
+  właściciela i praw zapisu; nowy katalog i pliki powstają
+  wyłącznie względem przytrzymanych deskryptorów. Wyjątek
+  dotyczy root-owned `/tmp` ze sticky bit na potrzeby
+  izolowanych testów. Istniejących katalogów nie `chmod`ujemy.
+- Weryfikacja kopii czyta pliki z tego samego otwartego
+  katalogu przez deskryptor; odmowa przy symlinku, nietypowych
+  prawach, niezgodnym SHA-256 lub niepoprawnej strukturze.
+- Wynik backupu zwraca `interpreter_binary_attested=false`,
+  `isolated_collector_executed=false` oraz
+  `restore_rehearsal_completed=false`. Nie są to spełnione
+  bramki wydania.
+- Stary backup `m1-msmkv_0i` zachowujemy **bez zmian**.
+  Po niezależnym review nowego kodu można wyłącznie odczytowo
+  zweryfikować go na Macu przez
+  `python3 -B -m scripts.m1_collector_release_prepare
+  --verify-bundle-id m1-msmkv_0i`. To sprawdzi kopię, a nie
+  uruchomienie kolektora.
+
+Wydanie `G3` nadal `NO-GO`: wymaga osobnej atestacji
+rzeczywistego interpretera, kontrolowanej próby przywrócenia,
+odrębnego bezpiecznego mechanizmu przeładowania tylko
+`pl.gniewkob.isl.acceptance` oraz postflight przed rozpoczęciem
+nowego okna 24 godzin. Nie uruchamiać starszego `--help`
+ani nie przełączać usługi tylko dlatego, że backup istnieje.
