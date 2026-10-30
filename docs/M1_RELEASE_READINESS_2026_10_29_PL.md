@@ -652,3 +652,41 @@ próby przywrócenia, atestacji interpretera, przeładowania kolektora
 czy zgody na operacje finansowe. PR #87 pozostaje Draft;
 G3 nadal NO-GO do uzyskania niezależnego review, odczytowego
 preflightu nowego SHA i próby rollbacku.
+
+
+## M1.3 — candidate canary: odrębne obejście Git (30.10.2026)
+
+Niezależne review commitu `e1a05c06049142896bfc38950fbd6cec463d2426`
+ujawniło **P1**: `portfolio_release_canary.local_code_attestation()`
+sprawdzał checkout kandydata przez bezpośrednie polecenia `git`
+bez izolowania `GIT_*`, filtrów czy `core.fsmonitor`. W efekcie
+dotychczas poprawnie zabezpieczony runtime mógł uzyskać pozytywny
+preflight, podczas gdy canary wykonywał niezatwierdzony hook/filtr
+z konfiguracji kandydata. Flagi `files_changed=0` i `network_requests=0`
+nie dowodziły braku tego wykonania.
+
+**Poprawka:** `scripts/portfolio_release_canary.py` korzysta
+teraz z tego samego `assert_trusted_git_checkout` i utwardzonego
+`command("git", ...)`, co preflight M1 oraz narzędzie backupu.
+Import jest lokalny wewnątrz funkcji, aby uniknąć cyklu importów
+(`m1_predeploy_readiness` importuje `portfolio_release_canary`).
+Obie operacje sprawdzania HEAD i clean worktree używają chronionych
+odczytów Git, z `--ignore-submodules=all`. Błędna, nieznana lub
+niebezpieczna konfiguracja jest stałym, zredagowanym `NO-GO`,
+bez ujawnienia ścieżek, danych portfela czy outputu Git.
+
+Testy syntetyczne obejmują konfigurowalny `core.fsmonitor`,
+filtry, `commondir`, `core.worktree` i `include`;
+weryfikują, że blokada następuje **przed** wywołaniem Git.
+Osobny test sprawdza wywołania chronionego wrappera, a kontrakt
+prawdziwego `git status` jest badany na własnym minimalnym repo
+testowym (bez konfiguracji auth generowanej przez GitHub Actions).
+Pierwszy przebieg CI na SHA `2ff208d...` był czerwony z powodu
+historycznego testu zakładającego zaufanie do konfiguracji checkoutu
+GitHub Actions. Test został izolowany bez rozluźniania walidatora;
+nie interpretowano tego nieudanego przebiegu jako PASS.
+
+**Bramki:** istniejąca kopia `m1-msmkv_0i` została zweryfikowana,
+lecz nie testowano przywrócenia; interpreter i działanie izolowanego
+kolektora nie zostały atestowane. G3 pozostaje `NO-GO`, bez
+modyfikacji LaunchAgent, restartów, transferów i transakcji.
