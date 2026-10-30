@@ -6,6 +6,7 @@ from io import StringIO
 import json
 import os
 import subprocess
+from types import SimpleNamespace
 import sys
 import tempfile
 from pathlib import Path
@@ -390,6 +391,58 @@ class PreflightTests(unittest.TestCase):
             "M1_FAILURE_STAGE=CHECK_COLLECTOR_EXPECTED_SHA",
         ])
         self.assertNotIn("sensitive", output.getvalue())
+
+    def test_git_attestation_rejects_executable_checkout_configuration(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d) / "runtime"
+            git = root / ".git"
+            git.mkdir(parents=True)
+            config = git / "config"
+            for payload in (
+                "[core]\nfsmonitor = /untrusted/hook\n",
+                "[filter \"external\"]\nclean = /untrusted/filter\n",
+                "[include]\npath = /untrusted/extra-config\n",
+                "[hook \"post-index-change\"]\ncommand = /untrusted/hook\n",
+                "[core]\nhooksPath = /untrusted/hooks\n",
+            ):
+                config.write_text(payload)
+                with self.subTest(payload=payload.splitlines()[0]):
+                    with self.assertRaises(m.PreflightRejected):
+                        m.assert_trusted_git_checkout(root, os.getuid())
+            config.write_text("[core]\nrepositoryformatversion = 0\n")
+            m.assert_trusted_git_checkout(root, os.getuid())
+            config.chmod(0o666)
+            with self.assertRaises(m.PreflightRejected):
+                m.assert_trusted_git_checkout(root, os.getuid())
+            config.chmod(0o600)
+            config.unlink()
+            external = Path(d) / "external"
+            external.write_text("[core]\nrepositoryformatversion = 0\n")
+            config.symlink_to(external)
+            with self.assertRaises(OSError):
+                m.assert_trusted_git_checkout(root, os.getuid())
+
+    def test_system_git_invocation_scrubs_inherited_config_and_disables_hooks(self):
+        with patch.dict(os.environ, {
+                "GIT_CONFIG_COUNT": "1",
+                "GIT_CONFIG_KEY_0": "core.fsmonitor",
+                "GIT_CONFIG_VALUE_0": "/untrusted/exec",
+                "GIT_DIR": "/untrusted/repo"}):
+            with patch.object(m.subprocess, "run",
+                    return_value=SimpleNamespace(returncode=0, stdout="")) as mocked:
+                self.assertEqual(m.command(
+                    "git", "-C", "/safe/repo", "status", "--porcelain"), "")
+            argv = mocked.call_args.args[0]
+            env = mocked.call_args.kwargs["env"]
+            self.assertEqual(argv[0], "/usr/bin/git")
+            self.assertIn("--no-optional-locks", argv)
+            self.assertIn("core.fsmonitor=false", argv)
+            self.assertIn("core.hooksPath=/dev/null", argv)
+            self.assertIn("core.untrackedCache=false", argv)
+            self.assertNotIn("GIT_DIR", env)
+            self.assertNotIn("GIT_CONFIG_COUNT", env)
+            self.assertEqual(env["GIT_OPTIONAL_LOCKS"], "0")
+            self.assertEqual(env["GIT_CONFIG_NOSYSTEM"], "1")
 
     def test_command_line_option_rejects_duplicate_or_missing_values(self):
         self.assertEqual(m.option(["--output", OUT], "--output"), OUT)
