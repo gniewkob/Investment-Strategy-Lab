@@ -77,6 +77,61 @@ class AcceptanceTests(unittest.TestCase):
         definition['WorkingDirectory'] = '/unreviewed'
         self.assertFalse(m.watchdog_attestation(runtime, definition, loaded)['recognized'])
 
+    def test_git_attestation_rejects_untrusted_runtime_and_watchdog_config(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / 'runtime'
+            git = root / '.git'
+            git.mkdir(parents=True)
+            config = git / 'config'
+            for value in (
+                '[core]\nfsmonitor = /untrusted/program\n',
+                '[filter "external"]\nprocess = /untrusted/program\n',
+                '[core] worktree = /decoy\n',
+                '[include]\npath = /untrusted/config\n',
+            ):
+                config.write_text(value, encoding='utf-8')
+                with self.subTest(value=value.splitlines()[0]):
+                    with patch.object(m.subprocess, 'check_output',
+                                      side_effect=AssertionError('unsafe git subprocess')):
+                        with self.assertRaises(ValueError):
+                            m.command(['git', 'status', '--porcelain'], cwd=root)
+            config.write_text('[core]\nrepositoryformatversion = 0\n')
+            (git / 'commondir').write_text('../redirect\n')
+            with patch.object(m.subprocess, 'check_output',
+                              side_effect=AssertionError('unsafe git subprocess')):
+                with self.assertRaises(ValueError):
+                    m.command(['git', 'rev-parse', 'HEAD'], cwd=root)
+
+    def test_git_runtime_and_watchdog_use_safe_system_binary_and_environment(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / 'runtime'
+            git = root / '.git'
+            git.mkdir(parents=True)
+            (git / 'config').write_text('[core]\nrepositoryformatversion = 0\n')
+            with patch.dict(os.environ, {
+                'GIT_DIR': '/untrusted/repository',
+                'GIT_WORK_TREE': '/untrusted/decoy',
+                'GIT_CONFIG_COUNT': '1',
+                'GIT_CONFIG_KEY_0': 'core.fsmonitor',
+                'GIT_CONFIG_VALUE_0': '/untrusted/program',
+            }):
+                with patch.object(m.subprocess, 'check_output',
+                                  return_value='') as out:
+                    m.command(['git', 'status', '--porcelain'], cwd=root)
+            args = out.call_args.args[0]
+            env = out.call_args.kwargs['env']
+            self.assertEqual(args[0], '/usr/bin/git')
+            for part in ('--no-optional-locks', 'core.fsmonitor=false',
+                         'core.hooksPath=/dev/null', '--ignore-submodules=all'):
+                self.assertIn(part, args)
+            for key in ('GIT_DIR', 'GIT_WORK_TREE', 'GIT_CONFIG_COUNT'):
+                self.assertNotIn(key, env)
+            self.assertEqual(env['GIT_OPTIONAL_LOCKS'], '0')
+            self.assertEqual(env['GIT_CONFIG_NOSYSTEM'], '1')
+            with patch.object(m.subprocess, 'check_output', return_value='a' * 40) as out:
+                m.command(['git', 'rev-parse', 'HEAD'], cwd=root)
+            self.assertNotIn('--ignore-submodules=all', out.call_args.args[0])
+
     def test_transport_metadata_keeps_unknown_and_rejects_extra_private_fields(self):
         p,h,w=fixture()
         self.assertIsNone(m.transport_metadata(p))
