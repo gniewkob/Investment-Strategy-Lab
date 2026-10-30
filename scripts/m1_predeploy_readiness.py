@@ -113,7 +113,7 @@ def assert_trusted_git_checkout(root, uid):
         stripped = line.strip()
         if not stripped or stripped.startswith(("#", ";")):
             continue
-        require(not stripped.endswith("\\\\"))
+        require(not stripped.endswith("\\"))
         if stripped.startswith("["):
             match = re.fullmatch(
                 r'\[([a-z][a-z0-9-]*)(?:\s+"[^"\\\n]{1,128}")?\]',
