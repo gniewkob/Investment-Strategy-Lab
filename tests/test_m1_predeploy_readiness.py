@@ -476,9 +476,10 @@ class PreflightTests(unittest.TestCase):
             self.assertIn("core.fsmonitor=false", argv)
             self.assertIn("core.hooksPath=/dev/null", argv)
             self.assertIn("core.untrackedCache=false", argv)
-            self.assertIn("-C", argv)
-            self.assertTrue(argv[argv.index("-C")+1].startswith("/dev/fd/"))
+            self.assertNotIn("-C", argv)
             self.assertEqual(len(opts["pass_fds"]), 1)
+            self.assertTrue(callable(opts["preexec_fn"]))
+            self.assertNotIn("cwd", opts)
             self.assertNotIn("GIT_DIR", env)
             self.assertNotIn("GIT_CONFIG_COUNT", env)
             self.assertEqual(env["GIT_OPTIONAL_LOCKS"], "0")
@@ -540,8 +541,9 @@ class PreflightTests(unittest.TestCase):
                 (root / "decoy").write_text("untrusted")
                 self.assertEqual(os.fstat(descriptor).st_ino, old_inode)
                 self.assertNotEqual(root.stat().st_ino, old_inode)
-                self.assertEqual(argv[argv.index("-C") + 1],
-                                 f"/dev/fd/{descriptor}")
+                self.assertNotIn("-C", argv)
+                self.assertTrue(callable(kwargs["preexec_fn"]))
+                self.assertNotIn("cwd", kwargs)
                 return SimpleNamespace(returncode=0, stdout="expected")
             with patch.object(m.subprocess, "run", side_effect=swap_while_running):
                 self.assertEqual(m.command("git", "-C", str(root),
