@@ -64,17 +64,22 @@ def local_code_attestation(expected, root):
     require(isinstance(expected, str) and SHA.fullmatch(expected) is not None)
     root = Path(root)
     require(root.is_dir())
+    # Import locally: m1_predeploy_readiness imports this module for its
+    # pre-release canary, so a top-level import would introduce a cycle.
+    # Both the standalone canary and M1 must use the SAME hardened Git path;
+    # a bare git process would re-enable fsmonitor/filter execution via
+    # inherited GIT_DIR, GIT_WORK_TREE or redirected local config.
     try:
-        head = subprocess.run(
-            ["git", "-C", str(root), "rev-parse", "--verify", "HEAD"],
-            capture_output=True, text=True, timeout=6, check=False)
-        dirty = subprocess.run(
-            ["git", "-C", str(root), "status", "--porcelain", "--untracked-files=all"],
-            capture_output=True, text=True, timeout=6, check=False)
-    except (OSError, subprocess.SubprocessError):
+        from scripts import m1_predeploy_readiness as guarded_git
+        guarded_git.assert_trusted_git_checkout(root, os.getuid())
+        head = guarded_git.command(
+            "git", "-C", str(root), "rev-parse", "--verify", "HEAD")
+        dirty = guarded_git.command(
+            "git", "-C", str(root), "status", "--porcelain",
+            "--untracked-files=all", "--ignore-submodules=all")
+    except Exception:
         raise ReleaseRejected("PRIVATE_RELEASE_CANARY_REJECTED") from None
-    require(head.returncode == 0 and head.stdout.strip() == expected
-            and dirty.returncode == 0 and dirty.stdout == "")
+    require(head == expected and dirty == "")
     return True
 
 
