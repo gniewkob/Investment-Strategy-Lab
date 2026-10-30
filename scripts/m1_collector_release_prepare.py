@@ -1,14 +1,14 @@
-"""Create and verify an owner-only rollback bundle for the existing M1 collector.
+"""Prepare and verify the collector's private rollback snapshot; never deploy.
 
-This is the PREPARE gate. It does not edit launchd, the collector plist,
-the private evidence journal, the supervisor, watchdog, wallets or databases.
-Only creates a new private, uniquely named backup directory.
-
-The isolated (-I) definition is staged in the backup folder, NOT installed.
+The planner performs read-only metadata checks and static Python compilation.
+It NEVER runs code from the live collector plist (even for --help).
+Only writes new 0600 backup files through securely opened directory fds.
+No launchctl bootstrap/bootout, real trading, network calls or evidence edits.
 """
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from hashlib import sha1, sha256
 import json
@@ -16,9 +16,8 @@ import os
 from pathlib import Path
 import plistlib
 import re
+import secrets
 import stat
-import subprocess
-import tempfile
 
 from scripts import m1_predeploy_readiness as preflight
 
@@ -27,6 +26,7 @@ SHA = re.compile(r"[0-9a-f]{40}\Z")
 LABEL = preflight.LABEL_COLLECTOR
 FILES = ("collector-before.plist", "collector-before.py",
          "collector-isolated-staged.plist")
+DIRECTORY_FLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
 
 
 def require(condition):
@@ -35,13 +35,10 @@ def require(condition):
 
 
 def private_read(path, uid, *, limit=200_000, backup=False):
-    """Read a bounded, owned non-symlink file with no group/world access."""
+    """Read bounded regular bytes; no symlink at final component."""
     fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
     with os.fdopen(fd, "rb") as stream:
         s = os.fstat(stream.fileno())
-        # Installed LaunchAgents and checked-out Git source can be
-        # group/world readable. They must NEVER be writable by others.
-        # New private rollback files are owner-only (0600).
         forbidden = 0o077 if backup else 0o022
         require(stat.S_ISREG(s.st_mode) and s.st_uid == uid
                 and not (s.st_mode & forbidden) and 0 < s.st_size <= limit)
@@ -50,33 +47,27 @@ def private_read(path, uid, *, limit=200_000, backup=False):
     return data
 
 
-def secure_folder(folder, uid):
-    s = Path(folder).lstat()
-    require(stat.S_ISDIR(s.st_mode) and s.st_uid == uid
-            and not (s.st_mode & 0o077))
-
-
-def write_new(path, payload, uid):
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
-    with os.fdopen(fd, "wb") as stream:
-        stream.write(payload)
-        stream.flush()
-        os.fsync(stream.fileno())
-    require(private_read(path, uid, limit=400_000, backup=True) == payload)
-
-
 def source_blob(content):
     return sha1(b"blob " + str(len(content)).encode("ascii")
                 + b"\x00" + content).hexdigest()
 
 
-def plan(home, expected_runtime_sha, uid, *, commands=None, check_help=None):
+def source_syntax_valid(content):
+    """Compile in memory without executing the Python script or its imports."""
+    try:
+        compile(content, "<approved-collector>", "exec", dont_inherit=True)
+        return True
+    except (SyntaxError, ValueError, TypeError):
+        return False
+
+
+def plan(home, expected_runtime_sha, uid, *, commands=None, check_syntax=None):
     require(type(expected_runtime_sha) is str
             and SHA.fullmatch(expected_runtime_sha) is not None)
     if commands is None:
         commands = preflight.command
-    if check_help is None:
-        check_help = run_isolated_help
+    if check_syntax is None:
+        check_syntax = source_syntax_valid
 
     home = Path(home)
     plist_path = home / "Library" / "LaunchAgents" / (LABEL + ".plist")
@@ -100,6 +91,9 @@ def plan(home, expected_runtime_sha, uid, *, commands=None, check_help=None):
     require(source_blob(reference) == GIT_BLOB)
     approved = private_read(argv[1], uid)
     require(sha256(reference).digest() == sha256(approved).digest())
+    # No subprocess using argv[0] or argv[1]: prevents untrusted-executable
+    # invocation and time-of-check/time-of-use source replacement attacks.
+    require(check_syntax(approved) is True)
 
     supervisor = preflight.read_launchagent(home, preflight.LABEL_PORTFOLIO, uid)
     active_root = supervisor.get("WorkingDirectory")
@@ -112,7 +106,6 @@ def plan(home, expected_runtime_sha, uid, *, commands=None, check_help=None):
             expected_runtime_sha)
     require(commands("git", "-C", active_root, "status",
                      "--porcelain", "--untracked-files=all") == "")
-
     # Existing launchd must still be the OLD (non-isolated) definition.
     loaded = commands("launchctl", "print", f"gui/{uid}/{LABEL}")
     require("run interval = 60 seconds" in loaded)
@@ -122,22 +115,9 @@ def plan(home, expected_runtime_sha, uid, *, commands=None, check_help=None):
     staged = dict(definition)
     staged["ProgramArguments"] = [argv[0], "-I"] + argv[1:]
     require(len(staged["ProgramArguments"]) == 11)
-    # Test only --help, which is handled by argparse before record().
-    require(check_help([argv[0], "-I", argv[1], "--help"]))
-
     staged_bytes = plistlib.dumps(staged, sort_keys=True)
     assert_only_isolation_change(definition, plistlib.loads(staged_bytes))
     return (old_bytes, approved, staged_bytes, expected_runtime_sha)
-
-
-def run_isolated_help(argv):
-    try:
-        result = subprocess.run(argv, stdout=subprocess.DEVNULL,
-                                stderr=subprocess.DEVNULL,
-                                check=False, timeout=10)
-        return result.returncode == 0
-    except (OSError, subprocess.SubprocessError):
-        return False
 
 
 def assert_only_isolation_change(old, staged):
@@ -156,52 +136,77 @@ def backup_base(home):
             / "InvestmentStrategyLab" / "M1Rollback")
 
 
-def store(home, uid, plan_tuple, *, backup_root=None):
-    old, source, staged, oldsha = plan_tuple
-    root = Path(backup_root or backup_base(home))
-    # Parents are under the user's HOME; no system-wide modifications.
-    root.mkdir(parents=True, exist_ok=True, mode=0o700)
-    # Never chmod an existing directory that could be a symlink/redirect.
-    secure_folder(root, uid)
-    bundle = Path(tempfile.mkdtemp(prefix="m1-", dir=root))
-    bundle.chmod(0o700)
-    secure_folder(bundle, uid)
+def checked_dir_metadata(st, uid, *, leaf=False):
+    require(stat.S_ISDIR(st.st_mode))
+    if leaf:
+        require(st.st_uid == uid and not (st.st_mode & 0o077))
+    else:
+        # /tmp is typically root-owned, sticky and world-writable. No other
+        # writable ancestor is accepted (including symlinks).
+        sticky_root = (st.st_uid == 0 and (st.st_mode & 0o1000)
+                       and (st.st_mode & 0o002))
+        require(st.st_uid in (uid, 0)
+                and (not (st.st_mode & 0o022) or sticky_root))
+
+
+@contextmanager
+def checked_directory(path, uid, *, create=False, leaf=True):
+    """Open each component O_NOFOLLOW and perform mkdir/open via dir_fd.
+
+    The returned fd binds operations to this directory regardless of later
+    path renames. Never chmod or follow any existing directory redirect.
+    """
+    path = Path(path)
+    require(path.is_absolute() and ".." not in path.parts)
+    fd = os.open("/", DIRECTORY_FLAGS)
     try:
-        for name, data in zip(FILES, (old, source, staged)):
-            write_new(bundle / name, data, uid)
-        manifest = {
-            "kind": "ISL_M1_COLLECTOR_BACKUP",
-            "running_supervisor_sha": oldsha,
-            "original_collector_git_blob": GIT_BLOB,
-            "file_hashes": {
-                name: sha256(data).hexdigest()
-                for name, data in zip(FILES, (old, source, staged))
-            },
-            "created_utc": datetime.now(timezone.utc).isoformat(),
-            "collector_launchagent_modified": False,
-            "collector_reloaded": False,
-            "financial_operations": 0
-        }
-        write_new(bundle / "manifest.json",
-                  json.dumps(manifest, sort_keys=True).encode("utf-8"), uid)
-        check = verify(bundle, uid)
-        require(check["status"] == "ROLLBACK_BUNDLE_VERIFIED_NO_DEPLOY")
-        return check
-    except Exception:
-        # Never delete a partial backup: preserve for forensic inspection.
-        raise
+        for i, token in enumerate(path.parts[1:]):
+            last = i == len(path.parts) - 2
+            checked_dir_metadata(os.fstat(fd), uid, leaf=False)
+            try:
+                child = os.open(token, DIRECTORY_FLAGS, dir_fd=fd)
+            except FileNotFoundError:
+                require(create)
+                os.mkdir(token, 0o700, dir_fd=fd)
+                child = os.open(token, DIRECTORY_FLAGS, dir_fd=fd)
+            os.close(fd)
+            fd = child
+            checked_dir_metadata(os.fstat(fd), uid, leaf=leaf and last)
+        yield fd
+    finally:
+        os.close(fd)
 
 
-def verify(bundle, uid):
-    bundle = Path(bundle)
-    secure_folder(bundle, uid)
-    manifest = json.loads(private_read(bundle / "manifest.json", uid, backup=True))
+def read_backup(fd, name, uid):
+    require(name in (*FILES, "manifest.json"))
+    child = os.open(name, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=fd)
+    with os.fdopen(child, "rb") as stream:
+        s = os.fstat(stream.fileno())
+        require(stat.S_ISREG(s.st_mode) and s.st_uid == uid
+                and not (s.st_mode & 0o077) and 0 < s.st_size <= 400_000)
+        data = stream.read(400_001)
+    require(len(data) == s.st_size)
+    return data
+
+
+def write_backup(fd, name, payload, uid):
+    require(name in (*FILES, "manifest.json"))
+    child = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                    0o600, dir_fd=fd)
+    with os.fdopen(child, "wb") as stream:
+        stream.write(payload)
+        stream.flush()
+        os.fsync(stream.fileno())
+    require(read_backup(fd, name, uid) == payload)
+
+
+def verify_contents(fd, uid, *, bundle_id):
+    manifest = json.loads(read_backup(fd, "manifest.json", uid))
     require(manifest.get("kind") == "ISL_M1_COLLECTOR_BACKUP")
     require(manifest.get("collector_launchagent_modified") is False
             and manifest.get("collector_reloaded") is False
             and manifest.get("financial_operations") == 0)
-    data = {name: private_read(bundle / name, uid, limit=400_000, backup=True)
-            for name in FILES}
+    data = {name: read_backup(fd, name, uid) for name in FILES}
     require(manifest.get("file_hashes") == {
         name: sha256(payload).hexdigest()
         for name, payload in data.items()
@@ -210,19 +215,74 @@ def verify(bundle, uid):
     new = plistlib.loads(data["collector-isolated-staged.plist"])
     assert_only_isolation_change(old, new)
     require(source_blob(data["collector-before.py"]) == GIT_BLOB)
+    require(type(manifest.get("running_supervisor_sha")) is str
+            and SHA.fullmatch(manifest["running_supervisor_sha"]) is not None)
     return {
-        "mode": "M1_COLLECTOR_RELEASE_PREPARE_V1",
+        "mode": "M1_COLLECTOR_RELEASE_PREPARE_V2",
         "status": "ROLLBACK_BUNDLE_VERIFIED_NO_DEPLOY",
-        "rollback_bundle_id": bundle.name,
+        "rollback_bundle_id": bundle_id,
         "old_supervisor_sha": manifest["running_supervisor_sha"],
         "old_collector_git_blob_verified": True,
         "original_plist_backup_verified": True,
         "original_collector_code_backup_verified": True,
         "staged_isolated_collector_plist_verified": True,
+        "isolated_collector_executed": False,
+        "interpreter_binary_attested": False,
+        "restore_rehearsal_completed": False,
         "live_plist_modified": False,
         "launchagents_reloaded": False,
         "financial_operations": 0,
     }
+
+
+def store(home, uid, plan_tuple, *, backup_root=None):
+    old, source, staged, oldsha = plan_tuple
+    root = Path(backup_root or backup_base(home))
+    with checked_directory(root, uid, create=True) as rootfd:
+        for _ in range(8):
+            name = "m1-" + secrets.token_urlsafe(7)
+            try:
+                os.mkdir(name, 0o700, dir_fd=rootfd)
+                break
+            except FileExistsError:
+                continue
+        else:
+            require(False)
+        bundle_fd = os.open(name, DIRECTORY_FLAGS, dir_fd=rootfd)
+        try:
+            checked_dir_metadata(os.fstat(bundle_fd), uid, leaf=True)
+            for filename, data in zip(FILES, (old, source, staged)):
+                write_backup(bundle_fd, filename, data, uid)
+            manifest = {
+                "kind": "ISL_M1_COLLECTOR_BACKUP",
+                "running_supervisor_sha": oldsha,
+                "original_collector_git_blob": GIT_BLOB,
+                "file_hashes": {
+                    filename: sha256(data).hexdigest()
+                    for filename, data in zip(FILES, (old, source, staged))
+                },
+                "created_utc": datetime.now(timezone.utc).isoformat(),
+                "collector_launchagent_modified": False,
+                "collector_reloaded": False,
+                "financial_operations": 0,
+            }
+            write_backup(bundle_fd, "manifest.json",
+                         json.dumps(manifest, sort_keys=True).encode(), uid)
+            return verify_contents(bundle_fd, uid, bundle_id=name)
+        finally:
+            os.close(bundle_fd)
+
+
+def verify(bundle, uid):
+    path = Path(bundle)
+    require(re.fullmatch(r"m1-[A-Za-z0-9_-]{4,64}", path.name) is not None)
+    with checked_directory(path.parent, uid) as rootfd:
+        fd = os.open(path.name, DIRECTORY_FLAGS, dir_fd=rootfd)
+        try:
+            checked_dir_metadata(os.fstat(fd), uid, leaf=True)
+            return verify_contents(fd, uid, bundle_id=path.name)
+        finally:
+            os.close(fd)
 
 
 def main(argv=None):
@@ -235,17 +295,15 @@ def main(argv=None):
         uid = os.getuid()
         home = Path.home()
         if args.verify_bundle_id is not None:
-            # A generated bundle ID, never an arbitrary path, is accepted.
-            require(re.fullmatch(r"m1-[A-Za-z0-9_-]{4,64}", args.verify_bundle_id) is not None)
-            root = backup_base(home)
-            secure_folder(root, uid)
-            result = verify(root / args.verify_bundle_id, uid)
+            require(re.fullmatch(r"m1-[A-Za-z0-9_-]{4,64}",
+                                 args.verify_bundle_id) is not None)
+            result = verify(backup_base(home) / args.verify_bundle_id, uid)
         else:
             result = store(home, uid, plan(home, args.expected_runtime_sha, uid))
         print(json.dumps(result, sort_keys=True, separators=(",", ":")))
         return 0
     except Exception:
-        # No private file paths, command output or exception text.
+        # Do not leak OS errors, filesystem locations, runtime args or keys.
         print("M1_COLLECTOR_ROLLBACK_PREPARE_REJECTED")
         return 2
 
