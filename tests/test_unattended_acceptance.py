@@ -170,6 +170,58 @@ class AcceptanceTests(unittest.TestCase):
             self.assertTrue(callable(options['preexec_fn']))
             self.assertIn('--ignore-submodules=all', args[0])
 
+    def test_copied_collector_git_supports_real_linked_worktree_safely(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory).resolve()
+            main = base / 'primary'
+            linked = base / 'runtime'
+            main.mkdir()
+            def git(where, *args):
+                return __import__('subprocess').run(
+                    ['/usr/bin/git', '-C', str(where), *args],
+                    capture_output=True, text=True, check=True,
+                    env={**os.environ, 'GIT_CONFIG_GLOBAL': os.devnull,
+                         'GIT_CONFIG_NOSYSTEM': '1'}).stdout.strip()
+            git(main, 'init', '-q')
+            git(main, 'config', 'user.name', 'Synthetic Test')
+            git(main, 'config', 'user.email', 'test@example.invalid')
+            (main / 'tracked.txt').write_text('original\n')
+            git(main, 'add', 'tracked.txt')
+            git(main, 'commit', '-qm', 'Synthetic fixture')
+            git(main, 'worktree', 'add', '-q', '--detach', str(linked), 'HEAD')
+            m._trusted_git_checkout(linked)
+            sha = git(linked, 'rev-parse', 'HEAD')
+            self.assertEqual(m.command(['git', 'rev-parse', 'HEAD'],
+                                       cwd=linked), sha)
+            self.assertEqual(m.command(['git', 'status', '--porcelain'],
+                                       cwd=linked), '')
+            (linked / 'tracked.txt').write_text('changed\n')
+            self.assertIn('tracked.txt',
+                          m.command(['git', 'status', '--porcelain'], cwd=linked))
+            (linked / 'tracked.txt').write_text('original\n')
+
+            pointer = (linked / '.git').read_bytes()
+            admin = Path(os.fsdecode(pointer.removeprefix(b'gitdir: ').strip()))
+            backlink = admin / 'gitdir'
+            previous = backlink.read_bytes()
+            backlink.write_text('/untrusted/decoy/.git\n')
+            with patch.object(m.subprocess, 'check_output') as invoked:
+                with self.assertRaises(ValueError):
+                    m.command(['git', 'rev-parse', 'HEAD'], cwd=linked)
+                invoked.assert_not_called()
+            backlink.write_bytes(previous)
+
+            common = admin.parent.parent
+            config = common / 'config'
+            original_config = config.read_bytes()
+            config.write_bytes(original_config + b'\n[filter "unsafe"]\nclean = /unsafe\n')
+            with patch.object(m.subprocess, 'check_output') as invoked:
+                with self.assertRaises(ValueError):
+                    m.command(['git', 'rev-parse', 'HEAD'], cwd=linked)
+                invoked.assert_not_called()
+            config.write_bytes(original_config)
+            m._trusted_git_checkout(linked)
+
     def test_transport_metadata_keeps_unknown_and_rejects_extra_private_fields(self):
         p,h,w=fixture()
         self.assertIsNone(m.transport_metadata(p))
