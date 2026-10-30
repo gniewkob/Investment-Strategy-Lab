@@ -61,7 +61,7 @@ class PrepareTests(unittest.TestCase):
             with patch.object(m.preflight, "read_launchagent",
                               return_value=sup):
                 p = m.plan(home, OLD_SHA, os.getuid(), commands=commands,
-                           check_help=lambda args: args[1] == "-I")
+                           check_syntax=lambda content: content.startswith(b"\"\"\""))
                 bundle_root = Path(d) / "private-backups"
                 result = m.store(home, os.getuid(), p, backup_root=bundle_root)
             self.assertEqual(result["status"], "ROLLBACK_BUNDLE_VERIFIED_NO_DEPLOY")
@@ -89,7 +89,7 @@ class PrepareTests(unittest.TestCase):
             with patch.object(m.preflight, "read_launchagent",
                               return_value=sup):
                 p = m.plan(home, OLD_SHA, os.getuid(), commands=commands,
-                           check_help=lambda _argv: True)
+                           check_syntax=lambda _argv: True)
                 root = Path(d) / "rollbacks"
                 result = m.store(home, os.getuid(), p, backup_root=root)
             folder = root/result["rollback_bundle_id"]
@@ -105,7 +105,7 @@ class PrepareTests(unittest.TestCase):
                               return_value=sup):
                 with self.assertRaises(ValueError):
                     m.plan(home, "a" * 40, os.getuid(), commands=commands,
-                           check_help=lambda _argv: True)
+                           check_syntax=lambda _argv: True)
                 def stale(*args, **kwargs):
                     result = commands(*args, **kwargs)
                     if args[:2] == ("launchctl", "print"):
@@ -114,10 +114,10 @@ class PrepareTests(unittest.TestCase):
                     return result
                 with self.assertRaises(ValueError):
                     m.plan(home, OLD_SHA, os.getuid(), commands=stale,
-                           check_help=lambda _argv: True)
+                           check_syntax=lambda _argv: True)
             self.assertFalse((Path(d) / "rollbacks").exists())
 
-    def test_unapproved_collector_and_help_failure_are_blocked(self):
+    def test_unapproved_collector_and_syntax_failure_are_blocked(self):
         with tempfile.TemporaryDirectory() as d:
             home, plist, code, sup, commands = self.fixture(d)
             old = plist.read_bytes()
@@ -125,11 +125,11 @@ class PrepareTests(unittest.TestCase):
                               return_value=sup):
                 with self.assertRaises(ValueError):
                     m.plan(home, OLD_SHA, os.getuid(), commands=commands,
-                           check_help=lambda _argv: False)
+                           check_syntax=lambda _argv: False)
                 code.write_bytes(code.read_bytes() + b"\n# modified")
                 with self.assertRaises(ValueError):
                     m.plan(home, OLD_SHA, os.getuid(), commands=commands,
-                           check_help=lambda _argv: True)
+                           check_syntax=lambda _argv: True)
             self.assertEqual(plist.read_bytes(), old)
 
     def test_bundle_reverification_and_reject_traversal_id(self):
@@ -138,7 +138,7 @@ class PrepareTests(unittest.TestCase):
             with patch.object(m.preflight, "read_launchagent",
                               return_value=sup):
                 plan = m.plan(home, OLD_SHA, os.getuid(), commands=commands,
-                              check_help=lambda args: True)
+                              check_syntax=lambda args: True)
                 bundle_root = m.backup_base(home)
                 result = m.store(home, os.getuid(), plan,
                                  backup_root=bundle_root)
@@ -157,6 +157,60 @@ class PrepareTests(unittest.TestCase):
                                               "../../other"]), 2)
                 self.assertEqual(rejected.getvalue().strip(),
                                  "M1_COLLECTOR_ROLLBACK_PREPARE_REJECTED")
+
+    def test_prepare_does_not_execute_an_untrusted_interpreter_or_script(self):
+        with tempfile.TemporaryDirectory() as d:
+            home, plist, script, supervisor, commands = self.fixture(d)
+            original = plistlib.loads(plist.read_bytes())
+            original["ProgramArguments"][0] = str(Path(d) / "python3")
+            fake = Path(d) / "python3"
+            fake.write_text("MALICIOUS_EXECUTABLE", encoding="utf-8")
+            fake.chmod(0o700)
+            plist.write_bytes(plistlib.dumps(original))
+            def synced(*args, **kwargs):
+                if args[:2] == ("launchctl", "print"):
+                    argv = original["ProgramArguments"]
+                    return ("run interval = 60 seconds\nprogram = " + argv[0]
+                            + "\narguments = {\n" +
+                            "\n".join("  " + x for x in argv) + "\n}")
+                return commands(*args, **kwargs)
+            with patch.object(m.preflight, "read_launchagent",
+                              return_value=supervisor), \
+                 patch("subprocess.run", side_effect=AssertionError(
+                     "PROBE_MUST_NOT_EXECUTE")):
+                data = m.plan(home, OLD_SHA, os.getuid(), commands=synced)
+            result = m.store(home, os.getuid(), data,
+                             backup_root=Path(d) / "safe-rollback")
+            self.assertFalse(result["interpreter_binary_attested"])
+            self.assertFalse(result["isolated_collector_executed"])
+            self.assertEqual(fake.read_text(), "MALICIOUS_EXECUTABLE")
+
+    def test_symlinked_backup_ancestor_cannot_redirect_writes(self):
+        with tempfile.TemporaryDirectory() as d:
+            home, plist, script, supervisor, commands = self.fixture(d)
+            with patch.object(m.preflight, "read_launchagent",
+                              return_value=supervisor):
+                data = m.plan(home, OLD_SHA, os.getuid(), commands=commands)
+            untrusted = Path(d) / "external"
+            untrusted.mkdir()
+            app_support = home / "Library" / "Application Support"
+            app_support.symlink_to(untrusted, target_is_directory=True)
+            with self.assertRaises(OSError):
+                m.store(home, os.getuid(), data)
+            self.assertEqual(list(untrusted.iterdir()), [])
+
+    def test_other_writable_ancestor_rejected_before_backup_creation(self):
+        with tempfile.TemporaryDirectory() as d:
+            home, plist, script, supervisor, commands = self.fixture(d)
+            with patch.object(m.preflight, "read_launchagent",
+                              return_value=supervisor):
+                data = m.plan(home, OLD_SHA, os.getuid(), commands=commands)
+            bad = Path(d) / "bad-ancestor"
+            bad.mkdir(mode=0o777)
+            bad.chmod(0o777)
+            with self.assertRaises(ValueError):
+                m.store(home, os.getuid(), data, backup_root=bad / "rollback")
+            self.assertFalse((bad / "rollback").exists())
 
     def test_output_redaction_on_failure(self):
         buffer = StringIO()
