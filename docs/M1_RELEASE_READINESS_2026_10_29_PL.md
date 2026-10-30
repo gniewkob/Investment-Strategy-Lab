@@ -801,3 +801,65 @@ i zweryfikowany historyczny bundle
 certyfikuje nowego kodu ani próby przywrócenia launchd.
 Przełączenie G3 nadal `NO-GO`; bez restartów,
 przeładowań, operacji finansowych i mergowania PR.
+
+
+## M1.4.1 — macOS fchdir oraz osobne fazy preflight G2/G4 (30.10.2026)
+
+Niezależny review SHA `b9fb5abb8b8a31527e969c4e282dad5c9ac24021`
+ujawnił **P1**: macOS nie gwarantuje poprawnego `chdir("/dev/fd/N")`
+dla deskryptora katalogu. Samo `pass_fds` nie zapewnia poprawnego
+katalogu roboczego przy wywołaniu Git. Poprzedni wariant nie jest
+podstawą do wydania.
+
+**Poprawka do niezależnej walidacji:** oba miejsca wywołujące Git
+(preflight/canary/prepare i samodzielny kolektor) zachowują deskryptor
+zweryfikowanego checkoutu, ale wywołują `os.fchdir(fd)` w procesie
+potomnym tuż przed `exec /usr/bin/git` przez
+`subprocess(..., preexec_fn=..., pass_fds=(fd,))`. Nie używają
+`git -C /dev/fd/N` ani `cwd=/dev/fd/N`. To mechanizm dla
+jednowątkowych narzędzi CLI, nie general-purpose workerów. **Dopiero
+test na rzeczywistym macOS** może potwierdzić jego zgodność,
+zachowanie przy zmianie nazwy przodka i brak uruchomienia
+zewnętrznych filtrów. Linux CI nie jest wystarczającym dowodem.
+
+W kodzie oddzielono dwie wzajemnie rozłączne atestacje:
+
+| Faza | Stan oczekiwany | Gwarancja | Czego nie gwarantuje |
+| --- | --- | --- | --- |
+| `legacy-before` (G2) | Aktywny V2 bez `-I`, plik identyczny z przypiętym legacy blob `41a8ca1e40af5697f6661b5e158bc205b4fe48ff`, zgodny loaded launchctl | Tylko zgodna historyczna konfiguracja/plik, bez wykonania kodu kolektora | Brak izolacji importów, brak zgody na uruchomienie V3 |
+| `isolated-after` (G4) | Wgrany zatwierdzony kolektor V3 i aktywne `python -I`, zgodne loaded launchctl | Izolowana definicja i dokładny hash kodu, tylko metadane | Nie potwierdza kodu już w pamięci, żywotności cykli ani odbioru 24h |
+
+Wywołanie operatora musi jawnie wskazywać fazę; domyślna faza CLI
+to `legacy-before` (bezpieczne sprawdzenie przed zmianą), natomiast
+testy z przygotowaną definicją `-I` korzystają z
+`isolated-after`. Wynik `LEGACY_COLLECTOR_BASELINE_VERIFIED_NO_DEPLOY`
+nie ustawia `collector_isolated_python_imports=true`, a sukces
+`ISOLATED_COLLECTOR_METADATA_VERIFIED_NOT_RUNTIME_ATTESTED`
+nadal nie jest potwierdzeniem procesu działającego w pamięci.
+
+Przykładowe odczytowe wywołanie po **osobnym przypięciu, review
+i zatwierdzeniu SHA kandydata** (bez użycia niezweryfikowanego
+aktualnego HEAD jako automatycznego kryterium):
+
+```bash
+set +x
+PYTHONDONTWRITEBYTECODE=1 python3 -B -m scripts.m1_predeploy_readiness \
+  --expected-commit "<EXACT_APPROVED_CANDIDATE_SHA>" \
+  --collector-phase legacy-before
+```
+
+Przed G3 pozostają: niezależny PASS aktualnego SHA, pozytywny
+odczyt G2 na Macu, atestacja interpretera, poprawnie odtworzona
+kopia plików w izolacji, osobny plan kontrolowanego przełączenia
+V3 i możliwego przywrócenia V2. G4 z fazą `isolated-after`
+ma sens **dopiero po odrębnym zatwierdzeniu G3**; nie wykonujemy
+zmiany LaunchAgent w ramach preflight.
+
+Kandydat nowego kodu kolektora ma przypięty blob
+`dd53b570af2c996fb9dc847df58a453af683f946`; legacy
+`41a8ca1e40af5697f6661b5e158bc205b4fe48ff`
+i historyczny bundle `m1-msmkv_0i` nie zostały zmienione.
+
+**Decyzja: Release NO-GO.** Nie odczytano stanu Maca w tym
+przeglądzie chmurowym, nie wykonano produkcyjnego restore,
+nie przeładowano usług ani nie uruchomiono operacji finansowych.
