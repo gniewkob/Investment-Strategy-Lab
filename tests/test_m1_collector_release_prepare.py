@@ -212,6 +212,25 @@ class PrepareTests(unittest.TestCase):
                 m.store(home, os.getuid(), data, backup_root=bad / "rollback")
             self.assertFalse((bad / "rollback").exists())
 
+    def test_preparer_rejects_untrusted_git_config_without_running_git(self):
+        with tempfile.TemporaryDirectory() as d:
+            home, _plist, _code, supervisor, _cmd = self.fixture(d)
+            active = Path(supervisor["WorkingDirectory"])
+            repo = active / ".git"
+            repo.mkdir()
+            config = repo / "config"
+            for payload in (
+                "[core]\nfsmonitor = /untrusted/command\n",
+                "[filter \"malicious\"]\nprocess = /untrusted/program\n",
+            ):
+                config.write_text(payload)
+                with patch.object(m.preflight, "read_launchagent",
+                                  return_value=supervisor), \
+                     patch.object(m.preflight, "command") as fake_git:
+                    with self.assertRaises(m.preflight.PreflightRejected):
+                        m.plan(home, OLD_SHA, os.getuid())
+                    fake_git.assert_not_called()
+
     def test_output_redaction_on_failure(self):
         buffer = StringIO()
         with patch.object(m, "plan", side_effect=OSError(
