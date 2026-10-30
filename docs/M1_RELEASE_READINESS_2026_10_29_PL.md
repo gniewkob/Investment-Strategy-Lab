@@ -753,3 +753,51 @@ pozostaje nienaruszony, a pełen restore z przeładowaniem usługi
 nie został wykonany. Wymagane pozostają niezależny review,
 lokalny preflight/atestacja interpretera, próba przywrócenia
 oraz nowy postflight i 24-godzinny pomiar.
+
+
+## M1.4 — P1 TOCTOU: związanie Git z katalogiem przez deskryptor
+
+Niezależny review SHA `cf648f771ee159addb01c299698dc578bb090064`
+wykrył **P1**: nawet zaakceptowane `.git/config` nie wyklucza
+podmiany ścieżki checkoutu pomiędzy sprawdzeniem a otwarciem jej
+przez `git status`. W testowym katalogu nadrzędnym z
+niebezpiecznymi prawami zapisu można było podmienić repo i
+wykonać kod z zewnętrznego filtra przy pozornie czystym statusie.
+
+Zabezpieczenie obu ścieżek — wspólnego preflight/canary/
+rollback prepare oraz samodzielnego, skopiowanego kolektora:
+
+- **każdy** składnik bezwzględnej ścieżki repo jest otwierany
+  za pomocą `O_DIRECTORY | O_NOFOLLOW` względem aktualnie
+  otwartego deskryptora katalogu, począwszy od katalogu `/`;
+- wymagamy właściciela root lub aktualnego użytkownika,
+  bez zapisu grupowego/publicznego; zaufany root-owned,
+  sticky katalog `/tmp` jest wyjątkiem;
+- końcowy checkout musi należeć do aktualnego użytkownika
+  i nie może być grupowo/publicznie zapisywalny;
+- kontrolujemy tożsamość katalogu `st_dev/st_ino` po
+  weryfikacji konfiguracji;
+- **wywołanie Git korzysta z otwartego deskryptora**
+  (`/dev/fd/N`, `pass_fds=(fd,)`), a nie z ponownego
+  rozwiązania niezweryfikowanej ścieżki;
+- przy nieznanym formacie, symlinkach, niebezpiecznym
+  przodku albo podmianie inode: `NO-GO`.
+  Nie wolno usuwać ograniczeń w celu uzyskania PASS.
+
+Nowe testy weryfikują odrzucenie nie-sticky 0777 przodka,
+symlinków, związanie deskryptora z wywołaniem, zmianę
+nazwy katalogu pomiędzy przygotowaniem a wywołaniem
+i realny status Git (czysty i zmodyfikowany plik) w
+izolowanym lokalnym repo. Dla macOS wymagana jest
+oddzielna kompatybilność `/dev/fd` w preflight runtime
+— sukces testów GitHub/Linux nie jest tym dowodem.
+
+**Nowy kolektor nie jest aktywny na Macu.** Każda zmiana
+`scripts/unattended_acceptance.py` wymaga ponownego
+przypięcia Git blob nowej wersji; stary blob
+`41a8ca1e40af5697f6661b5e158bc205b4fe48ff`
+i zweryfikowany historyczny bundle
+`m1-msmkv_0i` pozostają nietknięte. Backup V2 nie
+certyfikuje nowego kodu ani próby przywrócenia launchd.
+Przełączenie G3 nadal `NO-GO`; bez restartów,
+przeładowań, operacji finansowych i mergowania PR.
