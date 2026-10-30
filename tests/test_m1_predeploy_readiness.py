@@ -144,6 +144,44 @@ class PreflightTests(unittest.TestCase):
                 self.verify(definitions=definitions,
                             collector_phase="legacy-before")
 
+    def test_complete_collector_argv_rejects_help_unknown_and_duplicates(self):
+        # A --flag=value spelling reduces token count; a trailing --help
+        # would otherwise pass the old fixed-length metadata gate.
+        with tempfile.TemporaryDirectory() as folder:
+            source = (Path(__file__).parent / "fixtures" /
+                      "collector_legacy_v2.txt").read_bytes()
+            legacy = Path(folder) / "legacy-approved.py"
+            legacy.write_bytes(source)
+            for phase in ("legacy-before", "isolated-after"):
+                definitions = fixtures()
+                argv = definitions[m.LABEL_COLLECTOR]["ProgramArguments"]
+                if phase == "legacy-before":
+                    argv.remove("-I")
+                    argv[1] = str(legacy)
+                for extra in ("--help", "--unknown", "surplus",
+                              "--output=" + OUT, "--runtime"):
+                    with self.subTest(phase=phase, extra=extra):
+                        bad = deepcopy(definitions)
+                        args = bad[m.LABEL_COLLECTOR]["ProgramArguments"]
+                        prefix = 2 if phase == "legacy-before" else 3
+                        self.assertEqual(args[prefix], "--state-directory")
+                        args[prefix:prefix+2] = ["--state-directory=" + STATE]
+                        args.append(extra)
+                        stages = []
+                        with self.assertRaises(m.PreflightRejected):
+                            self.verify(definitions=bad,
+                                        collector_phase=phase)
+                        with self.assertRaises(m.PreflightRejected):
+                            m.collector_options(args, collector_phase=phase)
+                valid = deepcopy(definitions)
+                args = valid[m.LABEL_COLLECTOR]["ProgramArguments"]
+                prefix = 2 if phase == "legacy-before" else 3
+                args[prefix:prefix+2] = ["--state-directory=" + STATE]
+                parsed = m.collector_options(args, collector_phase=phase)
+                self.assertEqual(parsed["--state-directory"], STATE)
+                self.assertEqual(self.verify(definitions=valid,
+                                 collector_phase=phase)["financial_operations"], 0)
+
     def test_unsafe_or_mismatched_collector_and_watchdog_are_blocked(self):
         for change in (
             lambda d: d[m.LABEL_COLLECTOR].update(StartInterval=15),
