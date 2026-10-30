@@ -66,6 +66,40 @@ def option(arguments, flag):
     return matched[0]
 
 
+
+def collector_options(arguments, *, collector_phase):
+    """Parse exactly the four allowlisted collector options, never execute argv.
+
+    Either --flag value or --flag=value is supported, but all tokens must
+    belong to one of the four required pairs; --help, unknown/extra tokens,
+    missing values and duplicate flags reject without fallback.
+    """
+    require(collector_phase in ("legacy-before", "isolated-after"))
+    require(type(arguments) is list and all(type(x) is str for x in arguments))
+    prefix = 2 if collector_phase == "legacy-before" else 3
+    require(len(arguments) > prefix)
+    required = {"--state-directory", "--output", "--expected-commit",
+                "--runtime"}
+    parsed = {}
+    i = prefix
+    while i < len(arguments):
+        token = arguments[i]
+        if "=" in token:
+            flag, value = token.split("=", 1)
+            i += 1
+        else:
+            flag = token
+            require(i + 1 < len(arguments))
+            value = arguments[i + 1]
+            i += 2
+        require(flag in required and flag not in parsed
+                and bool(value) and not value.startswith("-")
+                and not any(ord(ch) < 32 for ch in value))
+        parsed[flag] = value
+    require(set(parsed) == required)
+    return parsed
+
+
 def open_trusted_checkout(root, uid):
     """Bind a checkout to an fd after checking every ancestor, no symlinks.
 
@@ -410,12 +444,12 @@ def check(expected, *, home=None, uid=None, reader=read_launchagent,
 
     # Check the collector's read-only scope before trusting its evidence.
     step("CHECK_COLLECTOR_EXPECTED_SHA")
-    collector_state = option(collector_args, "--state-directory")
-    collector_output = option(collector_args, "--output")
-    collector_expected = option(collector_args, "--expected-commit")
-    collector_runtime = option(collector_args, "--runtime")
-    require(len(collector_args) == (10 if collector_phase == "legacy-before" else 11)
-            and Path(collector_state).is_absolute()
+    parsed = collector_options(collector_args, collector_phase=collector_phase)
+    collector_state = parsed["--state-directory"]
+    collector_output = parsed["--output"]
+    collector_expected = parsed["--expected-commit"]
+    collector_runtime = parsed["--runtime"]
+    require(Path(collector_state).is_absolute()
             and Path(collector_output).is_absolute()
             and Path(collector_runtime).is_absolute()
             and Path(collector_runtime) == Path(active_root)
