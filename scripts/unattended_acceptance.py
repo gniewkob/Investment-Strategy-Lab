@@ -48,6 +48,39 @@ def load(path, limit=2_000_000):
         return json.loads(raw)
 
 
+def _open_checkout_fd(directory):
+    """Open every checkout ancestor without symlinks or unsafe write perms.
+
+    Preserve this fd through the Git invocation so parent rename attacks
+    cannot redirect the command to an unvalidated checkout.
+    """
+    path = Path(directory)
+    if not path.is_absolute() or '..' in path.parts:
+        raise ValueError('invalid git checkout')
+    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+    fd = os.open('/', flags)
+    try:
+        for i, name in enumerate(path.parts[1:]):
+            child = os.open(name, flags, dir_fd=fd)
+            os.close(fd)
+            fd = child
+            info = os.fstat(fd)
+            root_sticky = (info.st_uid == 0 and
+                           info.st_mode & stat.S_ISVTX and
+                           info.st_mode & 0o002)
+            if not (stat.S_ISDIR(info.st_mode) and
+                    info.st_uid in (0, os.getuid()) and
+                    (not info.st_mode & 0o022 or root_sticky)):
+                raise ValueError('unsafe git ancestor')
+            if i == len(path.parts) - 2 and (
+                    info.st_uid != os.getuid() or info.st_mode & 0o022):
+                raise ValueError('unsafe git checkout')
+        return fd
+    except Exception:
+        os.close(fd)
+        raise
+
+
 def _trusted_git_checkout(directory):
     """Fail closed on executable, redirected or ambiguous local Git config.
 
@@ -55,8 +88,13 @@ def _trusted_git_checkout(directory):
     python -I and cannot import M1's repo-local preflight module.
     """
     root = Path(directory)
-    if not root.is_absolute():
-        raise ValueError('untrusted git root')
+    fd = _open_checkout_fd(root)
+    try:
+        bound, current = os.fstat(fd), root.lstat()
+        if (bound.st_dev, bound.st_ino) != (current.st_dev, current.st_ino):
+            raise ValueError('untrusted git root')
+    finally:
+        os.close(fd)
     for path in (root, root / '.git'):
         entry = path.lstat()
         if not stat.S_ISDIR(entry.st_mode) or entry.st_uid != os.getuid() or entry.st_mode & 0o022:
@@ -129,18 +167,27 @@ def command(args, cwd=None):
             'GIT_TERMINAL_PROMPT': '0',
             'PATH': '/usr/bin:/bin:/usr/sbin:/sbin',
         })
-        args = ['/usr/bin/git', '--no-optional-locks',
-                '-c', 'core.fsmonitor=false',
-                '-c', 'core.hooksPath=/dev/null',
-                '-c', 'core.untrackedCache=false',
-                '-c', 'core.attributesFile=/dev/null',
-                '-c', 'core.excludesFile=/dev/null',
-                '-c', 'submodule.recurse=false', *args[1:]]
-        if 'status' in args:
-            args = [*args, '--ignore-submodules=all']
-        return subprocess.check_output(
-            args, cwd=cwd, text=True, stderr=subprocess.DEVNULL,
-            timeout=10, env=clean_env).strip()
+        fd = _open_checkout_fd(cwd)
+        try:
+            checked, current = os.fstat(fd), Path(cwd).lstat()
+            if (checked.st_dev, checked.st_ino) != (
+                    current.st_dev, current.st_ino):
+                raise ValueError('git checkout changed')
+            args = ['/usr/bin/git', '--no-optional-locks',
+                    '-c', 'core.fsmonitor=false',
+                    '-c', 'core.hooksPath=/dev/null',
+                    '-c', 'core.untrackedCache=false',
+                    '-c', 'core.attributesFile=/dev/null',
+                    '-c', 'core.excludesFile=/dev/null',
+                    '-c', 'submodule.recurse=false', *args[1:]]
+            if 'status' in args:
+                args = [*args, '--ignore-submodules=all']
+            return subprocess.check_output(
+                args, cwd=f'/dev/fd/{fd}', pass_fds=(fd,),
+                text=True, stderr=subprocess.DEVNULL,
+                timeout=10, env=clean_env).strip()
+        finally:
+            os.close(fd)
     return subprocess.check_output(
         args, cwd=cwd, text=True, stderr=subprocess.DEVNULL,
         timeout=10).strip()
