@@ -151,10 +151,14 @@ def assert_only_isolation_change(old, staged):
     require(copied == reference)
 
 
+def backup_base(home):
+    return (Path(home) / "Library" / "Application Support"
+            / "InvestmentStrategyLab" / "M1Rollback")
+
+
 def store(home, uid, plan_tuple, *, backup_root=None):
     old, source, staged, oldsha = plan_tuple
-    root = Path(backup_root or (Path(home) / "Library" / "Application Support"
-                                 / "InvestmentStrategyLab" / "M1Rollback"))
+    root = Path(backup_root or backup_base(home))
     # Parents are under the user's HOME; no system-wide modifications.
     root.mkdir(parents=True, exist_ok=True, mode=0o700)
     # Never chmod an existing directory that could be a symlink/redirect.
@@ -223,12 +227,21 @@ def verify(bundle, uid):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--expected-runtime-sha", required=True)
+    flags = parser.add_mutually_exclusive_group(required=True)
+    flags.add_argument("--expected-runtime-sha")
+    flags.add_argument("--verify-bundle-id")
     args = parser.parse_args(argv)
     try:
         uid = os.getuid()
         home = Path.home()
-        result = store(home, uid, plan(home, args.expected_runtime_sha, uid))
+        if args.verify_bundle_id is not None:
+            # A generated bundle ID, never an arbitrary path, is accepted.
+            require(re.fullmatch(r"m1-[A-Za-z0-9_-]{4,64}", args.verify_bundle_id) is not None)
+            root = backup_base(home)
+            secure_folder(root, uid)
+            result = verify(root / args.verify_bundle_id, uid)
+        else:
+            result = store(home, uid, plan(home, args.expected_runtime_sha, uid))
         print(json.dumps(result, sort_keys=True, separators=(",", ":")))
         return 0
     except Exception:
