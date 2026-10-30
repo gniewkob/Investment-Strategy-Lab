@@ -75,10 +75,11 @@ def assert_trusted_git_checkout(root, uid):
         info = path.lstat()
         require(stat.S_ISDIR(info.st_mode) and info.st_uid == uid
                 and not (info.st_mode & 0o022))
-    # Worktree-local config may carry executable filter/fsmonitor keys
-    # even when the primary .git/config is benign. Reject ambiguity.
-    extra = root / ".git" / "config.worktree"
-    require(not extra.exists() and not extra.is_symlink())
+    # A commondir pointer replaces the config Git actually reads.
+    # Reject shared/worktree and nonstandard layouts before any Git call.
+    for name in ("config.worktree", "commondir"):
+        extra = root / ".git" / name
+        require(not extra.exists() and not extra.is_symlink())
     config = root / ".git" / "config"
     fd = os.open(config, os.O_RDONLY | os.O_NOFOLLOW)
     with os.fdopen(fd, "rb") as stream:
@@ -92,18 +93,40 @@ def assert_trusted_git_checkout(root, uid):
         source = raw.decode("utf-8").lower()
     except UnicodeDecodeError:
         raise PreflightRejected("M1_PREDEPLOY_READONLY_REJECTED") from None
-    # Forbid repository-supplied executable entrypoints and config includes.
-    # The clean filter driver name can be arbitrary, so disabling only one
-    # known filter is NOT sufficient.
-    forbidden_section = re.compile(
-        r'^\s*\[\s*(?:filter|diff|hook|include|includeif)(?:[\s.\]]|$)',
-        flags=re.MULTILINE)
-    forbidden_setting = re.compile(
-        r'^\s*(?:fsmonitor|hookspath|excludesfile|attributesfile|worktree|'
-        r'alternaterefscommand|sshcommand)\s*=',
-        flags=re.MULTILINE)
-    require(forbidden_section.search(source) is None
-            and forbidden_setting.search(source) is None)
+    # Only accept a narrow, documented, non-executable subset of Git
+    # config. A permissive blacklist is unsafe: inline section headers
+    # ([core] worktree=...) and continuation lines bypass line regexes.
+    # Unknown sections/keys or unusual syntax are intentionally NO-GO.
+    allowed = {
+        "core": {"repositoryformatversion", "filemode", "bare",
+                 "logallrefupdates", "ignorecase", "precomposeunicode",
+                 "symlinks", "protecthfs", "protectntfs", "quotepath"},
+        "remote": {"url", "fetch", "pushurl", "tagopt", "mirror"},
+        "branch": {"remote", "merge", "rebase", "description"},
+        "user": {"name", "email", "signingkey"},
+        "pull": {"rebase", "ff"},
+        "init": {"defaultbranch"},
+        "gc": {"auto"},
+    }
+    section = None
+    for line in source.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith(("#", ";")):
+            continue
+        require(not stripped.endswith("\\\\"))
+        if stripped.startswith("["):
+            match = re.fullmatch(
+                r'\[([a-z][a-z0-9-]*)(?:\s+"[^"\\\n]{1,128}")?\]',
+                stripped)
+            require(match is not None)
+            section = match.group(1)
+            require(section in allowed)
+            continue
+        match = re.fullmatch(r'([a-z][a-z0-9-]*)\s*=\s*(.*)', stripped)
+        require(match is not None and section is not None)
+        require(match.group(1) in allowed[section])
+    # A normal repository cannot redirect Git to another common directory.
+    # The config parser above also rejects core.worktree and extensions.
 
 
 def command(*args, cwd=None):
