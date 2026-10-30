@@ -81,13 +81,14 @@ def plan(home, expected_runtime_sha, uid, *, commands=None, check_syntax=None):
     definition = plistlib.loads(old_bytes)
     require(type(definition) is dict and definition.get("StartInterval") == 60)
     argv = definition.get("ProgramArguments")
-    require(type(argv) is list and len(argv) == 10
-            and all(type(a) is str for a in argv))
+    require(type(argv) is list and all(type(a) is str for a in argv))
     require(Path(argv[0]).is_absolute()
             and re.fullmatch(r"python(?:3(?:\.\d+)?)?", Path(argv[0]).name))
     require(Path(argv[1]).is_absolute() and argv[1].endswith(".py"))
     require("-I" not in argv and "-m" not in argv and "-c" not in argv)
     require(definition.get("Program", argv[0]) == argv[0])
+    collector_flags = preflight.collector_options(
+        argv, collector_phase="legacy-before")
 
     parent_dir = Path(__file__).resolve().parent
     candidate = private_read(parent_dir / "unattended_acceptance.py", uid)
@@ -102,10 +103,10 @@ def plan(home, expected_runtime_sha, uid, *, commands=None, check_syntax=None):
     supervisor = preflight.read_launchagent(home, preflight.LABEL_PORTFOLIO, uid)
     active_root = supervisor.get("WorkingDirectory")
     require(type(active_root) is str and Path(active_root).is_absolute())
-    require(preflight.option(argv, "--runtime") == active_root)
-    require(Path(preflight.option(argv, "--state-directory")).is_absolute())
-    require(Path(preflight.option(argv, "--output")).is_absolute())
-    require(preflight.option(argv, "--expected-commit") == expected_runtime_sha)
+    require(collector_flags["--runtime"] == active_root)
+    require(Path(collector_flags["--state-directory"]).is_absolute())
+    require(Path(collector_flags["--output"]).is_absolute())
+    require(collector_flags["--expected-commit"] == expected_runtime_sha)
     if commands is preflight.command:
         preflight.assert_trusted_git_checkout(active_root, uid)
     require(commands("git", "-C", active_root, "rev-parse", "HEAD") ==
@@ -121,7 +122,8 @@ def plan(home, expected_runtime_sha, uid, *, commands=None, check_syntax=None):
 
     staged = dict(definition)
     staged["ProgramArguments"] = [argv[0], "-I"] + argv[1:]
-    require(len(staged["ProgramArguments"]) == 11)
+    preflight.collector_options(
+        staged["ProgramArguments"], collector_phase="isolated-after")
     staged_bytes = plistlib.dumps(staged, sort_keys=True)
     assert_only_isolation_change(definition, plistlib.loads(staged_bytes))
     return (old_bytes, approved, staged_bytes, expected_runtime_sha, candidate)
