@@ -233,16 +233,94 @@ class LocalReleaseTests(unittest.TestCase):
         self.assertEqual(code, 2)
         self.assertEqual(output.getvalue().strip(), "PRIVATE_RELEASE_CANARY_REJECTED")
 
+    def test_default_canary_git_attestation_rejects_untrusted_git_config(self):
+        # The canary must reject config BEFORE any git subprocess. This also
+        # covers inherited Git env pointing elsewhere: no unsafe call occurs.
+        from scripts import m1_predeploy_readiness as guarded
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d) / "candidate"
+            git = root / ".git"
+            git.mkdir(parents=True)
+            config = git / "config"
+            for text in (
+                "[core]\nfsmonitor = /untrusted/program\n",
+                "[filter \"external\"]\nprocess = /untrusted/command\n",
+                "[core] worktree = /decoy\n",
+                "[include]\npath = /untrusted/config\n",
+            ):
+                config.write_text(text)
+                with self.subTest(config=text.splitlines()[0]):
+                    with patch.object(guarded, "command",
+                                      side_effect=AssertionError(
+                                          "Git must not be invoked")):
+                        with self.assertRaises(m.ReleaseRejected):
+                            m.local_code_attestation(SHA, root)
+            config.write_text("[core]\nrepositoryformatversion = 0\n")
+            (git / "commondir").write_text("../outside\n")
+            with patch.object(guarded, "command",
+                              side_effect=AssertionError("Git must not run")):
+                with self.assertRaises(m.ReleaseRejected):
+                    m.local_code_attestation(SHA, root)
+
+    def test_canary_uses_hardened_git_for_both_revision_and_cleanliness(self):
+        from scripts import m1_predeploy_readiness as guarded
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d) / "candidate"
+            git = root / ".git"
+            git.mkdir(parents=True)
+            (git / "config").write_text(
+                "[core]\nrepositoryformatversion = 0\n")
+            seen = []
+            def fake_command(*args, **kwargs):
+                seen.append(args)
+                if "rev-parse" in args:
+                    return SHA
+                if "status" in args:
+                    return ""
+                raise AssertionError("Unrecognized Git command")
+            with patch.dict(os.environ, {"GIT_DIR": "/untrusted/repo",
+                                         "GIT_WORK_TREE": "/untrusted/tree"}):
+                with patch.object(guarded, "command",
+                                  side_effect=fake_command):
+                    self.assertTrue(m.local_code_attestation(SHA, root))
+            self.assertEqual(len(seen), 2)
+            self.assertTrue(all(cmd[0] == "git" and "-C" in cmd
+                                and str(root) in cmd for cmd in seen))
+            self.assertIn("--ignore-submodules=all", seen[1])
+            with patch.object(guarded, "command", return_value=""):
+                with self.assertRaises(m.ReleaseRejected):
+                    m.local_code_attestation(SHA, root)
+
     def test_local_git_expected_sha_and_worktree_clean_contract(self):
-        repo = Path(__file__).resolve().parents[1]
-        actual = subprocess.run(
-            ["git", "-C", str(repo), "rev-parse", "--verify", "HEAD"],
-            capture_output=True, text=True, check=True).stdout.strip()
-        self.assertTrue(m.local_code_attestation(actual, repo))
-        with self.assertRaises(m.ReleaseRejected):
-            m.local_code_attestation("f"*40, repo)
-        with self.assertRaises(m.ReleaseRejected):
-            m.local_code_attestation("notsha", repo)
+        # The CI runner's checkout can have extra HTTP auth config added by
+        # actions/checkout. Validate the security contract against an owned,
+        # minimal standalone Git repository rather than runner-specific Git
+        # configuration, without lowering the fail-closed allowlist.
+        with tempfile.TemporaryDirectory() as directory:
+            repo = Path(directory) / "clean-candidate"
+            repo.mkdir()
+            def git(*args):
+                return subprocess.run(
+                    ["/usr/bin/git", "-C", str(repo), *args],
+                    capture_output=True, text=True, check=True,
+                    env={**os.environ, "GIT_CONFIG_NOSYSTEM": "1",
+                         "GIT_CONFIG_GLOBAL": os.devnull},
+                ).stdout.strip()
+            git("init", "-q")
+            git("config", "user.name", "Synthetic Test")
+            git("config", "user.email", "synthetic@example.invalid")
+            (repo / "README.txt").write_text("synthetic-only\n", encoding="utf-8")
+            git("add", "README.txt")
+            git("commit", "-qm", "Synthetic test fixture")
+            actual = git("rev-parse", "--verify", "HEAD")
+            self.assertTrue(m.local_code_attestation(actual, repo))
+            with self.assertRaises(m.ReleaseRejected):
+                m.local_code_attestation("f" * 40, repo)
+            with self.assertRaises(m.ReleaseRejected):
+                m.local_code_attestation("notsha", repo)
+            (repo / "README.txt").write_text("modified\n", encoding="utf-8")
+            with self.assertRaises(m.ReleaseRejected):
+                m.local_code_attestation(actual, repo)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,33 @@
+name: M1 macOS directory descriptor smoke
+on:
+  pull_request:
+    paths:
+      - 'scripts/m1_predeploy_readiness.py'
+      - 'scripts/unattended_acceptance.py'
+      - 'scripts/portfolio_release_canary.py'
+      - 'tests/test_m1_predeploy_readiness.py'
+      - 'tests/test_unattended_acceptance.py'
+      - '.github/workflows/m1-macos-fchdir-smoke.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  macos-fchdir-smoke:
+    runs-on: macos-15
+    timeout-minutes: 8
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      TMPDIR: /private/tmp
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test Git descriptor binding and legacy/isolated metadata
+        run: |
+          python -B -m unittest discover -s tests -p 'test_m1_predeploy_readiness.py' -v
+          python -B -m unittest discover -s tests -p 'test_unattended_acceptance.py' -v

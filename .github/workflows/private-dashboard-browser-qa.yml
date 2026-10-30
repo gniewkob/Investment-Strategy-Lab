@@ -1,0 +1,39 @@
+name: Private dashboard browser QA
+on:
+  pull_request:
+    paths:
+      - 'scripts/private_portfolio_dashboard.py'
+      - 'scripts/private_dashboard_browser_qa.py'
+      - 'tests/test_private_portfolio_dashboard.py'
+      - '.github/workflows/private-dashboard-browser-qa.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  synthetic-browser-qa:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install isolated browser test dependencies
+        run: |
+          python -m pip install 'playwright==1.56.0'
+          python -m playwright install chromium --with-deps
+      - name: Render synthetic panel in Chromium at six responsive and theme configurations
+        run: |
+          python -m scripts.private_dashboard_browser_qa --output-dir "$RUNNER_TEMP/isl-visual-qa"
+      - name: Attach strictly synthetic browser screenshots and QA report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: isl-synthetic-dashboard-screenshots
+          path: ${{ runner.temp }}/isl-visual-qa/
+          if-no-files-found: error
+          retention-days: 7
