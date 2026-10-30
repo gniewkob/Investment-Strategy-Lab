@@ -131,40 +131,99 @@ def open_trusted_checkout(root, uid):
         raise
 
 
-def assert_trusted_git_checkout(root, uid):
-    """Fail closed before running Git against a configurable local checkout.
-
-    Never execute repo-defined filters, fsmonitor or hooks to attest a SHA.
-    We accept a normal standalone owner-controlled .git directory only.
-    A worktree or non-standard repository needs separate review.
-    """
-    root = Path(root)
-    bound = open_trusted_checkout(root, uid)
-    try:
-        root_st = os.fstat(bound)
-        current = root.lstat()
-        require((root_st.st_dev, root_st.st_ino) ==
-                (current.st_dev, current.st_ino))
-    finally:
-        os.close(bound)
-    for path in (root, root / ".git"):
-        info = path.lstat()
-        require(stat.S_ISDIR(info.st_mode) and info.st_uid == uid
-                and not (info.st_mode & 0o022))
-    # A commondir pointer replaces the config Git actually reads.
-    # Reject shared/worktree and nonstandard layouts before any Git call.
-    for name in ("config.worktree", "commondir"):
-        extra = root / ".git" / name
-        require(not extra.exists() and not extra.is_symlink())
-    config = root / ".git" / "config"
-    fd = os.open(config, os.O_RDONLY | os.O_NOFOLLOW)
+def _checked_git_metadata_file(path, uid, limit=4096):
+    """Bounded no-follow read of owner-controlled git metadata, never Git."""
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
     with os.fdopen(fd, "rb") as stream:
         info = os.fstat(stream.fileno())
         require(stat.S_ISREG(info.st_mode) and info.st_uid == uid
                 and not (info.st_mode & 0o022)
-                and 0 < info.st_size <= 64_000)
-        raw = stream.read(64_001)
+                and 0 < info.st_size <= limit)
+        raw = stream.read(limit + 1)
     require(len(raw) == info.st_size)
+    return raw
+
+
+def _trusted_git_config_path(root, uid):
+    """Resolve either standalone .git or a verified linked-worktree gitfile.
+
+    All real directories are traversed with O_NOFOLLOW and ownership/mode
+    checks. A gitfile may point only to a canonical, owner-controlled
+    $COMMON/worktrees/<id>, with a matching absolute backlink and common
+    directory. Reject nested commondir/config.worktree and symlinks.
+    """
+    root = Path(root)
+    dotgit = root / ".git"
+    info = dotgit.lstat()
+    require(info.st_uid == uid and not (info.st_mode & 0o022))
+    if stat.S_ISDIR(info.st_mode):
+        for name in ("config.worktree", "commondir"):
+            extra = dotgit / name
+            require(not extra.exists() and not extra.is_symlink())
+        return dotgit / "config"
+
+    require(stat.S_ISREG(info.st_mode))
+    gitfile = _checked_git_metadata_file(dotgit, uid)
+    pointer = re.fullmatch(rb"gitdir: ([^\r\n\x00]{1,4000})\r?\n?", gitfile)
+    require(pointer is not None)
+    try:
+        target = Path(os.fsdecode(pointer.group(1)))
+    except (UnicodeError, ValueError):
+        raise PreflightRejected("M1_PREDEPLOY_READONLY_REJECTED") from None
+    require(target.is_absolute() and ".." not in target.parts
+            and "." not in target.parts
+            and str(target) == os.path.normpath(str(target)))
+    target_fd = open_trusted_checkout(target, uid)
+    try:
+        actual = target.lstat()
+        bound = os.fstat(target_fd)
+        require((actual.st_dev, actual.st_ino) == (bound.st_dev, bound.st_ino))
+    finally:
+        os.close(target_fd)
+    require(target.parent.name == "worktrees" and bool(target.name))
+    common = target.parent.parent
+    common_fd = open_trusted_checkout(common, uid)
+    try:
+        actual = common.lstat()
+        bound = os.fstat(common_fd)
+        require((actual.st_dev, actual.st_ino) == (bound.st_dev, bound.st_ino))
+    finally:
+        os.close(common_fd)
+
+    commondir = _checked_git_metadata_file(target / "commondir", uid)
+    # Git's standard per-worktree admin dir points two levels up.
+    require(commondir.rstrip(b"\r\n") == b"../..")
+    backlink = _checked_git_metadata_file(target / "gitdir", uid)
+    try:
+        linked_path = Path(os.fsdecode(backlink.rstrip(b"\r\n")))
+    except (UnicodeError, ValueError):
+        raise PreflightRejected("M1_PREDEPLOY_READONLY_REJECTED") from None
+    require(linked_path.is_absolute() and
+            str(linked_path) == str(dotgit) and
+            not any(c in backlink for c in (b"\x00",)))
+    for p in (target / "config.worktree", common / "commondir",
+              common / "config.worktree"):
+        require(not p.exists() and not p.is_symlink())
+    return common / "config"
+
+
+def assert_trusted_git_checkout(root, uid):
+    """Fail closed on unsafe standalone or linked-worktree Git metadata.
+
+    File pointers and common config must be owner-controlled, non-symlinked,
+    and non-executable. Neither this function nor the preflight runs code
+    from the checked-out repository during trust validation.
+    """
+    root = Path(root)
+    bound = open_trusted_checkout(root, uid)
+    try:
+        checked, current = os.fstat(bound), root.lstat()
+        require((checked.st_dev, checked.st_ino) ==
+                (current.st_dev, current.st_ino))
+    finally:
+        os.close(bound)
+    config = _trusted_git_config_path(root, uid)
+    raw = _checked_git_metadata_file(config, uid, limit=64_000)
     try:
         source = raw.decode("utf-8").lower()
     except UnicodeDecodeError:
