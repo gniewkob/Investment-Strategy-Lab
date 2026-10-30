@@ -609,3 +609,46 @@ odrębnej atestacji rzeczywistej instalacji Git/interpretera na Macu.
 na Macu, ale nie oznacza udanego przywrócenia. G3 nadal
 `NO-GO`, G4/G5 nie wykonane. Nie przeładowano
 żadnego LaunchAgenta ani nie wykonano żadnych transakcji.
+
+
+## M1.3 — review commondir/core.worktree (30.10.2026)
+
+Niezależny przegląd commitu `af8b6af8eb9a16c7abe9a3cc86498ebf15005e62`
+wykrył kolejne **P1 + P2** po zabezpieczeniu `git status`:
+
+- Obecność `.git/commondir` pozwala skierować Git do innej
+  konfiguracji, zawierającej zewnętrzny filtr/hook, której wcześniejszy
+  walidator w ogóle nie odczytywał.
+- Zapis `[core] worktree = /decoy` w pojedynczej linii
+  pomijał regex na początku osobnej linii, pozwalając
+  atestować czystość **innego katalogu niż runtime supervisora**.
+
+Dodatkowe zabezpieczenie M1 w `scripts/m1_predeploy_readiness.py`,
+współdzielone przez `scripts/m1_collector_release_prepare.py`:
+
+- odrzuca `.git/commondir` i `.git/config.worktree`
+  także jako dangling symlink; dopuszcza tylko standalone `.git`;
+- parsuje `.git/config` w rygorystycznym podzbiorze Git config,
+  z dopuszczonymi niewykonywalnymi sekcjami/kluczami. Wszystkie
+  nieznane sekcje/klucze, wpisy inline po nagłówku,
+  kontynuacje linii, filtry, `core.worktree`,
+  `core.fsmonitor`, `include`, `hook` są `NO-GO`;
+- zachowuje izolowane wywołania systemowego Git z wyłączonymi
+  opcjonalnymi zapisami i submodułami.
+
+Testy obejmują zwykłą bezpieczną konfigurację, `commondir`,
+dangling symlink `commondir`, dwa warianty `worktree`,
+niebezpieczne filtry i kontynuacje. Realne środowisko Mac
+nie było ponownie atestowane na tym nowym kodzie, a zgodność
+lokalnej konfiguracji Git z allowlistą nie jest jeszcze znana.
+Jeśli nowe G2 odrzuci standardową lokalną konfigurację,
+nie należy modyfikować repozytorium ani wyłączać walidatora
+w celu uzyskania PASS; potrzebna jest tylko zredagowana
+diagnostyka metadanych i ocena dozwolonych kluczy.
+
+Backup `m1-msmkv_0i` pozostaje nienaruszony oraz był
+zweryfikowany odczytowo przez M1 V2. **Nie** oznacza to
+próby przywrócenia, atestacji interpretera, przeładowania kolektora
+czy zgody na operacje finansowe. PR #87 pozostaje Draft;
+G3 nadal NO-GO do uzyskania niezależnego review, odczytowego
+preflightu nowego SHA i próby rollbacku.
