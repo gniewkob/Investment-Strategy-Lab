@@ -30,7 +30,7 @@ SHA_RE = re.compile(r"[0-9a-f]{40}\Z")
 LEGACY_COLLECTOR_GIT_BLOB = "41a8ca1e40af5697f6661b5e158bc205b4fe48ff"
 # Candidate v3 is self-contained and hardens Git for runtime/watchdog.
 # This source is NOT active on the Mac until a separate controlled release.
-APPROVED_COLLECTOR_GIT_BLOB = "4e4f8e1c1d3eed87b4a6a7b9b5410ab2b3eeeb19"
+APPROVED_COLLECTOR_GIT_BLOB = "bf76288f1fb655afc9fd3a1cb686b924d242ef9a"
 
 
 class PreflightRejected(ValueError):
