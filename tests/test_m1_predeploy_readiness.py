@@ -84,7 +84,8 @@ def probe(config_path, expected, phase, now):
 
 
 class PreflightTests(unittest.TestCase):
-    def verify(self, definitions=None, command_fn=commands, canary=probe):
+    def verify(self, definitions=None, command_fn=commands, canary=probe,
+               collector_phase="isolated-after"):
         definitions = definitions or fixtures()
         def read(_home, label, _uid):
             return deepcopy(definitions[label])
@@ -92,12 +93,15 @@ class PreflightTests(unittest.TestCase):
             command_fn = lambda *args, **kwargs: commands(
                 *args, definitions=definitions, **kwargs)
         return m.check(NEW, reader=read, command_fn=command_fn,
-                       probe=canary,
+                       probe=canary, collector_phase=collector_phase,
                        now=datetime(2026, 10, 29, tzinfo=timezone.utc))
 
     def test_valid_readonly_preflight_only_confirms_metadata(self):
         report = self.verify()
-        self.assertEqual(report["status"], "READY_FOR_RELEASE_REVIEW_NOT_DEPLOYED")
+        self.assertEqual(report["status"],
+                         "ISOLATED_COLLECTOR_METADATA_VERIFIED_NOT_RUNTIME_ATTESTED")
+        self.assertEqual(report["collector_phase"], "isolated-after")
+        self.assertFalse(report["interpreter_binary_attested"])
         self.assertEqual(report["candidate_sha"], NEW)
         self.assertEqual(report["current_on_disk_runtime_sha"], OLD)
         self.assertFalse(report["candidate_is_active_on_disk_revision"])
@@ -109,6 +113,36 @@ class PreflightTests(unittest.TestCase):
         dumped = json.dumps(report)
         for private in (ROOT, CONFIG, STATE, OUT):
             self.assertNotIn(private, dumped)
+
+    def test_legacy_predeploy_phase_attests_v2_without_claiming_isolation(self):
+        with tempfile.TemporaryDirectory() as folder:
+            legacy = Path(folder) / "verified-legacy-collector.py"
+            fixture = (Path(__file__).parent / "fixtures" /
+                       "collector_legacy_v2.txt").read_bytes()
+            legacy.write_bytes(fixture)
+            definitions = fixtures()
+            argv = definitions[m.LABEL_COLLECTOR]["ProgramArguments"]
+            argv.remove("-I")
+            argv[1] = str(legacy)
+            report = self.verify(definitions=definitions,
+                                 collector_phase="legacy-before")
+            self.assertEqual(report["status"],
+                             "LEGACY_COLLECTOR_BASELINE_VERIFIED_NO_DEPLOY")
+            self.assertEqual(report["collector_phase"], "legacy-before")
+            self.assertTrue(report["legacy_collector_baseline_verified"])
+            self.assertFalse(report["collector_isolated_python_imports"])
+            self.assertFalse(report["interpreter_binary_attested"])
+            self.assertFalse(report["active_process_code_in_memory_attested"])
+            self.assertEqual(report["files_changed"], 0)
+            self.assertEqual(report["services_restarted"], 0)
+            self.assertEqual(report["financial_operations"], 0)
+            with self.assertRaises(m.PreflightRejected):
+                self.verify(definitions=definitions,
+                            collector_phase="isolated-after")
+            legacy.write_bytes(fixture + b"\\n# unauthorized drift\\n")
+            with self.assertRaises(m.PreflightRejected):
+                self.verify(definitions=definitions,
+                            collector_phase="legacy-before")
 
     def test_unsafe_or_mismatched_collector_and_watchdog_are_blocked(self):
         for change in (
@@ -379,7 +413,7 @@ class PreflightTests(unittest.TestCase):
     def test_cli_sanitizes_caught_stage_diagnostic(self):
         output = StringIO()
 
-        def reject(_sha, *, stage):
+        def reject(_sha, *, stage, collector_phase):
             stage("CHECK_COLLECTOR_EXPECTED_SHA")
             raise RuntimeError("sensitive local path")
 
