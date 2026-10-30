@@ -62,10 +62,74 @@ def option(arguments, flag):
     return matched[0]
 
 
+def assert_trusted_git_checkout(root, uid):
+    """Fail closed before running Git against a configurable local checkout.
+
+    Never execute repo-defined filters, fsmonitor or hooks to attest a SHA.
+    We accept a normal standalone owner-controlled .git directory only.
+    A worktree or non-standard repository needs separate review.
+    """
+    root = Path(root)
+    require(root.is_absolute())
+    for path in (root, root / ".git"):
+        info = path.lstat()
+        require(stat.S_ISDIR(info.st_mode) and info.st_uid == uid
+                and not (info.st_mode & 0o022))
+    config = root / ".git" / "config"
+    fd = os.open(config, os.O_RDONLY | os.O_NOFOLLOW)
+    with os.fdopen(fd, "rb") as stream:
+        info = os.fstat(stream.fileno())
+        require(stat.S_ISREG(info.st_mode) and info.st_uid == uid
+                and not (info.st_mode & 0o022)
+                and 0 < info.st_size <= 64_000)
+        raw = stream.read(64_001)
+    require(len(raw) == info.st_size)
+    try:
+        source = raw.decode("utf-8").lower()
+    except UnicodeDecodeError:
+        raise PreflightRejected("M1_PREDEPLOY_READONLY_REJECTED") from None
+    # Forbid repository-supplied executable entrypoints and config includes.
+    # The clean filter driver name can be arbitrary, so disabling only one
+    # known filter is NOT sufficient.
+    forbidden_section = re.compile(
+        r'^\s*\[\s*(?:filter|diff|hook|include|includeif)(?:[\s.\]]|$)',
+        flags=re.MULTILINE)
+    forbidden_setting = re.compile(
+        r'^\s*(?:fsmonitor|hookspath|excludesfile|attributesfile|worktree|'
+        r'alternaterefscommand|sshcommand)\s*=',
+        flags=re.MULTILINE)
+    require(forbidden_section.search(source) is None
+            and forbidden_setting.search(source) is None)
+
+
 def command(*args, cwd=None):
     try:
-        result = subprocess.run(args, cwd=cwd, capture_output=True, text=True,
-                                timeout=8, check=False)
+        if args and args[0] == "git":
+            # Absolute system Git; remove inherited Git configuration/env.
+            # -c overrides repo fsmonitor and hook paths. --no-optional-locks
+            # avoids refreshing or writing the existing runtime index.
+            clean_env = {k: v for k, v in os.environ.items()
+                         if not k.startswith("GIT_")}
+            clean_env.update({
+                "GIT_CONFIG_NOSYSTEM": "1",
+                "GIT_CONFIG_GLOBAL": os.devnull,
+                "GIT_ATTR_NOSYSTEM": "1",
+                "GIT_OPTIONAL_LOCKS": "0",
+                "GIT_TERMINAL_PROMPT": "0",
+                "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
+            })
+            argv = ("/usr/bin/git", "--no-optional-locks",
+                    "-c", "core.fsmonitor=false",
+                    "-c", "core.hooksPath=/dev/null",
+                    "-c", "core.untrackedCache=false",
+                    "-c", "core.attributesFile=/dev/null",
+                    "-c", "core.excludesFile=/dev/null",
+                    "-c", "submodule.recurse=false", *args[1:])
+            result = subprocess.run(argv, cwd=cwd, capture_output=True, text=True,
+                                    timeout=8, check=False, env=clean_env)
+        else:
+            result = subprocess.run(args, cwd=cwd, capture_output=True, text=True,
+                                    timeout=8, check=False)
     except (OSError, subprocess.SubprocessError):
         raise PreflightRejected("M1_PREDEPLOY_READONLY_REJECTED") from None
     require(result.returncode == 0 and len(result.stdout) < 128_000)
@@ -233,6 +297,10 @@ def check(expected, *, home=None, uid=None, reader=read_launchagent,
             and loaded_arguments == collector_args)
 
     step("CHECK_EXISTING_RUNTIME_GIT")
+    # Synthetic injected command functions in tests never invoke real Git.
+    # Production CLI uses the guarded system command only.
+    if command_fn is command:
+        assert_trusted_git_checkout(active_root, uid)
     current = command_fn("git", "-C", active_root, "rev-parse", "--verify", "HEAD")
     require(SHA_RE.fullmatch(current) is not None)
     current_clean = (command_fn("git", "-C", active_root, "status",
