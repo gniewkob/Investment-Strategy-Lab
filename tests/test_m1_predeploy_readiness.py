@@ -621,6 +621,69 @@ class PreflightTests(unittest.TestCase):
                 self.assertEqual(m.command("git", "-C", str(root),
                                            "rev-parse", "HEAD"), "expected")
 
+    def test_linked_worktree_git_metadata_and_actual_status_fail_closed(self):
+        # Real synthetic Git linked worktree: not just mocked pointer checks.
+        with tempfile.TemporaryDirectory() as folder:
+            base = Path(folder).resolve()
+            main = base / "primary"
+            linked = base / "active"
+            main.mkdir()
+            def git(where, *args):
+                return subprocess.run(
+                    ["/usr/bin/git", "-C", str(where), *args],
+                    capture_output=True, text=True, check=True,
+                    env={**os.environ, "GIT_CONFIG_GLOBAL": os.devnull,
+                         "GIT_CONFIG_NOSYSTEM": "1"}).stdout.strip()
+            git(main, "init", "-q")
+            git(main, "config", "user.name", "Synthetic Tester")
+            git(main, "config", "user.email", "test@example.invalid")
+            (main / "tracked.txt").write_text("original\n")
+            git(main, "add", "tracked.txt")
+            git(main, "commit", "-qm", "Synthetic fixture")
+            git(main, "worktree", "add", "-q", "--detach", str(linked), "HEAD")
+            self.assertTrue((linked / ".git").is_file())
+            m.assert_trusted_git_checkout(linked, os.getuid())
+            expected = git(linked, "rev-parse", "HEAD")
+            self.assertEqual(m.command("git", "-C", str(linked),
+                                       "rev-parse", "--verify", "HEAD"), expected)
+            self.assertEqual(m.command("git", "-C", str(linked), "status",
+                                       "--porcelain"), "")
+            (linked / "tracked.txt").write_text("changed\n")
+            self.assertIn("tracked.txt", m.command(
+                "git", "-C", str(linked), "status", "--porcelain"))
+            (linked / "tracked.txt").write_text("original\n")
+
+            gitfile = linked / ".git"
+            pointer = gitfile.read_bytes()
+            admin = Path(os.fsdecode(pointer.removeprefix(b"gitdir: ").strip()))
+            self.assertTrue(admin.is_dir())
+            common = admin.parent.parent
+            backlink = admin / "gitdir"
+            original_backlink = backlink.read_bytes()
+            backlink.write_text(str(base / "wrong" / ".git") + "\n")
+            with self.assertRaises(m.PreflightRejected):
+                m.assert_trusted_git_checkout(linked, os.getuid())
+            backlink.write_bytes(original_backlink)
+
+            common_config = common / "config"
+            original_config = common_config.read_bytes()
+            common_config.write_bytes(original_config + b"\n[include]\npath = /unsafe\n")
+            with self.assertRaises(m.PreflightRejected):
+                m.command("git", "-C", str(linked), "rev-parse", "HEAD")
+            common_config.write_bytes(original_config)
+
+            extra = admin / "config.worktree"
+            extra.write_text("[core]\nfsmonitor = /unsafe\n")
+            with self.assertRaises(m.PreflightRejected):
+                m.assert_trusted_git_checkout(linked, os.getuid())
+            extra.unlink()
+
+            gitfile.write_text("gitdir: /untrusted/other/worktrees/forged\n")
+            with self.assertRaises((OSError, m.PreflightRejected)):
+                m.assert_trusted_git_checkout(linked, os.getuid())
+            gitfile.write_bytes(pointer)
+            m.assert_trusted_git_checkout(linked, os.getuid())
+
     def test_command_line_option_rejects_duplicate_or_missing_values(self):
         self.assertEqual(m.option(["--output", OUT], "--output"), OUT)
         self.assertEqual(m.option(["--output="+OUT], "--output"), OUT)
