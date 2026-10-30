@@ -499,6 +499,54 @@ class PreflightTests(unittest.TestCase):
             with self.assertRaises(OSError):
                 m.open_trusted_checkout(root / "link", os.getuid())
 
+    def test_fd_pinned_git_attests_real_clean_then_dirty_checkout(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "repo"
+            root.mkdir()
+            def raw_git(*args):
+                subprocess.run(
+                    ["/usr/bin/git", "-C", str(root), *args],
+                    env={**os.environ, "GIT_CONFIG_GLOBAL": os.devnull,
+                         "GIT_CONFIG_NOSYSTEM": "1"},
+                    capture_output=True, text=True, check=True)
+            raw_git("init", "-q")
+            raw_git("config", "user.name", "Synthetic Test")
+            raw_git("config", "user.email", "synthetic@example.invalid")
+            target = root / "tracked.txt"
+            target.write_text("original\n")
+            raw_git("add", "tracked.txt")
+            raw_git("commit", "-qm", "Synthetic read-only test fixture")
+            sha = m.command("git", "-C", str(root), "rev-parse", "--verify", "HEAD")
+            self.assertRegex(sha, r"^[0-9a-f]{40}$")
+            self.assertEqual(m.command("git", "-C", str(root), "status",
+                                       "--porcelain"), "")
+            target.write_text("modified\n")
+            self.assertIn("tracked.txt", m.command("git", "-C", str(root),
+                         "status", "--porcelain"))
+
+    def test_fd_pinned_git_ignores_root_path_swapped_during_execution(self):
+        with tempfile.TemporaryDirectory() as folder:
+            parent = Path(folder)
+            root = parent / "approved"
+            git = root / ".git"
+            git.mkdir(parents=True)
+            (git / "config").write_text("[core]\nrepositoryformatversion = 0\n")
+            old_inode = root.stat().st_ino
+            def swap_while_running(argv, **kwargs):
+                descriptor = kwargs["pass_fds"][0]
+                self.assertEqual(os.fstat(descriptor).st_ino, old_inode)
+                root.rename(parent / "original-still-open")
+                root.mkdir()
+                (root / "decoy").write_text("untrusted")
+                self.assertEqual(os.fstat(descriptor).st_ino, old_inode)
+                self.assertNotEqual(root.stat().st_ino, old_inode)
+                self.assertEqual(argv[argv.index("-C") + 1],
+                                 f"/dev/fd/{descriptor}")
+                return SimpleNamespace(returncode=0, stdout="expected")
+            with patch.object(m.subprocess, "run", side_effect=swap_while_running):
+                self.assertEqual(m.command("git", "-C", str(root),
+                                           "rev-parse", "HEAD"), "expected")
+
     def test_command_line_option_rejects_duplicate_or_missing_values(self):
         self.assertEqual(m.option(["--output", OUT], "--output"), OUT)
         self.assertEqual(m.option(["--output="+OUT], "--output"), OUT)
