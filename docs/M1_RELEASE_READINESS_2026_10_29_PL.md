@@ -564,3 +564,48 @@ odrębnego bezpiecznego mechanizmu przeładowania tylko
 `pl.gniewkob.isl.acceptance` oraz postflight przed rozpoczęciem
 nowego okna 24 godzin. Nie uruchamiać starszego `--help`
 ani nie przełączać usługi tylko dlatego, że backup istnieje.
+
+
+## M1.3 — szósta uwaga P1: Git może wykonywać hooki/filtry podczas atestacji
+
+Po ponownej weryfikacji rzeczywistego backupu `m1-msmkv_0i`
+(`ROLLBACK_BUNDLE_VERIFIED_NO_DEPLOY` z poprawionego M1 V2,
+zero modyfikacji `plist`, zero przeładowań i operacji finansowych)
+kolejne code review SHA `174b7693e9c75bf4d9fe8f342a32a808364b9745`
+zgłosiło nową uwagę **P1**: `git status` może wykonać
+repozytoryjny `core.fsmonitor`, a także zewnętrzne filtry
+`filter.*.clean/process`, mimo pozornie odczytowego charakteru
+polecenia. Sam czysty wynik `git status --porcelain` nie
+jest atestacją bezpieczeństwa lokalnej konfiguracji Git.
+
+**Hardening obu ścieżek M1:** `scripts/m1_predeploy_readiness.py`
+oraz `scripts/m1_collector_release_prepare.py` wymagają
+owner-controlled, niegrupowo/niepublicznie zapisywalnego katalogu
+standalone `.git` i jego lokalnej konfiguracji (bez symlinków),
+odrzucają `config.worktree` i konfigurację zawierającą:
+`core.fsmonitor`, `core.hooksPath`, zewnętrzne sekcje
+`filter`, `diff`, `hook`, `include`, `includeIf`
+oraz inne niezatwierdzone punkty wejścia.
+
+Przy faktycznych odczytach z Git stosowany jest systemowy
+`/usr/bin/git`, jawnie czyszczone środowisko `GIT_*`,
+wyłączone konfiguracje globalna i systemowa, `--no-optional-locks`
+oraz ustawienia `core.fsmonitor=false`,
+`core.hooksPath=/dev/null`, `core.untrackedCache=false`.
+`status` ignoruje submoduły, nie aktualizuje indeksu.
+Wszystkie te działania pozostają bramkami **fail-closed**:
+jeśli lokalny runtime używa worktree, dowiązań, wykonywalnych
+hooków lub filtrów, przygotowanie należy zatrzymać i
+ocenić konkretną konfigurację, a nie wyłączać kontrolę.
+
+Dodane testy syntetyczne odrzucają `core.fsmonitor`,
+`filter.*`, `hook.*`, `include`, `config.worktree`,
+niebezpieczne uprawnienia i symlink pliku konfiguracyjnego.
+Dodatkowy test potwierdza izolację argumentów i zmiennych
+środowiskowych wywołania Git. Syntetyczne testy nie zastępują
+odrębnej atestacji rzeczywistej instalacji Git/interpretera na Macu.
+
+**Status:** G2.2 kopia `m1-msmkv_0i` została zweryfikowana
+na Macu, ale nie oznacza udanego przywrócenia. G3 nadal
+`NO-GO`, G4/G5 nie wykonane. Nie przeładowano
+żadnego LaunchAgenta ani nie wykonano żadnych transakcji.
