@@ -863,3 +863,33 @@ i historyczny bundle `m1-msmkv_0i` nie zostały zmienione.
 **Decyzja: Release NO-GO.** Nie odczytano stanu Maca w tym
 przeglądzie chmurowym, nie wykonano produkcyjnego restore,
 nie przeładowano usług ani nie uruchomiono operacji finansowych.
+
+
+
+## M1.4.2 — P2: pełna walidacja parametrów LaunchAgent (30.10.2026)
+
+Review dokładnego SHA `5532fde237ff0fbcf4ce75c348cc597ece43c121`
+wykazał P2: sprawdzenie liczby tokenów nie wykrywało dodatkowego
+`--help`, gdy jeden z wymaganych argumentów zapisano jako
+`--flag=wartość`. Kolektor mógł zakończyć działanie po wyświetleniu
+pomocy bez zapisania nowej próbki, a preflight fałszywie sygnalizował
+zaakceptowane metadane.
+
+Wspólny walidator `collector_options` wymaga **dokładnie czterech**
+opcji: `--state-directory`, `--output`, `--expected-commit`,
+`--runtime`. Każdą można zapisać jako `--flag wartość` albo
+`--flag=wartość`, ale każda musi wystąpić dokładnie raz, ze
+zdefiniowaną niepustą wartością. Wszystkie tokeny muszą należeć
+do tych par. `--help`, nieznana opcja, argument pozycyjny,
+powtórzenie albo brak wartości prowadzą do odmowy.
+
+Walidator jest używany w obu fazach G2/G4 i podczas przygotowania
+rollbacku V2→V3. Nie wykonuje interpretera ani kodu kolektora.
+Testy syntetyczne obejmują oba warianty fazy i odrzucenie
+obejścia `--flag=value --help`. Ten dowód nie zastępuje
+kontroli załadowanego `launchctl` na Macu ani 24h obserwacji.
+
+**G3 nadal NO-GO** do czasu niezależnego review nowego SHA,
+pełnego CI, bezpiecznego odczytu Maca i weryfikacji planu odtworzenia.
+Istniejący bundle `m1-msmkv_0i` i produkcja pozostają poza
+zakresem zmian.
