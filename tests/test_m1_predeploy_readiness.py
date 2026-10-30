@@ -411,6 +411,31 @@ class PreflightTests(unittest.TestCase):
                         m.assert_trusted_git_checkout(root, os.getuid())
             config.write_text("[core]\nrepositoryformatversion = 0\n")
             m.assert_trusted_git_checkout(root, os.getuid())
+            # Valid repository syntax must not be accepted merely because
+            # a dangerous key is inline with the section header.
+            for payload in (
+                "[core] worktree = /absolute/decoy\n",
+                "[core] fsmonitor = /untrusted/hook\n",
+                "[include] path = /untrusted/config\n",
+                "[core]\nworktree = /absolute/decoy\n",
+                "[filter \"shadow\"]\nprocess = /untrusted/filter\n",
+                "[core]\nrepositoryformatversion = 0\\\nworktree = /decoy\n",
+            ):
+                config.write_text(payload)
+                with self.subTest(payload=payload.splitlines()[0]):
+                    with self.assertRaises(m.PreflightRejected):
+                        m.assert_trusted_git_checkout(root, os.getuid())
+            config.write_text("[core]\nrepositoryformatversion = 0\n")
+            commondir = git / "commondir"
+            commondir.write_text("../other-git\n")
+            with self.assertRaises(m.PreflightRejected):
+                m.assert_trusted_git_checkout(root, os.getuid())
+            commondir.unlink()
+            commondir.symlink_to(Path(d) / "missing-common-dir")
+            with self.assertRaises(m.PreflightRejected):
+                m.assert_trusted_git_checkout(root, os.getuid())
+            commondir.unlink()
+            m.assert_trusted_git_checkout(root, os.getuid())
             config.chmod(0o666)
             with self.assertRaises(m.PreflightRejected):
                 m.assert_trusted_git_checkout(root, os.getuid())
