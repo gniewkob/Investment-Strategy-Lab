@@ -304,7 +304,8 @@ def check(expected, *, home=None, uid=None, reader=read_launchagent,
     current = command_fn("git", "-C", active_root, "rev-parse", "--verify", "HEAD")
     require(SHA_RE.fullmatch(current) is not None)
     current_clean = (command_fn("git", "-C", active_root, "status",
-                                "--porcelain", "--untracked-files=all") == "")
+                                "--porcelain", "--untracked-files=all",
+                                "--ignore-submodules=all") == "")
     require(current_clean)
 
     # Check the collector's read-only scope before trusting its evidence.
