@@ -81,11 +81,94 @@ def _open_checkout_fd(directory):
         raise
 
 
-def _trusted_git_checkout(directory):
-    """Fail closed on executable, redirected or ambiguous local Git config.
+def _require_git(condition):
+    if not condition:
+        raise ValueError('untrusted git metadata')
 
-    Self-contained because the installed copied collector is run via
-    python -I and cannot import M1's repo-local preflight module.
+
+def _checked_git_metadata_file(path, uid, limit=4096):
+    """Bounded no-follow read of owner-controlled git metadata, never Git."""
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+    with os.fdopen(fd, "rb") as stream:
+        info = os.fstat(stream.fileno())
+        _require_git(stat.S_ISREG(info.st_mode) and info.st_uid == uid
+                and not (info.st_mode & 0o022)
+                and 0 < info.st_size <= limit)
+        raw = stream.read(limit + 1)
+    _require_git(len(raw) == info.st_size)
+    return raw
+
+
+def _trusted_git_config_path(root, uid):
+    """Resolve either standalone .git or a verified linked-worktree gitfile.
+
+    All real directories are traversed with O_NOFOLLOW and ownership/mode
+    checks. A gitfile may point only to a canonical, owner-controlled
+    $COMMON/worktrees/<id>, with a matching absolute backlink and common
+    directory. Reject nested commondir/config.worktree and symlinks.
+    """
+    root = Path(root)
+    dotgit = root / ".git"
+    info = dotgit.lstat()
+    _require_git(info.st_uid == uid and not (info.st_mode & 0o022))
+    if stat.S_ISDIR(info.st_mode):
+        for name in ("config.worktree", "commondir"):
+            extra = dotgit / name
+            _require_git(not extra.exists() and not extra.is_symlink())
+        return dotgit / "config"
+
+    _require_git(stat.S_ISREG(info.st_mode))
+    gitfile = _checked_git_metadata_file(dotgit, uid)
+    pointer = re.fullmatch(rb"gitdir: ([^\r\n\x00]{1,4000})\r?\n?", gitfile)
+    _require_git(pointer is not None)
+    try:
+        target = Path(os.fsdecode(pointer.group(1)))
+    except (UnicodeError, ValueError):
+        raise ValueError('untrusted git metadata') from None
+    _require_git(target.is_absolute() and ".." not in target.parts
+            and "." not in target.parts
+            and str(target) == os.path.normpath(str(target)))
+    target_fd = _open_checkout_fd(target)
+    try:
+        actual = target.lstat()
+        bound = os.fstat(target_fd)
+        _require_git((actual.st_dev, actual.st_ino) == (bound.st_dev, bound.st_ino))
+    finally:
+        os.close(target_fd)
+    _require_git(target.parent.name == "worktrees" and bool(target.name))
+    common = target.parent.parent
+    common_fd = _open_checkout_fd(common)
+    try:
+        actual = common.lstat()
+        bound = os.fstat(common_fd)
+        _require_git((actual.st_dev, actual.st_ino) == (bound.st_dev, bound.st_ino))
+    finally:
+        os.close(common_fd)
+
+    commondir = _checked_git_metadata_file(target / "commondir", uid)
+    # Git's standard per-worktree admin dir points two levels up.
+    _require_git(commondir.rstrip(b"\r\n") == b"../..")
+    backlink = _checked_git_metadata_file(target / "gitdir", uid)
+    try:
+        linked_path = Path(os.fsdecode(backlink.rstrip(b"\r\n")))
+    except (UnicodeError, ValueError):
+        raise ValueError('untrusted git metadata') from None
+    _require_git(linked_path.is_absolute() and
+            str(linked_path) == str(dotgit) and
+            not any(c in backlink for c in (b"\x00",)))
+    for p in (target / "config.worktree", common / "commondir",
+              common / "config.worktree"):
+        _require_git(not p.exists() and not p.is_symlink())
+    return common / "config"
+
+
+
+def _trusted_git_checkout(directory):
+    """Fail closed on standalone or linked-worktree Git metadata.
+
+    Copied collector is self-contained under Python -I; this mirrors the
+    M1 preflight's pinned metadata checks and does not run untrusted Git
+    until all pointers and common configuration have been checked.
     """
     root = Path(directory)
     fd = _open_checkout_fd(root)
@@ -95,25 +178,8 @@ def _trusted_git_checkout(directory):
             raise ValueError('untrusted git root')
     finally:
         os.close(fd)
-    for path in (root, root / '.git'):
-        entry = path.lstat()
-        if not stat.S_ISDIR(entry.st_mode) or entry.st_uid != os.getuid() or entry.st_mode & 0o022:
-            raise ValueError('untrusted git checkout')
-    for name in ('commondir', 'config.worktree'):
-        alternate = root / '.git' / name
-        if alternate.exists() or alternate.is_symlink():
-            raise ValueError('redirected git configuration')
-    config = root / '.git' / 'config'
-    fd = os.open(config, os.O_RDONLY | os.O_NOFOLLOW)
-    with os.fdopen(fd, 'rb') as stream:
-        entry = os.fstat(stream.fileno())
-        if not (stat.S_ISREG(entry.st_mode) and entry.st_uid == os.getuid()
-                and not entry.st_mode & 0o022
-                and 0 < entry.st_size <= 64_000):
-            raise ValueError('untrusted git config')
-        raw = stream.read(64_001)
-    if len(raw) != entry.st_size:
-        raise ValueError('git config too large')
+    config = _trusted_git_config_path(root, os.getuid())
+    raw = _checked_git_metadata_file(config, os.getuid(), limit=64_000)
     try:
         config_text = raw.decode('utf-8').lower()
     except UnicodeDecodeError:
