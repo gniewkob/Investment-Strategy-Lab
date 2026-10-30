@@ -182,8 +182,12 @@ def command(args, cwd=None):
                     '-c', 'submodule.recurse=false', *args[1:]]
             if 'status' in args:
                 args = [*args, '--ignore-submodules=all']
+            # macOS cannot chdir('/dev/fd/N') to an opened directory.
+            # fchdir in the forked child binds Git to the verified inode,
+            # without reopening an ancestor pathname. This collector is
+            # a single-threaded CLI; never run this from threaded workers.
             return subprocess.check_output(
-                args, cwd=f'/dev/fd/{fd}', pass_fds=(fd,),
+                args, pass_fds=(fd,), preexec_fn=lambda: os.fchdir(fd),
                 text=True, stderr=subprocess.DEVNULL,
                 timeout=10, env=clean_env).strip()
         finally:
