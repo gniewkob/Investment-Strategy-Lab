@@ -87,6 +87,26 @@ class PrepareTests(unittest.TestCase):
                              + source["ProgramArguments"][1:])
             self.assertNotIn(str(home), json.dumps(result))
 
+    def test_rollback_plan_rejects_unparsed_collector_arguments(self):
+        for extra in ("--help", "--unknown", "stray-position",
+                      "--output=/other", "--runtime"):
+            with self.subTest(extra=extra), tempfile.TemporaryDirectory() as d:
+                home, plist, _, supervisor, commands = self.fixture(d)
+                definition = plistlib.loads(plist.read_bytes())
+                argv = definition["ProgramArguments"]
+                argv[2:4] = ["--state-directory=" + argv[3]]
+                argv.append(extra)
+                definition["ProgramArguments"] = argv
+                plist.write_bytes(plistlib.dumps(definition))
+                with patch.object(m.preflight, "read_launchagent",
+                                  return_value=supervisor):
+                    with self.assertRaises(ValueError):
+                        m.plan(home, OLD_SHA, os.getuid(), commands=commands,
+                               check_syntax=lambda _: True)
+                self.assertFalse(
+                    (Path(home) / "Library" / "Application Support" /
+                     "InvestmentStrategyLab" / "M1Rollback").exists())
+
     def test_change_or_remove_backup_fails_verification(self):
         with tempfile.TemporaryDirectory() as d:
             home, plist, code, sup, commands = self.fixture(d)
