@@ -66,6 +66,37 @@ def option(arguments, flag):
     return matched[0]
 
 
+def open_trusted_checkout(root, uid):
+    """Bind a checkout to an fd after checking every ancestor, no symlinks.
+
+    Root-owned sticky /tmp is allowed; non-sticky group/world-writable
+    parents are refused. The returned fd must be held through git process
+    execution; no pathname re-resolution by git is permitted.
+    """
+    path = Path(root)
+    require(path.is_absolute() and ".." not in path.parts)
+    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+    fd = os.open("/", flags)
+    try:
+        for i, name in enumerate(path.parts[1:]):
+            child = os.open(name, flags, dir_fd=fd)
+            os.close(fd)
+            fd = child
+            st = os.fstat(fd)
+            root_sticky = (st.st_uid == 0 and
+                           (st.st_mode & stat.S_ISVTX) and
+                           (st.st_mode & 0o002))
+            require(stat.S_ISDIR(st.st_mode) and
+                    st.st_uid in (0, uid) and
+                    (not (st.st_mode & 0o022) or root_sticky))
+            if i == len(path.parts) - 2:
+                require(st.st_uid == uid and not (st.st_mode & 0o022))
+        return fd
+    except Exception:
+        os.close(fd)
+        raise
+
+
 def assert_trusted_git_checkout(root, uid):
     """Fail closed before running Git against a configurable local checkout.
 
@@ -74,7 +105,14 @@ def assert_trusted_git_checkout(root, uid):
     A worktree or non-standard repository needs separate review.
     """
     root = Path(root)
-    require(root.is_absolute())
+    bound = open_trusted_checkout(root, uid)
+    try:
+        root_st = os.fstat(bound)
+        current = root.lstat()
+        require((root_st.st_dev, root_st.st_ino) ==
+                (current.st_dev, current.st_ino))
+    finally:
+        os.close(bound)
     for path in (root, root / ".git"):
         info = path.lstat()
         require(stat.S_ISDIR(info.st_mode) and info.st_uid == uid
@@ -149,15 +187,31 @@ def command(*args, cwd=None):
                 "GIT_TERMINAL_PROMPT": "0",
                 "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
             })
-            argv = ("/usr/bin/git", "--no-optional-locks",
-                    "-c", "core.fsmonitor=false",
-                    "-c", "core.hooksPath=/dev/null",
-                    "-c", "core.untrackedCache=false",
-                    "-c", "core.attributesFile=/dev/null",
-                    "-c", "core.excludesFile=/dev/null",
-                    "-c", "submodule.recurse=false", *args[1:])
-            result = subprocess.run(argv, cwd=cwd, capture_output=True, text=True,
-                                    timeout=8, check=False, env=clean_env)
+            require(len(args) >= 4 and args[1] == "-C")
+            root = Path(args[2])
+            fd = open_trusted_checkout(root, os.getuid())
+            try:
+                assert_trusted_git_checkout(root, os.getuid())
+                before = os.fstat(fd)
+                after = root.lstat()
+                require((before.st_dev, before.st_ino) ==
+                        (after.st_dev, after.st_ino))
+                # Pass the already-validated directory descriptor to Git.
+                # The hostile parent cannot redirect /dev/fd/N.
+                git_path = f"/dev/fd/{fd}"
+                argv = ("/usr/bin/git", "--no-optional-locks",
+                        "-c", "core.fsmonitor=false",
+                        "-c", "core.hooksPath=/dev/null",
+                        "-c", "core.untrackedCache=false",
+                        "-c", "core.attributesFile=/dev/null",
+                        "-c", "core.excludesFile=/dev/null",
+                        "-c", "submodule.recurse=false",
+                        "-C", git_path, *args[3:])
+                result = subprocess.run(
+                    argv, capture_output=True, text=True, timeout=8,
+                    check=False, env=clean_env, pass_fds=(fd,))
+            finally:
+                os.close(fd)
         else:
             result = subprocess.run(args, cwd=cwd, capture_output=True, text=True,
                                     timeout=8, check=False)
