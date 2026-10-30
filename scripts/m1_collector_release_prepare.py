@@ -21,11 +21,14 @@ import stat
 
 from scripts import m1_predeploy_readiness as preflight
 
-GIT_BLOB = preflight.APPROVED_COLLECTOR_GIT_BLOB
+GIT_BLOB = preflight.LEGACY_COLLECTOR_GIT_BLOB
+NEW_GIT_BLOB = preflight.APPROVED_COLLECTOR_GIT_BLOB
 SHA = re.compile(r"[0-9a-f]{40}\Z")
 LABEL = preflight.LABEL_COLLECTOR
 FILES = ("collector-before.plist", "collector-before.py",
          "collector-isolated-staged.plist")
+NEW_FILE = "collector-isolated-staged.py"
+FILES_UPGRADE = (*FILES, NEW_FILE)
 DIRECTORY_FLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
 
 
@@ -87,13 +90,14 @@ def plan(home, expected_runtime_sha, uid, *, commands=None, check_syntax=None):
     require(definition.get("Program", argv[0]) == argv[0])
 
     parent_dir = Path(__file__).resolve().parent
-    reference = private_read(parent_dir / "unattended_acceptance.py", uid)
-    require(source_blob(reference) == GIT_BLOB)
+    candidate = private_read(parent_dir / "unattended_acceptance.py", uid)
+    require(source_blob(candidate) == NEW_GIT_BLOB)
     approved = private_read(argv[1], uid)
-    require(sha256(reference).digest() == sha256(approved).digest())
+    require(source_blob(approved) == GIT_BLOB)
+    # The OLD bytes remain the rollback source; new bytes are staged only.
     # No subprocess using argv[0] or argv[1]: prevents untrusted-executable
     # invocation and time-of-check/time-of-use source replacement attacks.
-    require(check_syntax(approved) is True)
+    require(check_syntax(approved) is True and check_syntax(candidate) is True)
 
     supervisor = preflight.read_launchagent(home, preflight.LABEL_PORTFOLIO, uid)
     active_root = supervisor.get("WorkingDirectory")
@@ -120,7 +124,7 @@ def plan(home, expected_runtime_sha, uid, *, commands=None, check_syntax=None):
     require(len(staged["ProgramArguments"]) == 11)
     staged_bytes = plistlib.dumps(staged, sort_keys=True)
     assert_only_isolation_change(definition, plistlib.loads(staged_bytes))
-    return (old_bytes, approved, staged_bytes, expected_runtime_sha)
+    return (old_bytes, approved, staged_bytes, expected_runtime_sha, candidate)
 
 
 def assert_only_isolation_change(old, staged):
@@ -181,7 +185,7 @@ def checked_directory(path, uid, *, create=False, leaf=True):
 
 
 def read_backup(fd, name, uid):
-    require(name in (*FILES, "manifest.json"))
+    require(name in (*FILES_UPGRADE, "manifest.json"))
     child = os.open(name, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=fd)
     with os.fdopen(child, "rb") as stream:
         s = os.fstat(stream.fileno())
@@ -193,7 +197,7 @@ def read_backup(fd, name, uid):
 
 
 def write_backup(fd, name, payload, uid):
-    require(name in (*FILES, "manifest.json"))
+    require(name in (*FILES_UPGRADE, "manifest.json"))
     child = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
                     0o600, dir_fd=fd)
     with os.fdopen(child, "wb") as stream:
@@ -209,19 +213,31 @@ def verify_contents(fd, uid, *, bundle_id):
     require(manifest.get("collector_launchagent_modified") is False
             and manifest.get("collector_reloaded") is False
             and manifest.get("financial_operations") == 0)
-    data = {name: read_backup(fd, name, uid) for name in FILES}
-    require(manifest.get("file_hashes") == {
+    # Existing V2 backups have 3 files, while V3 also stages a separately
+    # pinned hardened collector. Neither kind is a completed restore drill.
+    hashes = manifest.get("file_hashes")
+    require(type(hashes) is dict)
+    names = FILES_UPGRADE if set(hashes) == set(FILES_UPGRADE) else FILES
+    require(set(hashes) == set(names))
+    data = {name: read_backup(fd, name, uid) for name in names}
+    require(hashes == {
         name: sha256(payload).hexdigest()
         for name, payload in data.items()
     })
+    if names == FILES_UPGRADE:
+        require(source_blob(data[NEW_FILE]) == NEW_GIT_BLOB)
     old = plistlib.loads(data["collector-before.plist"])
     new = plistlib.loads(data["collector-isolated-staged.plist"])
     assert_only_isolation_change(old, new)
     require(source_blob(data["collector-before.py"]) == GIT_BLOB)
+    require(manifest.get("original_collector_git_blob") == GIT_BLOB)
+    if names == FILES_UPGRADE:
+        require(manifest.get("staged_collector_git_blob") == NEW_GIT_BLOB)
     require(type(manifest.get("running_supervisor_sha")) is str
             and SHA.fullmatch(manifest["running_supervisor_sha"]) is not None)
     return {
-        "mode": "M1_COLLECTOR_RELEASE_PREPARE_V2",
+        "mode": ("M1_COLLECTOR_RELEASE_PREPARE_V3"
+                 if names == FILES_UPGRADE else "M1_COLLECTOR_RELEASE_PREPARE_V2"),
         "status": "ROLLBACK_BUNDLE_VERIFIED_NO_DEPLOY",
         "rollback_bundle_id": bundle_id,
         "old_supervisor_sha": manifest["running_supervisor_sha"],
@@ -229,6 +245,7 @@ def verify_contents(fd, uid, *, bundle_id):
         "original_plist_backup_verified": True,
         "original_collector_code_backup_verified": True,
         "staged_isolated_collector_plist_verified": True,
+        "staged_isolated_collector_code_verified": names == FILES_UPGRADE,
         "isolated_collector_executed": False,
         "interpreter_binary_attested": False,
         "restore_rehearsal_completed": False,
@@ -239,7 +256,8 @@ def verify_contents(fd, uid, *, bundle_id):
 
 
 def store(home, uid, plan_tuple, *, backup_root=None):
-    old, source, staged, oldsha = plan_tuple
+    require(len(plan_tuple) == 5)
+    old, source, staged, oldsha, candidate = plan_tuple
     root = Path(backup_root or backup_base(home))
     with checked_directory(root, uid, create=True) as rootfd:
         for _ in range(8):
@@ -254,15 +272,17 @@ def store(home, uid, plan_tuple, *, backup_root=None):
         bundle_fd = os.open(name, DIRECTORY_FLAGS, dir_fd=rootfd)
         try:
             checked_dir_metadata(os.fstat(bundle_fd), uid, leaf=True)
-            for filename, data in zip(FILES, (old, source, staged)):
+            for filename, data in zip(FILES_UPGRADE, (old, source, staged, candidate)):
                 write_backup(bundle_fd, filename, data, uid)
             manifest = {
                 "kind": "ISL_M1_COLLECTOR_BACKUP",
                 "running_supervisor_sha": oldsha,
                 "original_collector_git_blob": GIT_BLOB,
+                "staged_collector_git_blob": NEW_GIT_BLOB,
                 "file_hashes": {
                     filename: sha256(data).hexdigest()
-                    for filename, data in zip(FILES, (old, source, staged))
+                    for filename, data in zip(FILES_UPGRADE,
+                                              (old, source, staged, candidate))
                 },
                 "created_utc": datetime.now(timezone.utc).isoformat(),
                 "collector_launchagent_modified": False,
