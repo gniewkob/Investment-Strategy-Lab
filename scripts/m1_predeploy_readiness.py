@@ -75,6 +75,10 @@ def assert_trusted_git_checkout(root, uid):
         info = path.lstat()
         require(stat.S_ISDIR(info.st_mode) and info.st_uid == uid
                 and not (info.st_mode & 0o022))
+    # Worktree-local config may carry executable filter/fsmonitor keys
+    # even when the primary .git/config is benign. Reject ambiguity.
+    extra = root / ".git" / "config.worktree"
+    require(not extra.exists() and not extra.is_symlink())
     config = root / ".git" / "config"
     fd = os.open(config, os.O_RDONLY | os.O_NOFOLLOW)
     with os.fdopen(fd, "rb") as stream:
