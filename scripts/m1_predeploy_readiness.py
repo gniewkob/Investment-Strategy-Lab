@@ -247,34 +247,45 @@ def loaded_collector_arguments(payload):
     return program_rows[0], tokens
 
 
-def verified_collector_entrypoint(arguments, *, approved_source=None, uid=None):
-    """Require Python isolated mode and an exact approved collector source.
+def verified_collector_entrypoint(arguments, *, approved_source=None, uid=None,
+                                  collector_phase="isolated-after"):
+    """Attest exact file bytes without executing the collector.
 
-    -I ignores PYTHON* environment variables, user site packages, and
-    script-directory import resolution. This prevents an untrusted argparse
-    (or another stdlib module) next to the copied file or in PYTHONPATH.
-    No code execution, provider access, state write, or service restart.
+    The existing V2 collector is recorded only as a LEGACY predeploy baseline:
+    its imports are NOT isolated, and it is not eligible as V3 release code.
+    The V3 postdeploy phase requires Python -I plus the new approved blob.
     """
+    require(collector_phase in ("legacy-before", "isolated-after"))
     require(type(arguments) is list and all(type(a) is str for a in arguments))
-    require(len(arguments) >= 3 and Path(arguments[0]).is_absolute())
+    require(len(arguments) >= 2 and Path(arguments[0]).is_absolute())
     exe = Path(arguments[0]).name.lower()
     require(re.fullmatch(r"(?:python(?:3(?:\.\d+)?)?|pypy(?:3(?:\.\d+)?)?)", exe) is not None)
-    # A source hash proves only this script, not its imports. The -I
-    # interpreter flag must precede the script. All other interpreter
-    # modes (including bare script, -m, -c, or extra flags) fail closed.
-    require(arguments[1] == "-I" and arguments[2].endswith(".py"))
-    script = Path(arguments[2])
-    require(script.is_absolute())
     if uid is None:
         uid = os.getuid()
-    src = Path(approved_source or Path(__file__).resolve().parent /
-               "unattended_acceptance.py")
-    # Read only the audited source file, after rejecting symlink/path tricks.
+
+    if collector_phase == "legacy-before":
+        # Exactly the legacy, not-isolated script invocation; do not
+        # reinterpret V2 as a safe isolated runtime or execute it.
+        require(arguments[1].endswith(".py"))
+        script = Path(arguments[1])
+        src = Path(approved_source or Path(__file__).resolve().parents[1] /
+                   "tests" / "fixtures" / "collector_legacy_v2.txt")
+        expected_blob = LEGACY_COLLECTOR_GIT_BLOB
+        label = "REVIEWED_LEGACY_COPIED_PYTHON_SCRIPT_UNISOLATED"
+    else:
+        require(len(arguments) >= 3 and arguments[1] == "-I"
+                and arguments[2].endswith(".py"))
+        script = Path(arguments[2])
+        src = Path(approved_source or Path(__file__).resolve().parent /
+                   "unattended_acceptance.py")
+        expected_blob = APPROVED_COLLECTOR_GIT_BLOB
+        label = "REVIEWED_ISOLATED_COPIED_PYTHON_SCRIPT"
+    require(script.is_absolute())
+
     def trusted_bytes(path):
         try:
             fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
         except OSError:
-            # Do not leak private script paths in low-level exceptions.
             raise PreflightRejected("M1_PREDEPLOY_READONLY_REJECTED") from None
         with os.fdopen(fd, "rb") as stream:
             st = os.fstat(stream.fileno())
@@ -282,20 +293,21 @@ def verified_collector_entrypoint(arguments, *, approved_source=None, uid=None):
                     and not (st.st_mode & 0o022)
                     and 10_000 <= st.st_size <= 200_000)
             raw = stream.read(200_001)
-        require(len(raw) == st.st_size and len(raw) <= 200_000)
+        require(len(raw) == st.st_size)
         return raw
 
     approved = trusted_bytes(src)
     signature = sha1(b"blob " + str(len(approved)).encode("ascii") +
                      b"\x00" + approved).hexdigest()
-    require(signature == APPROVED_COLLECTOR_GIT_BLOB)
+    require(signature == expected_blob)
     deployed = trusted_bytes(script)
     require(sha256(deployed).digest() == sha256(approved).digest())
-    return "REVIEWED_ISOLATED_COPIED_PYTHON_SCRIPT"
+    return label
 
 
 def check(expected, *, home=None, uid=None, reader=read_launchagent,
-          command_fn=command, probe=None, now=None, stage=None):
+          command_fn=command, probe=None, now=None, stage=None,
+          collector_phase="isolated-after"):
     """Inspect metadata of the existing job; no mutation or financial access."""
     def step(code):
         if stage is not None:
@@ -303,6 +315,7 @@ def check(expected, *, home=None, uid=None, reader=read_launchagent,
 
     step("VALIDATE_EXPECTED_SHA")
     require(type(expected) is str and SHA_RE.fullmatch(expected) is not None)
+    require(collector_phase in ("legacy-before", "isolated-after"))
     if uid is None:
         uid = os.getuid()
     if home is None:
@@ -353,7 +366,8 @@ def check(expected, *, home=None, uid=None, reader=read_launchagent,
         require(type(collector["Program"]) is str
                 and collector["Program"] == collector_args[0])
     step("CHECK_COLLECTOR_CODE_IDENTITY")
-    collector_mode = verified_collector_entrypoint(collector_args, uid=uid)
+    collector_mode = verified_collector_entrypoint(
+        collector_args, uid=uid, collector_phase=collector_phase)
     step("CHECK_COLLECTOR_INTERVAL")
     require(type(collector.get("StartInterval")) is int
             and collector["StartInterval"] == 60)
@@ -400,7 +414,7 @@ def check(expected, *, home=None, uid=None, reader=read_launchagent,
     collector_output = option(collector_args, "--output")
     collector_expected = option(collector_args, "--expected-commit")
     collector_runtime = option(collector_args, "--runtime")
-    require(len(collector_args) == 11
+    require(len(collector_args) == (10 if collector_phase == "legacy-before" else 11)
             and Path(collector_state).is_absolute()
             and Path(collector_output).is_absolute()
             and Path(collector_runtime).is_absolute()
@@ -422,8 +436,11 @@ def check(expected, *, home=None, uid=None, reader=read_launchagent,
     # only canary's input inspection opens config; this separate script
     # does not open keys, wallets, local checkpoints or private reports.
     return {
-        "mode": "M1_PREDEPLOY_READONLY_V1",
-        "status": "READY_FOR_RELEASE_REVIEW_NOT_DEPLOYED",
+        "mode": "M1_PREDEPLOY_METADATA_PHASED_V2",
+        "collector_phase": collector_phase,
+        "status": ("LEGACY_COLLECTOR_BASELINE_VERIFIED_NO_DEPLOY"
+                   if collector_phase == "legacy-before"
+                   else "ISOLATED_COLLECTOR_METADATA_VERIFIED_NOT_RUNTIME_ATTESTED"),
         "candidate_sha": expected,
         "current_on_disk_runtime_sha": current,
         "active_daemon_pid_present": True,
@@ -434,7 +451,9 @@ def check(expected, *, home=None, uid=None, reader=read_launchagent,
         "collector_expected_sha_matches_existing_runtime": True,
         "collector_runtime_path_matches_supervisor": True,
         "collector_entrypoint_verified": collector_mode,
-        "collector_isolated_python_imports": True,
+        "collector_isolated_python_imports": collector_phase == "isolated-after",
+        "legacy_collector_baseline_verified": collector_phase == "legacy-before",
+        "interpreter_binary_attested": False,
         "current_runtime_checkout_clean": True,
         "candidate_private_release_canary": "PASS",
         "candidate_is_active_on_disk_revision": current == expected,
@@ -450,6 +469,9 @@ def check(expected, *, home=None, uid=None, reader=read_launchagent,
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--expected-commit", required=True)
+    parser.add_argument("--collector-phase",
+                        choices=("legacy-before", "isolated-after"),
+                        default="legacy-before")
     args = parser.parse_args(argv)
     failure_stage = ["VALIDATE_EXPECTED_SHA"]
 
@@ -458,7 +480,8 @@ def main(argv=None):
         failure_stage[0] = code
 
     try:
-        output = check(args.expected_commit, stage=note)
+        output = check(args.expected_commit, stage=note,
+                       collector_phase=args.collector_phase)
         print(json.dumps(output, sort_keys=True, separators=(",", ":")))
         return 0
     except Exception:
