@@ -441,3 +441,70 @@ potwierdzenia rollbacku, osobnej zgody operatora na kontrolowaną
 zmianę wyłącznie kolektora i nowego realnego preflight/postflight.
 Nie wolno wykonywać restartów, przeładowań, zmian LaunchAgent,
 operacji finansowych, ani nadpisywać historycznych próbek w celu PASS.
+
+
+## M1.3 — operator zatwierdził przygotowanie przełączenia kolektora (30.10.2026)
+
+Użytkownik wyraził zgodę na kontynuację kontrolowanego przełączenia
+**wyłącznie** kolektora na izolowany Python `-I`, pod warunkiem
+weryfikacji kopii rollbacku i wydania. Nie obejmuje to restartu Maca,
+supervisora, watchdoga, operacji finansowych ani usuwania dowodów.
+
+Review dokładnego SHA `309839142b62f8ca6641eabaca17adfde2c98daf`
+zakończyło się bez nowych usterek; historyczne wątki P2 zamknięto;
+CI 4/4 workflowy i Python 621/621 PASS. Osobny status
+`security_review` nie został jeszcze potwierdzony.
+
+### G2.2: owner-only backup i projekt nowego plist — bez deploy
+
+`scripts/m1_collector_release_prepare.py` wymaga zgodności
+aktywnego `launchctl print` ze starą (nieizolowaną) definicją
+LaunchAgent, starego pinu supervisora, bezpiecznych praw plików
+oraz zatwierdzonego blobu Git kodu kolektora.
+Testuje tylko `python -I zatwierdzony-collector.py --help`.
+
+Następnie w **nowym prywatnym** katalogu (0700) zapisuje
+oryginalny plist, oryginalny kod kolektora oraz wariant plist z dodaną
+flagą `-I` (pliki 0600). Tworzy manifest SHA256 i ponownie weryfikuje
+cały backup. Lokalizacja:
+`~/Library/Application Support/InvestmentStrategyLab/M1Rollback`.
+Standardowy stdout ujawnia wyłącznie ID bundle, SHA i stałe statusy,
+nie ujawnia prywatnych ścieżek, danych środowiskowych, portfela ani
+konfiguracji. Nie dotyka pliku plist w `~/Library/LaunchAgents`,
+nie przeładowuje usługi i nie zapisuje niczego do istniejących
+dzienników kolektora.
+
+```bash
+set +x
+(
+  set -e
+  branch="codex/integrate-portfolio-81-85-86-20261029"
+  expected="__EXACT_REVIEWED_PR_HEAD__"
+  old_runtime="93038ca62edff39492f9b8ddb68d890e3e6e5c45"
+  tmp="$(mktemp -d /tmp/isl-m1-prepare.XXXXXXXX)"
+  git clone -q --depth 1 --single-branch --branch "$branch" \
+      https://github.com/gniewkob/Investment-Strategy-Lab.git "$tmp/repo"
+  test "$(git -C "$tmp/repo" rev-parse HEAD)" = "$expected"
+  echo "M1_PREPARE_COMMIT_VERIFIED"
+  cd "$tmp/repo"
+  PYTHONDONTWRITEBYTECODE=1 python3 -B -m \
+      scripts.m1_collector_release_prepare \
+      --expected-runtime-sha "$old_runtime"
+)
+```
+
+Sukces: `ROLLBACK_BUNDLE_VERIFIED_NO_DEPLOY`, exit 0.
+Odrzucenie: `M1_COLLECTOR_ROLLBACK_PREPARE_REJECTED`, exit 2;
+nie obchodzić przez reset plików, zmianę pinu ani restart.
+
+Oddzielny odczyt backupu przy użyciu otrzymanego identyfikatora:
+`python3 -B -m scripts.m1_collector_release_prepare
+--verify-bundle-id "$M1_PRIVATE_BUNDLE_ID"`.
+
+**G3 nie wykonano:** przełączenie i ewentualne odwrócenie wyłącznie
+`pl.gniewkob.isl.acceptance` wymaga pozytywnego G2.2,
+weryfikacji faktycznej konfiguracji `launchctl`, testu nowych
+zapisów i gwarancji zachowania starych dowodów.
+`-I` nie może zostać dopisane wyłącznie do pliku plist bez
+przeładowania załadowanej definicji. Nowy odbiór 24h zaczyna się
+dopiero po pomyślnym G3/G4.
