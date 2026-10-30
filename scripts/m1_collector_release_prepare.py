@@ -102,10 +102,13 @@ def plan(home, expected_runtime_sha, uid, *, commands=None, check_syntax=None):
     require(Path(preflight.option(argv, "--state-directory")).is_absolute())
     require(Path(preflight.option(argv, "--output")).is_absolute())
     require(preflight.option(argv, "--expected-commit") == expected_runtime_sha)
+    if commands is preflight.command:
+        preflight.assert_trusted_git_checkout(active_root, uid)
     require(commands("git", "-C", active_root, "rev-parse", "HEAD") ==
             expected_runtime_sha)
     require(commands("git", "-C", active_root, "status",
-                     "--porcelain", "--untracked-files=all") == "")
+                     "--porcelain", "--untracked-files=all",
+                     "--ignore-submodules=all") == "")
     # Existing launchd must still be the OLD (non-isolated) definition.
     loaded = commands("launchctl", "print", f"gui/{uid}/{LABEL}")
     require("run interval = 60 seconds" in loaded)
