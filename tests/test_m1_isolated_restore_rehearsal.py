@@ -8,14 +8,15 @@ from unittest.mock import patch
 
 from scripts import m1_collector_release_prepare as backup
 from scripts import m1_isolated_restore_rehearsal as rehearsal
-from test_m1_collector_release_prepare import PrepareTests, OLD_SHA
+import test_m1_collector_release_prepare as fixtures
+from test_m1_collector_release_prepare import OLD_SHA
 
 
 class RestoreRehearsalTests(unittest.TestCase):
     def test_reconstructs_original_files_in_new_private_directory(self):
         with tempfile.TemporaryDirectory() as tmp:
             home, live_plist, live_code, supervisor, commands = (
-                PrepareTests().fixture(tmp))
+                fixtures.PrepareTests().fixture(tmp))
             original_plist, original_code = live_plist.read_bytes(), live_code.read_bytes()
             with patch.object(backup.preflight, "read_launchagent",
                               return_value=supervisor):
@@ -46,7 +47,7 @@ class RestoreRehearsalTests(unittest.TestCase):
 
     def test_tampered_bundle_fails_before_any_restore_file_creation(self):
         with tempfile.TemporaryDirectory() as tmp:
-            home, _, _, supervisor, commands = PrepareTests().fixture(tmp)
+            home, _, _, supervisor, commands = fixtures.PrepareTests().fixture(tmp)
             with patch.object(backup.preflight, "read_launchagent",
                               return_value=supervisor):
                 stored = backup.store(home, os.getuid(),
