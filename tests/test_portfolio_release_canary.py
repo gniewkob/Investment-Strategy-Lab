@@ -292,15 +292,35 @@ class LocalReleaseTests(unittest.TestCase):
                     m.local_code_attestation(SHA, root)
 
     def test_local_git_expected_sha_and_worktree_clean_contract(self):
-        repo = Path(__file__).resolve().parents[1]
-        actual = subprocess.run(
-            ["git", "-C", str(repo), "rev-parse", "--verify", "HEAD"],
-            capture_output=True, text=True, check=True).stdout.strip()
-        self.assertTrue(m.local_code_attestation(actual, repo))
-        with self.assertRaises(m.ReleaseRejected):
-            m.local_code_attestation("f"*40, repo)
-        with self.assertRaises(m.ReleaseRejected):
-            m.local_code_attestation("notsha", repo)
+        # The CI runner's checkout can have extra HTTP auth config added by
+        # actions/checkout. Validate the security contract against an owned,
+        # minimal standalone Git repository rather than runner-specific Git
+        # configuration, without lowering the fail-closed allowlist.
+        with tempfile.TemporaryDirectory() as directory:
+            repo = Path(directory) / "clean-candidate"
+            repo.mkdir()
+            def git(*args):
+                return subprocess.run(
+                    ["/usr/bin/git", "-C", str(repo), *args],
+                    capture_output=True, text=True, check=True,
+                    env={**os.environ, "GIT_CONFIG_NOSYSTEM": "1",
+                         "GIT_CONFIG_GLOBAL": os.devnull},
+                ).stdout.strip()
+            git("init", "-q")
+            git("config", "user.name", "Synthetic Test")
+            git("config", "user.email", "synthetic@example.invalid")
+            (repo / "README.txt").write_text("synthetic-only\n", encoding="utf-8")
+            git("add", "README.txt")
+            git("commit", "-qm", "Synthetic test fixture")
+            actual = git("rev-parse", "--verify", "HEAD")
+            self.assertTrue(m.local_code_attestation(actual, repo))
+            with self.assertRaises(m.ReleaseRejected):
+                m.local_code_attestation("f" * 40, repo)
+            with self.assertRaises(m.ReleaseRejected):
+                m.local_code_attestation("notsha", repo)
+            (repo / "README.txt").write_text("modified\n", encoding="utf-8")
+            with self.assertRaises(m.ReleaseRejected):
+                m.local_code_attestation(actual, repo)
 
 
 if __name__ == "__main__":
