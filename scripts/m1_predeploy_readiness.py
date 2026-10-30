@@ -30,7 +30,7 @@ SHA_RE = re.compile(r"[0-9a-f]{40}\Z")
 LEGACY_COLLECTOR_GIT_BLOB = "41a8ca1e40af5697f6661b5e158bc205b4fe48ff"
 # Candidate v3 is self-contained and hardens Git for runtime/watchdog.
 # This source is NOT active on the Mac until a separate controlled release.
-APPROVED_COLLECTOR_GIT_BLOB = "bf76288f1fb655afc9fd3a1cb686b924d242ef9a"
+APPROVED_COLLECTOR_GIT_BLOB = "dd53b570af2c996fb9dc847df58a453af683f946"
 
 
 class PreflightRejected(ValueError):
@@ -196,20 +196,21 @@ def command(*args, cwd=None):
                 after = root.lstat()
                 require((before.st_dev, before.st_ino) ==
                         (after.st_dev, after.st_ino))
-                # Pass the already-validated directory descriptor to Git.
-                # The hostile parent cannot redirect /dev/fd/N.
-                git_path = f"/dev/fd/{fd}"
+                # Change the forked child's cwd via the checked descriptor:
+                # macOS cannot use /dev/fd/N as a directory for Git -C.
+                # The M1 CLI is single-threaded. preexec_fn is intentionally
+                # limited to os.fchdir; never use it in threaded workers.
                 argv = ("/usr/bin/git", "--no-optional-locks",
                         "-c", "core.fsmonitor=false",
                         "-c", "core.hooksPath=/dev/null",
                         "-c", "core.untrackedCache=false",
                         "-c", "core.attributesFile=/dev/null",
                         "-c", "core.excludesFile=/dev/null",
-                        "-c", "submodule.recurse=false",
-                        "-C", git_path, *args[3:])
+                        "-c", "submodule.recurse=false", *args[3:])
                 result = subprocess.run(
                     argv, capture_output=True, text=True, timeout=8,
-                    check=False, env=clean_env, pass_fds=(fd,))
+                    check=False, env=clean_env, pass_fds=(fd,),
+                    preexec_fn=lambda: os.fchdir(fd))
             finally:
                 os.close(fd)
         else:
