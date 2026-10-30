@@ -48,8 +48,102 @@ def load(path, limit=2_000_000):
         return json.loads(raw)
 
 
+def _trusted_git_checkout(directory):
+    """Fail closed on executable, redirected or ambiguous local Git config.
+
+    Self-contained because the installed copied collector is run via
+    python -I and cannot import M1's repo-local preflight module.
+    """
+    root = Path(directory)
+    if not root.is_absolute():
+        raise ValueError('untrusted git root')
+    for path in (root, root / '.git'):
+        entry = path.lstat()
+        if not stat.S_ISDIR(entry.st_mode) or entry.st_uid != os.getuid() or entry.st_mode & 0o022:
+            raise ValueError('untrusted git checkout')
+    for name in ('commondir', 'config.worktree'):
+        alternate = root / '.git' / name
+        if alternate.exists() or alternate.is_symlink():
+            raise ValueError('redirected git configuration')
+    config = root / '.git' / 'config'
+    fd = os.open(config, os.O_RDONLY | os.O_NOFOLLOW)
+    with os.fdopen(fd, 'rb') as stream:
+        entry = os.fstat(stream.fileno())
+        if not (stat.S_ISREG(entry.st_mode) and entry.st_uid == os.getuid()
+                and not entry.st_mode & 0o022
+                and 0 < entry.st_size <= 64_000):
+            raise ValueError('untrusted git config')
+        raw = stream.read(64_001)
+    if len(raw) != entry.st_size:
+        raise ValueError('git config too large')
+    try:
+        config_text = raw.decode('utf-8').lower()
+    except UnicodeDecodeError:
+        raise ValueError('unreadable git config') from None
+
+    allowed = {
+        'core': {'repositoryformatversion', 'filemode', 'bare',
+                 'logallrefupdates', 'ignorecase', 'precomposeunicode',
+                 'symlinks', 'protecthfs', 'protectntfs', 'quotepath'},
+        'remote': {'url', 'fetch', 'pushurl', 'tagopt', 'mirror'},
+        'branch': {'remote', 'merge', 'rebase', 'description'},
+        'user': {'name', 'email', 'signingkey'},
+        'pull': {'rebase', 'ff'},
+        'init': {'defaultbranch'},
+        'gc': {'auto'},
+    }
+    section = None
+    for line in config_text.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith(('#', ';')):
+            continue
+        if stripped.endswith('\\'):
+            raise ValueError('git config continuation not allowed')
+        if stripped.startswith('['):
+            match = re.fullmatch(
+                r'\[([a-z][a-z0-9-]*)(?:\s+"[^"\\\n]{1,128}")?\]',
+                stripped)
+            if not match or match.group(1) not in allowed:
+                raise ValueError('git config section not allowed')
+            section = match.group(1)
+            continue
+        match = re.fullmatch(r'([a-z][a-z0-9-]*)\s*=\s*(.*)', stripped)
+        if not match or section is None or match.group(1) not in allowed[section]:
+            raise ValueError('git config key not allowed')
+
+
 def command(args, cwd=None):
-    return subprocess.check_output(args, cwd=cwd, text=True, stderr=subprocess.DEVNULL, timeout=10).strip()
+    if args and args[0] == 'git':
+        if cwd is None:
+            raise ValueError('git attestation requires explicit checkout')
+        _trusted_git_checkout(cwd)
+        # Never trust inherited GIT_* (including config counters and alternate
+        # worktrees). Always invoke system Git with execution hooks disabled.
+        clean_env = {name: value for name, value in os.environ.items()
+                     if not name.startswith('GIT_')}
+        clean_env.update({
+            'GIT_CONFIG_NOSYSTEM': '1',
+            'GIT_CONFIG_GLOBAL': os.devnull,
+            'GIT_ATTR_NOSYSTEM': '1',
+            'GIT_OPTIONAL_LOCKS': '0',
+            'GIT_TERMINAL_PROMPT': '0',
+            'PATH': '/usr/bin:/bin:/usr/sbin:/sbin',
+        })
+        args = ['/usr/bin/git', '--no-optional-locks',
+                '-c', 'core.fsmonitor=false',
+                '-c', 'core.hooksPath=/dev/null',
+                '-c', 'core.untrackedCache=false',
+                '-c', 'core.attributesFile=/dev/null',
+                '-c', 'core.excludesFile=/dev/null',
+                '-c', 'submodule.recurse=false', *args[1:]]
+        if 'status' in args:
+            args = [*args, '--ignore-submodules=all']
+        return subprocess.check_output(
+            args, cwd=cwd, text=True, stderr=subprocess.DEVNULL,
+            timeout=10, env=clean_env).strip()
+    return subprocess.check_output(
+        args, cwd=cwd, text=True, stderr=subprocess.DEVNULL,
+        timeout=10).strip()
 
 
 def watchdog_attestation(runtime, definition, loaded_job, expected_commit=EXPECTED_SHA):
