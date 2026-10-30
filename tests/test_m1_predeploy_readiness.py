@@ -415,6 +415,12 @@ class PreflightTests(unittest.TestCase):
             with self.assertRaises(m.PreflightRejected):
                 m.assert_trusted_git_checkout(root, os.getuid())
             config.chmod(0o600)
+            worktree_config = git / "config.worktree"
+            worktree_config.write_text("[core]\nfsmonitor=/untrusted/exec\n")
+            with self.assertRaises(m.PreflightRejected):
+                m.assert_trusted_git_checkout(root, os.getuid())
+            worktree_config.unlink()
+            m.assert_trusted_git_checkout(root, os.getuid())
             config.unlink()
             external = Path(d) / "external"
             external.write_text("[core]\nrepositoryformatversion = 0\n")
