@@ -7,6 +7,7 @@ Not a replacement for independent operator review and host-side validation.
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
 import fcntl
 from hashlib import sha256
 import json
@@ -15,6 +16,7 @@ from pathlib import Path
 import platform
 import plistlib
 import re
+import signal
 import stat
 import subprocess
 import tempfile
@@ -54,6 +56,34 @@ def job(args):
         require(proc.returncode == 0)
     except (OSError, subprocess.SubprocessError):
         raise CutoverRejected("LAUNCHCTL_REJECTED") from None
+
+
+@contextmanager
+def deferred_termination():
+    """Record INT/TERM/HUP during a collector transition, never abort rollback.
+
+    SIGKILL, process crash and power loss remain outside signal handling;
+    the separately reviewed --recover-v2 path handles interruptions.
+    """
+    requested = [False]
+    originals = []
+
+    def note(_signum, _frame):
+        requested[0] = True
+
+    try:
+        for signum in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
+            previous = signal.getsignal(signum)
+            signal.signal(signum, note)
+            originals.append((signum, previous))
+
+        def checkpoint():
+            if requested[0]:
+                raise CutoverRejected("G3_TERMINATION_REQUESTED")
+        yield checkpoint
+    finally:
+        for signum, previous in reversed(originals):
+            signal.signal(signum, previous)
 
 
 def current_loaded():
@@ -208,61 +238,70 @@ def execute():
             except Exception:
                 staged_script.unlink(missing_ok=True)
                 raise
-            stopped = False
-            attempted_bootstrap = False
-            try:
-                # Repeat source/file baseline before job is stopped.
-                before_cutover(home, uid)
-                job(["bootout", f"gui/{uid}/{LABEL}"])
-                stopped = True
-                install(script, staged_script)
-                install(plist, staged_plist)
-                require(backup.source_blob(safe_live_file(script, uid, 400000)[0])
-                        == backup.NEW_GIT_BLOB)
-                attempted_bootstrap = True
-                job(["bootstrap", f"gui/{uid}", str(plist)])
-                result = preflight.check(
-                    CANDIDATE, collector_phase="isolated-after",
-                    home=home, uid=uid)
-                require(result["status"] ==
-                        "ISOLATED_COLLECTOR_METADATA_VERIFIED_NOT_RUNTIME_ATTESTED"
-                        and result["loaded_collector_executable_arguments_attested"]
-                        and result["financial_operations"] == 0)
-                return {
-                    "status": "G3_COLLECTOR_ONLY_CUTOVER_AND_G4_METADATA_PASS",
-                    "candidate_sha": CANDIDATE,
-                    "rollback_bundle_id": V3_BUNDLE,
-                    "g4_natural_cycles_confirmed": False,
-                    "g5_24h_completed": False,
-                    "production_supervisor_or_watchdog_modified": False,
-                    "financial_operations": 0,
-                }
-            except Exception:
-                if stopped:
-                    try:
-                        rollback(script, plist, b,
-                                 (script_mode, plist_mode),
-                                 service_loaded=attempted_bootstrap)
-                    except Exception:
-                        raise CutoverRejected("ROLLBACK_UNVERIFIED_MANUAL_RECOVERY") from None
-                    raise CutoverRejected("G3_FAILED_V2_ROLLBACK_VERIFIED") from None
-                # An unsuccessful bootout may still have stopped launchd.
-                # Do not leave the old collector silently disabled.
-                if current_loaded():
-                    raise CutoverRejected("G3_STOP_REJECTED_OLD_JOB_LOADED") from None
+            # Verify directory fsync works before any service is stopped.
+            sync_dir(script.parent)
+            sync_dir(plist.parent)
+            with deferred_termination() as interrupted:
+                stopped = False
+                attempted_bootstrap = False
                 try:
+                    # Repeat source/file baseline before job is stopped.
+                    before_cutover(home, uid)
+                    job(["bootout", f"gui/{uid}/{LABEL}"])
+                    stopped = True
+                    interrupted()
+                    install(script, staged_script)
+                    interrupted()
+                    install(plist, staged_plist)
+                    interrupted()
+                    require(backup.source_blob(safe_live_file(script, uid, 400000)[0])
+                            == backup.NEW_GIT_BLOB)
+                    attempted_bootstrap = True
                     job(["bootstrap", f"gui/{uid}", str(plist)])
-                    recovered = preflight.check(
-                        CANDIDATE, collector_phase="legacy-before",
+                    interrupted()
+                    result = preflight.check(
+                        CANDIDATE, collector_phase="isolated-after",
                         home=home, uid=uid)
-                    require(recovered["status"] ==
-                            "LEGACY_COLLECTOR_BASELINE_VERIFIED_NO_DEPLOY")
+                    require(result["status"] ==
+                            "ISOLATED_COLLECTOR_METADATA_VERIFIED_NOT_RUNTIME_ATTESTED"
+                            and result["loaded_collector_executable_arguments_attested"]
+                            and result["financial_operations"] == 0)
+                    interrupted()
+                    return {
+                        "status": "G3_COLLECTOR_ONLY_CUTOVER_AND_G4_METADATA_PASS",
+                        "candidate_sha": CANDIDATE,
+                        "rollback_bundle_id": V3_BUNDLE,
+                        "g4_natural_cycles_confirmed": False,
+                        "g5_24h_completed": False,
+                        "production_supervisor_or_watchdog_modified": False,
+                        "financial_operations": 0,
+                    }
                 except Exception:
-                    raise CutoverRejected("G3_STOP_FAILED_RECOVERY_UNVERIFIED") from None
-                raise CutoverRejected("G3_STOP_FAILED_V2_RESTARTED_VERIFIED") from None
-            finally:
-                staged_script.unlink(missing_ok=True)
-                staged_plist.unlink(missing_ok=True)
+                    if stopped:
+                        try:
+                            rollback(script, plist, b,
+                                     (script_mode, plist_mode),
+                                     service_loaded=attempted_bootstrap)
+                        except Exception:
+                            raise CutoverRejected("ROLLBACK_UNVERIFIED_MANUAL_RECOVERY") from None
+                        raise CutoverRejected("G3_FAILED_V2_ROLLBACK_VERIFIED") from None
+                    # An unsuccessful bootout may still have stopped launchd.
+                    # Do not leave the old collector silently disabled.
+                    if current_loaded():
+                        raise CutoverRejected("G3_STOP_REJECTED_OLD_JOB_LOADED") from None
+                    try:
+                        job(["bootstrap", f"gui/{uid}", str(plist)])
+                        recovered = preflight.check(
+                            CANDIDATE, collector_phase="legacy-before",
+                            home=home, uid=uid)
+                        require(recovered["status"] ==
+                                "LEGACY_COLLECTOR_BASELINE_VERIFIED_NO_DEPLOY")
+                    except Exception:
+                        raise CutoverRejected("G3_STOP_FAILED_RECOVERY_UNVERIFIED") from None
+                    raise CutoverRejected("G3_STOP_FAILED_V2_RESTARTED_VERIFIED") from None
+                finally:
+                    staged_script.unlink(missing_ok=True)
+                    staged_plist.unlink(missing_ok=True)
         finally:
             os.close(fd)
 
@@ -308,22 +347,26 @@ def recover_v2():
             except Exception:
                 staged_script.unlink(missing_ok=True)
                 raise
-            try:
-                if current_loaded():
-                    job(["bootout", f"gui/{uid}/{LABEL}"])
-                install(script, staged_script)
-                install(plist, staged_plist)
-                job(["bootstrap", f"gui/{uid}", str(plist)])
-                result = preflight.check(CANDIDATE, collector_phase="legacy-before",
-                                         home=home, uid=uid)
-                require(result["status"] ==
-                        "LEGACY_COLLECTOR_BASELINE_VERIFIED_NO_DEPLOY")
-                return {
-                    "status": "G3_OPERATOR_V2_RECOVERY_VERIFIED",
-                    "collector_only": True,
-                    "historical_evidence_modified": False,
-                    "financial_operations": 0,
-                }
+            # Recovery must finish even if the operator sends Ctrl-C / TERM.
+            sync_dir(script.parent)
+            sync_dir(plist.parent)
+            with deferred_termination():
+                try:
+                    if current_loaded():
+                        job(["bootout", f"gui/{uid}/{LABEL}"])
+                    install(script, staged_script)
+                    install(plist, staged_plist)
+                    job(["bootstrap", f"gui/{uid}", str(plist)])
+                    result = preflight.check(CANDIDATE, collector_phase="legacy-before",
+                                             home=home, uid=uid)
+                    require(result["status"] ==
+                            "LEGACY_COLLECTOR_BASELINE_VERIFIED_NO_DEPLOY")
+                    return {
+                        "status": "G3_OPERATOR_V2_RECOVERY_VERIFIED",
+                        "collector_only": True,
+                        "historical_evidence_modified": False,
+                        "financial_operations": 0,
+                    }
             finally:
                 staged_script.unlink(missing_ok=True)
                 staged_plist.unlink(missing_ok=True)
