@@ -86,14 +86,38 @@ def deferred_termination():
             signal.signal(signum, previous)
 
 
+def confirmed_unregistered(proc, uid):
+    """Recognize only a specific missing-service error, never generic failures.
+
+    launchctl's output is not a stable API. Unknown codes/formats fail
+    closed; test the expected missing-service response on the actual Mac
+    before allowing any live cutover or V2 recovery.
+    """
+    if (proc.returncode != 113 or proc.stdout or
+            not isinstance(proc.stderr, str) or
+            len(proc.stderr) > 2048):
+        return False
+    expected = (
+        f'Could not find service "{LABEL}" in domain for user gui: {uid}'
+    )
+    return expected in proc.stderr
+
+
 def current_loaded():
+    """Read service presence with explicit negative-result attestation."""
+    uid = os.getuid()
     try:
         proc = subprocess.run(
-            [LAUNCHCTL, "print", f"gui/{os.getuid()}/{LABEL}"],
+            [LAUNCHCTL, "print", f"gui/{uid}/{LABEL}"],
             check=False, capture_output=True, text=True, timeout=10)
     except (OSError, subprocess.SubprocessError):
         raise CutoverRejected("LAUNCHD_STATE_UNKNOWN") from None
-    return proc.returncode == 0
+    require(len(proc.stdout) <= 128_000)
+    if proc.returncode == 0:
+        return True
+    if confirmed_unregistered(proc, uid):
+        return False
+    raise CutoverRejected("LAUNCHD_STATE_UNKNOWN")
 
 
 def approved_loaded_collector(originals):
@@ -112,7 +136,9 @@ def approved_loaded_collector(originals):
         raise CutoverRejected("LAUNCHD_STATE_UNKNOWN") from None
     require(len(proc.stdout) <= 128_000)
     if proc.returncode != 0:
-        return False
+        if confirmed_unregistered(proc, os.getuid()):
+            return False
+        raise CutoverRejected("LAUNCHD_STATE_UNKNOWN")
     program, argv = preflight.loaded_collector_arguments(proc.stdout)
     require(program == old["ProgramArguments"][0] and
             argv in (old["ProgramArguments"], new["ProgramArguments"]))
@@ -341,7 +367,7 @@ def execute(candidate_checkout=None):
                         raise CutoverRejected("G3_FAILED_V2_ROLLBACK_VERIFIED") from None
                     # An unsuccessful bootout may still have stopped launchd.
                     # Do not leave the old collector silently disabled.
-                    if current_loaded():
+                    if approved_loaded_collector(b):
                         raise CutoverRejected("G3_STOP_REJECTED_OLD_JOB_LOADED") from None
                     try:
                         job(["bootstrap", f"gui/{uid}", str(plist)])
