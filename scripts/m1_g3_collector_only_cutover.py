@@ -238,15 +238,17 @@ def execute():
             except Exception:
                 staged_script.unlink(missing_ok=True)
                 raise
-            # Verify directory fsync works before any service is stopped.
-            sync_dir(script.parent)
-            sync_dir(plist.parent)
             with deferred_termination() as interrupted:
                 stopped = False
                 attempted_bootstrap = False
                 try:
                     # Repeat source/file baseline before job is stopped.
                     before_cutover(home, uid)
+                    # Directory fsync must work *before* the stop. A failed
+                    # probe exits through the protected staged-file cleanup.
+                    sync_dir(script.parent)
+                    sync_dir(plist.parent)
+                    interrupted()
                     job(["bootout", f"gui/{uid}/{LABEL}"])
                     stopped = True
                     interrupted()
@@ -348,10 +350,10 @@ def recover_v2():
                 staged_script.unlink(missing_ok=True)
                 raise
             # Recovery must finish even if the operator sends Ctrl-C / TERM.
-            sync_dir(script.parent)
-            sync_dir(plist.parent)
             with deferred_termination():
                 try:
+                    sync_dir(script.parent)
+                    sync_dir(plist.parent)
                     if current_loaded():
                         job(["bootout", f"gui/{uid}/{LABEL}"])
                     install(script, staged_script)
@@ -367,9 +369,9 @@ def recover_v2():
                         "historical_evidence_modified": False,
                         "financial_operations": 0,
                     }
-            finally:
-                staged_script.unlink(missing_ok=True)
-                staged_plist.unlink(missing_ok=True)
+                finally:
+                    staged_script.unlink(missing_ok=True)
+                    staged_plist.unlink(missing_ok=True)
         finally:
             os.close(fd)
 
