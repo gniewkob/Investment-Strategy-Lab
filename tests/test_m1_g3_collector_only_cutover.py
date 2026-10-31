@@ -88,8 +88,9 @@ class FakeHost:
         assert expected == m.CANDIDATE
         assert self.loaded, "Expected loaded collector in preflight"
         if collector_phase == "legacy-before":
-            assert self.script.read_bytes() == self.old_code
-            assert self.plist.read_bytes() == self.old_plist_bytes
+            if (self.script.read_bytes() != self.old_code or
+                    self.plist.read_bytes() != self.old_plist_bytes):
+                raise m.CutoverRejected("MOCK_LEGACY_DRIFT")
             return {
                 "status": "LEGACY_COLLECTOR_BASELINE_VERIFIED_NO_DEPLOY",
                 "current_on_disk_runtime_sha": m.LEGACY_RUNTIME,
