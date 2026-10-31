@@ -186,12 +186,12 @@ class G3CutoverTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(dir=str(Path.home())) as d:
             h = FakeHost(d)
             from types import SimpleNamespace
-            wrong = ("program = /bin/sleep\\n"
-                     "arguments = {\\n"
-                     "/bin/sleep\\n"
-                     "500\\n"
-                     "}\\n"
-                     "pid = 1234\\n")
+            wrong = ("program = /bin/sleep\n"
+                     "arguments = {\n"
+                     "/bin/sleep\n"
+                     "500\n"
+                     "}\n"
+                     "pid = 1234\n")
             with patch.object(m.subprocess, "run",
                               return_value=SimpleNamespace(returncode=0,
                                                            stdout=wrong)):
@@ -204,11 +204,11 @@ class G3CutoverTests(unittest.TestCase):
             from types import SimpleNamespace
             for argv in (h.old_plist["ProgramArguments"],
                          h.new_plist["ProgramArguments"]):
-                text = ("program = /usr/bin/python3\\n"
-                        "arguments = {\\n" +
-                        "".join(str(token) + "\\n" for token in argv) +
-                        "}\\n"
-                        "pid = 1234\\n")
+                text = ("program = /usr/bin/python3\n"
+                        "arguments = {\n" +
+                        "".join(str(token) + "\n" for token in argv) +
+                        "}\n"
+                        "pid = 1234\n")
                 with patch.object(m.subprocess, "run",
                                   return_value=SimpleNamespace(returncode=0,
                                                                stdout=text)):
