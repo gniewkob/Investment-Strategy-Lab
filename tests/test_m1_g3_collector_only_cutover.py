@@ -1,0 +1,198 @@
+"""Offline safety tests for the M1 collector-only G3 cutover.
+
+No macOS services or financial accounts are accessed. All launchctl calls
+are injected fakes; temporary files live under a private test root.
+"""
+from contextlib import contextmanager, redirect_stdout
+from io import StringIO
+import json
+import os
+from pathlib import Path
+import plistlib
+import tempfile
+import unittest
+from unittest.mock import patch
+
+from scripts import m1_g3_collector_only_cutover as m
+from scripts import m1_collector_release_prepare as backup
+
+
+class FakeHost:
+    def __init__(self, base, *, fail_v3_check=False, fail_v3_bootstrap=False):
+        self.home = Path(base) / "home"
+        self.home.mkdir(mode=0o700)
+        self.agents = self.home / "Library" / "LaunchAgents"
+        self.agents.mkdir(parents=True)
+        self.script = self.home / "private-collector.py"
+        self.plist = self.agents / (m.LABEL + ".plist")
+        self.backup_root = self.home / "PrivateBackup"
+        self.backup_root.mkdir(mode=0o700)
+        self.old_code = (Path(__file__).resolve().parent /
+                         "fixtures" / "collector_legacy_v2.txt").read_bytes()
+        self.new_code = (Path(__file__).resolve().parents[1] /
+                         "scripts" / "unattended_acceptance.py").read_bytes()
+        self.assert_source_blobs()
+        self.script.write_bytes(self.old_code)
+        self.script.chmod(0o600)
+        self.runtime = self.home / "runtime"
+        self.runtime.mkdir()
+        self.old_plist = {
+            "Label": m.LABEL, "StartInterval": 60,
+            "ProgramArguments": [
+                "/usr/bin/python3", str(self.script),
+                "--state-directory", str(self.home / "collector_state"),
+                "--output", str(self.home / "observations"),
+                "--expected-commit", m.LEGACY_RUNTIME,
+                "--runtime", str(self.runtime),
+            ],
+        }
+        self.new_plist = dict(self.old_plist)
+        self.new_plist["ProgramArguments"] = [
+            "/usr/bin/python3", "-I", *self.old_plist["ProgramArguments"][1:]
+        ]
+        self.old_plist_bytes = plistlib.dumps(self.old_plist)
+        self.new_plist_bytes = plistlib.dumps(self.new_plist)
+        self.plist.write_bytes(self.old_plist_bytes)
+        self.plist.chmod(0o600)
+        self.bundle = {
+            "collector-before.plist": self.old_plist_bytes,
+            "collector-before.py": self.old_code,
+            "collector-isolated-staged.plist": self.new_plist_bytes,
+            "collector-isolated-staged.py": self.new_code,
+        }
+        self.loaded = True
+        self.v3_attempted = False
+        self.fail_v3_check = fail_v3_check
+        self.fail_v3_bootstrap = fail_v3_bootstrap
+        self.actions = []
+
+    def assert_source_blobs(self):
+        assert backup.source_blob(self.old_code) == backup.GIT_BLOB
+        assert backup.source_blob(self.new_code) == backup.NEW_GIT_BLOB
+
+    def fake_job(self, argv):
+        self.actions.append(tuple(argv))
+        if argv[0] == "bootout":
+            assert self.loaded
+            self.loaded = False
+        elif argv[0] == "bootstrap":
+            if self.fail_v3_bootstrap and self.script.read_bytes() == self.new_code:
+                self.v3_attempted = True
+                raise m.CutoverRejected("MOCK_REJECTED_BOOTSTRAP_V3")
+            assert not self.loaded
+            self.loaded = True
+        else:
+            raise AssertionError("Unexpected launchctl action")
+
+    def fake_preflight(self, expected, *, collector_phase, **_):
+        assert expected == m.CANDIDATE
+        assert self.loaded, "Expected loaded collector in preflight"
+        if collector_phase == "legacy-before":
+            assert self.script.read_bytes() == self.old_code
+            assert self.plist.read_bytes() == self.old_plist_bytes
+            return {
+                "status": "LEGACY_COLLECTOR_BASELINE_VERIFIED_NO_DEPLOY",
+                "current_on_disk_runtime_sha": m.LEGACY_RUNTIME,
+                "loaded_collector_executable_arguments_attested": True,
+                "financial_operations": 0,
+            }
+        if collector_phase == "isolated-after":
+            assert self.script.read_bytes() == self.new_code
+            assert self.plist.read_bytes() == self.new_plist_bytes
+            if self.fail_v3_check:
+                raise m.CutoverRejected("MOCK_V3_POSTFLIGHT_REJECTED")
+            return {
+                "status": "ISOLATED_COLLECTOR_METADATA_VERIFIED_NOT_RUNTIME_ATTESTED",
+                "loaded_collector_executable_arguments_attested": True,
+                "financial_operations": 0,
+            }
+        raise AssertionError("Unexpected preflight phase")
+
+
+class G3CutoverTests(unittest.TestCase):
+    @contextmanager
+    def host(self, root, **kwargs):
+        h = FakeHost(root, **kwargs)
+        with patch.object(m.platform, "system", return_value="Darwin"), \
+             patch.object(m.Path, "home", return_value=h.home), \
+             patch.object(m, "LAUNCHCTL", "/bin/true"), \
+             patch.object(backup, "backup_base", return_value=h.backup_root), \
+             patch.object(m, "read_proven_bundle", return_value=h.bundle), \
+             patch.object(m.preflight, "check", side_effect=h.fake_preflight), \
+             patch.object(m, "job", side_effect=h.fake_job), \
+             patch.object(m, "current_loaded", side_effect=lambda: h.loaded):
+            yield h
+
+    def test_plan_only_never_touches_host(self):
+        out = StringIO()
+        with redirect_stdout(out):
+            rc = m.main([])
+        self.assertEqual(rc, 0)
+        result = json.loads(out.getvalue())
+        self.assertEqual(result["status"], "G3_PLAN_ONLY_NO_HOST_CHANGE")
+        self.assertFalse(result["g3_executed"])
+        self.assertEqual(result["candidate_sha"], m.CANDIDATE)
+
+    def test_synthetic_success_v2_to_v3(self):
+        with tempfile.TemporaryDirectory() as d:
+            with self.host(d) as h:
+                result = m.execute()
+                self.assertEqual(result["status"],
+                                 "G3_COLLECTOR_ONLY_CUTOVER_AND_G4_METADATA_PASS")
+                self.assertFalse(result["g5_24h_completed"])
+                self.assertEqual(result["financial_operations"], 0)
+                self.assertEqual(h.script.read_bytes(), h.new_code)
+                self.assertEqual(h.plist.read_bytes(), h.new_plist_bytes)
+                self.assertTrue(h.loaded)
+                self.assertEqual([x[0] for x in h.actions],
+                                 ["bootout", "bootstrap"])
+
+    def test_failed_g4_restores_exact_original_files_and_service(self):
+        with tempfile.TemporaryDirectory() as d:
+            with self.host(d, fail_v3_check=True) as h:
+                with self.assertRaisesRegex(
+                        m.CutoverRejected, "G3_FAILED_V2_ROLLBACK_VERIFIED"):
+                    m.execute()
+                self.assertEqual(h.script.read_bytes(), h.old_code)
+                self.assertEqual(h.plist.read_bytes(), h.old_plist_bytes)
+                self.assertTrue(h.loaded)
+                self.assertEqual([x[0] for x in h.actions],
+                                 ["bootout", "bootstrap", "bootout", "bootstrap"])
+
+    def test_failed_v3_bootstrap_restores_legacy_without_extra_bootout(self):
+        with tempfile.TemporaryDirectory() as d:
+            with self.host(d, fail_v3_bootstrap=True) as h:
+                with self.assertRaisesRegex(
+                        m.CutoverRejected, "G3_FAILED_V2_ROLLBACK_VERIFIED"):
+                    m.execute()
+                self.assertEqual(h.script.read_bytes(), h.old_code)
+                self.assertEqual(h.plist.read_bytes(), h.old_plist_bytes)
+                self.assertTrue(h.loaded)
+                self.assertEqual([x[0] for x in h.actions],
+                                 ["bootout", "bootstrap", "bootstrap"])
+
+    def test_wrong_original_code_prevents_any_bootout(self):
+        with tempfile.TemporaryDirectory() as d:
+            with self.host(d) as h:
+                h.script.write_bytes(b"unknown source")
+                with self.assertRaises(m.CutoverRejected):
+                    m.execute()
+                self.assertTrue(h.loaded)
+                self.assertEqual(h.actions, [])
+
+    def test_job_restricts_all_targets_except_collector(self):
+        with patch.object(m.subprocess, "run") as fake:
+            for argv in (
+                ["bootout", "gui/1234/pl.gniewkob.isl.portfolio"],
+                ["bootstrap", "gui/1234", "/tmp/untrusted.plist"],
+                ["kickstart", "gui/1234/pl.gniewkob.isl.acceptance"],
+                ["bootout", "system/pl.gniewkob.isl.acceptance"],
+            ):
+                with self.subTest(argv=argv):
+                    with self.assertRaises(m.CutoverRejected):
+                        m.job(argv)
+            fake.assert_not_called()
+
+
+if __name__ == "__main__":
+    unittest.main()
