@@ -158,9 +158,36 @@ def read_proven_bundle(home, uid):
             os.close(fd)
 
 
-def before_cutover(home, uid):
-    result = preflight.check(CANDIDATE, collector_phase="legacy-before",
-                             home=home, uid=uid)
+def validate_candidate_checkout(path, uid):
+    """Independently verify candidate HEAD rather than the helper's HEAD.
+
+    Helper PR #89 is intentionally based on, but cannot be the same commit
+    as, the frozen V3 candidate PR #87. Both clones must be separately pinned.
+    """
+    require(path is not None)
+    root = Path(path)
+    require(root.is_absolute() and ".." not in root.parts)
+    preflight.assert_trusted_git_checkout(root, uid)
+    require(preflight.command("git", "-C", str(root),
+                              "rev-parse", "--verify", "HEAD") == CANDIDATE)
+    require(preflight.command("git", "-C", str(root),
+                              "status", "--porcelain", "--untracked-files=all",
+                              "--ignore-submodules=all") == "")
+    return root
+
+
+def candidate_preflight(root, *, collector_phase, home=None, uid=None):
+    """Supply pinned candidate checkout to the existing read-only canary."""
+    def pinned_probe(config, expected, phase, now):
+        return preflight.canary.inspect(
+            config, expected, phase, now, repository_root=root)
+    return preflight.check(CANDIDATE, collector_phase=collector_phase,
+                           home=home, uid=uid, probe=pinned_probe)
+
+
+def before_cutover(home, uid, candidate_root):
+    result = candidate_preflight(candidate_root, collector_phase="legacy-before",
+                                  home=home, uid=uid)
     require(result["status"] == "LEGACY_COLLECTOR_BASELINE_VERIFIED_NO_DEPLOY"
             and result["current_on_disk_runtime_sha"] == LEGACY_RUNTIME
             and result["loaded_collector_executable_arguments_attested"]
@@ -192,7 +219,7 @@ def before_cutover(home, uid):
     return (script_path, plist_path, originals, code_mode, plist_mode)
 
 
-def rollback(script, plist, originals, modes, *, service_loaded):
+def rollback(script, plist, originals, modes, *, service_loaded, candidate_root):
     """Attempt to return only the collector to its exact backed-up V2 bytes."""
     # A rejected bootstrap may leave no registered service. Only bootout
     # when the random-access launchd inventory confirms a loaded job.
@@ -207,16 +234,17 @@ def rollback(script, plist, originals, modes, *, service_loaded):
         old_code.unlink(missing_ok=True)
         old_plist.unlink(missing_ok=True)
     job(["bootstrap", f"gui/{os.getuid()}", str(plist)])
-    verified = preflight.check(CANDIDATE, collector_phase="legacy-before")
+    verified = candidate_preflight(candidate_root, collector_phase="legacy-before")
     require(verified["status"] == "LEGACY_COLLECTOR_BASELINE_VERIFIED_NO_DEPLOY")
     return True
 
 
-def execute():
+def execute(candidate_checkout=None):
     uid = os.getuid()
     require(platform.system() == "Darwin" and uid > 0
             and os.geteuid() == uid and Path(LAUNCHCTL).is_file())
     home = Path.home()
+    candidate_root = validate_candidate_checkout(candidate_checkout, uid)
     # Owner-private file lock, separate from the historical ledger.
     root = backup.backup_base(home)
     with backup.checked_directory(root, uid) as rootfd:
@@ -228,7 +256,7 @@ def execute():
             require(st.st_uid == uid and stat.S_ISREG(st.st_mode)
                     and not st.st_mode & 0o077)
             fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            script, plist, b, script_mode, plist_mode = before_cutover(home, uid)
+            script, plist, b, script_mode, plist_mode = before_cutover(home, uid, candidate_root)
             staged_script = disk_stage(script, b["collector-isolated-staged.py"],
                                        script_mode)
             try:
@@ -243,7 +271,7 @@ def execute():
                 attempted_bootstrap = False
                 try:
                     # Repeat source/file baseline before job is stopped.
-                    before_cutover(home, uid)
+                    before_cutover(home, uid, candidate_root)
                     # Directory fsync must work *before* the stop. A failed
                     # probe exits through the protected staged-file cleanup.
                     sync_dir(script.parent)
@@ -261,8 +289,8 @@ def execute():
                     attempted_bootstrap = True
                     job(["bootstrap", f"gui/{uid}", str(plist)])
                     interrupted()
-                    result = preflight.check(
-                        CANDIDATE, collector_phase="isolated-after",
+                    result = candidate_preflight(
+                        candidate_root, collector_phase="isolated-after",
                         home=home, uid=uid)
                     require(result["status"] ==
                             "ISOLATED_COLLECTOR_METADATA_VERIFIED_NOT_RUNTIME_ATTESTED"
@@ -283,7 +311,8 @@ def execute():
                         try:
                             rollback(script, plist, b,
                                      (script_mode, plist_mode),
-                                     service_loaded=attempted_bootstrap)
+                                     service_loaded=attempted_bootstrap,
+                                     candidate_root=candidate_root)
                         except Exception:
                             raise CutoverRejected("ROLLBACK_UNVERIFIED_MANUAL_RECOVERY") from None
                         raise CutoverRejected("G3_FAILED_V2_ROLLBACK_VERIFIED") from None
@@ -293,8 +322,8 @@ def execute():
                         raise CutoverRejected("G3_STOP_REJECTED_OLD_JOB_LOADED") from None
                     try:
                         job(["bootstrap", f"gui/{uid}", str(plist)])
-                        recovered = preflight.check(
-                            CANDIDATE, collector_phase="legacy-before",
+                        recovered = candidate_preflight(
+                            candidate_root, collector_phase="legacy-before",
                             home=home, uid=uid)
                         require(recovered["status"] ==
                                 "LEGACY_COLLECTOR_BASELINE_VERIFIED_NO_DEPLOY")
@@ -308,12 +337,13 @@ def execute():
             os.close(fd)
 
 
-def recover_v2():
+def recover_v2(candidate_checkout=None):
     """Explicit crash/interruption recovery. Never installs unfamiliar bytes."""
     uid = os.getuid()
     require(platform.system() == "Darwin" and uid > 0
             and os.geteuid() == uid and Path(LAUNCHCTL).is_file())
     home = Path.home()
+    candidate_root = validate_candidate_checkout(candidate_checkout, uid)
     root = backup.backup_base(home)
     with backup.checked_directory(root, uid) as rootfd:
         fd = os.open("g3-collector-only.lock",
@@ -359,8 +389,9 @@ def recover_v2():
                     install(script, staged_script)
                     install(plist, staged_plist)
                     job(["bootstrap", f"gui/{uid}", str(plist)])
-                    result = preflight.check(CANDIDATE, collector_phase="legacy-before",
-                                             home=home, uid=uid)
+                    result = candidate_preflight(
+                        candidate_root, collector_phase="legacy-before",
+                        home=home, uid=uid)
                     require(result["status"] ==
                             "LEGACY_COLLECTOR_BASELINE_VERIFIED_NO_DEPLOY")
                     return {
@@ -381,6 +412,7 @@ def main(argv=None):
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--execute-collector-only", action="store_true")
     mode.add_argument("--recover-v2", action="store_true")
+    parser.add_argument("--candidate-checkout", type=Path)
     args = parser.parse_args(argv)
     if not (args.execute_collector_only or args.recover_v2):
         print(json.dumps({
@@ -393,7 +425,8 @@ def main(argv=None):
         }, sort_keys=True))
         return 0
     try:
-        print(json.dumps(recover_v2() if args.recover_v2 else execute(),
+        print(json.dumps(recover_v2(args.candidate_checkout) if args.recover_v2
+                         else execute(args.candidate_checkout),
                          sort_keys=True))
         return 0
     except Exception as exc:
