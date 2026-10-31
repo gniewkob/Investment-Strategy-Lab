@@ -134,7 +134,7 @@ class G3CutoverTests(unittest.TestCase):
         self.assertEqual(result["candidate_sha"], m.CANDIDATE)
 
     def test_synthetic_success_v2_to_v3(self):
-        with tempfile.TemporaryDirectory() as d:
+        with tempfile.TemporaryDirectory(dir=str(Path.home())) as d:
             with self.host(d) as h:
                 result = m.execute()
                 self.assertEqual(result["status"],
@@ -148,7 +148,7 @@ class G3CutoverTests(unittest.TestCase):
                                  ["bootout", "bootstrap"])
 
     def test_failed_g4_restores_exact_original_files_and_service(self):
-        with tempfile.TemporaryDirectory() as d:
+        with tempfile.TemporaryDirectory(dir=str(Path.home())) as d:
             with self.host(d, fail_v3_check=True) as h:
                 with self.assertRaisesRegex(
                         m.CutoverRejected, "G3_FAILED_V2_ROLLBACK_VERIFIED"):
@@ -160,7 +160,7 @@ class G3CutoverTests(unittest.TestCase):
                                  ["bootout", "bootstrap", "bootout", "bootstrap"])
 
     def test_failed_v3_bootstrap_restores_legacy_without_extra_bootout(self):
-        with tempfile.TemporaryDirectory() as d:
+        with tempfile.TemporaryDirectory(dir=str(Path.home())) as d:
             with self.host(d, fail_v3_bootstrap=True) as h:
                 with self.assertRaisesRegex(
                         m.CutoverRejected, "G3_FAILED_V2_ROLLBACK_VERIFIED"):
@@ -171,8 +171,46 @@ class G3CutoverTests(unittest.TestCase):
                 self.assertEqual([x[0] for x in h.actions],
                                  ["bootout", "bootstrap", "bootstrap"])
 
+    def test_explicit_v2_recovery_from_partially_written_cutover(self):
+        with tempfile.TemporaryDirectory(dir=str(Path.home())) as d:
+            with self.host(d) as h:
+                h.script.write_bytes(h.new_code)
+                h.plist.write_bytes(h.old_plist_bytes)
+                h.loaded = False
+                result = m.recover_v2()
+                self.assertEqual(result["status"],
+                                 "G3_OPERATOR_V2_RECOVERY_VERIFIED")
+                self.assertEqual(result["financial_operations"], 0)
+                self.assertEqual(h.script.read_bytes(), h.old_code)
+                self.assertEqual(h.plist.read_bytes(), h.old_plist_bytes)
+                self.assertTrue(h.loaded)
+                self.assertEqual([x[0] for x in h.actions], ["bootstrap"])
+
+    def test_recovery_of_loaded_v3_bootouts_before_v2_bootstrap(self):
+        with tempfile.TemporaryDirectory(dir=str(Path.home())) as d:
+            with self.host(d) as h:
+                h.script.write_bytes(h.new_code)
+                h.plist.write_bytes(h.new_plist_bytes)
+                result = m.recover_v2()
+                self.assertEqual(result["status"],
+                                 "G3_OPERATOR_V2_RECOVERY_VERIFIED")
+                self.assertEqual(h.script.read_bytes(), h.old_code)
+                self.assertEqual(h.plist.read_bytes(), h.old_plist_bytes)
+                self.assertTrue(h.loaded)
+                self.assertEqual([x[0] for x in h.actions],
+                                 ["bootout", "bootstrap"])
+
+    def test_recovery_rejects_unknown_source_before_bootout(self):
+        with tempfile.TemporaryDirectory(dir=str(Path.home())) as d:
+            with self.host(d) as h:
+                h.script.write_bytes(b"unknown source")
+                with self.assertRaises(m.CutoverRejected):
+                    m.recover_v2()
+                self.assertTrue(h.loaded)
+                self.assertEqual(h.actions, [])
+
     def test_wrong_original_code_prevents_any_bootout(self):
-        with tempfile.TemporaryDirectory() as d:
+        with tempfile.TemporaryDirectory(dir=str(Path.home())) as d:
             with self.host(d) as h:
                 h.script.write_bytes(b"unknown source")
                 with self.assertRaises(m.CutoverRejected):
