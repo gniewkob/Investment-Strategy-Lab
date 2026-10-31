@@ -21,6 +21,11 @@ class FakeHost:
     def __init__(self, base, *, fail_v3_check=False, fail_v3_bootstrap=False):
         self.home = Path(base) / "home"
         self.home.mkdir(mode=0o700)
+        # A verified local fixture file satisfies the host-executable guard.
+        # Every service action is still intercepted by the fake job runner.
+        self.fake_launchctl = self.home / "synthetic-launchctl-fixture"
+        self.fake_launchctl.write_text("test fixture only, never execute\n")
+        self.fake_launchctl.chmod(0o600)
         self.agents = self.home / "Library" / "LaunchAgents"
         self.agents.mkdir(parents=True)
         self.script = self.home / "private-collector.py"
@@ -116,7 +121,7 @@ class G3CutoverTests(unittest.TestCase):
         h = FakeHost(root, **kwargs)
         with patch.object(m.platform, "system", return_value="Darwin"), \
              patch.object(m.Path, "home", return_value=h.home), \
-             patch.object(m, "LAUNCHCTL", "/bin/true"), \
+             patch.object(m, "LAUNCHCTL", str(h.fake_launchctl)), \
              patch.object(backup, "backup_base", return_value=h.backup_root), \
              patch.object(m, "read_proven_bundle", return_value=h.bundle), \
              patch.object(m.preflight, "check", side_effect=h.fake_preflight), \
@@ -133,6 +138,19 @@ class G3CutoverTests(unittest.TestCase):
         self.assertEqual(result["status"], "G3_PLAN_ONLY_NO_HOST_CHANGE")
         self.assertFalse(result["g3_executed"])
         self.assertEqual(result["candidate_sha"], m.CANDIDATE)
+
+    def test_host_guard_rejects_missing_launchctl_without_change(self):
+        with tempfile.TemporaryDirectory(dir=str(Path.home())) as d:
+            with self.host(d) as h:
+                with patch.object(m, "LAUNCHCTL",
+                                  str(h.home / "nonexistent-launchctl")):
+                    with self.assertRaisesRegex(
+                            m.CutoverRejected, "^PRECONDITION_REJECTED$"):
+                        m.execute()
+                self.assertEqual(h.actions, [])
+                self.assertTrue(h.loaded)
+                self.assertEqual(h.script.read_bytes(), h.old_code)
+                self.assertEqual(h.plist.read_bytes(), h.old_plist_bytes)
 
     def test_synthetic_success_v2_to_v3(self):
         with tempfile.TemporaryDirectory(dir=str(Path.home())) as d:
