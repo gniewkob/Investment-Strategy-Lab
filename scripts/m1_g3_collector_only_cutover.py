@@ -164,7 +164,9 @@ def before_cutover(home, uid):
 
 def rollback(script, plist, originals, modes, *, service_loaded):
     """Attempt to return only the collector to its exact backed-up V2 bytes."""
-    if service_loaded or current_loaded():
+    # A rejected bootstrap may leave no registered service. Only bootout
+    # when the random-access launchd inventory confirms a loaded job.
+    if current_loaded():
         job(["bootout", f"gui/{os.getuid()}/{LABEL}"])
     old_code = disk_stage(script, originals["collector-before.py"], modes[0])
     old_plist = disk_stage(plist, originals["collector-before.plist"], modes[1])
