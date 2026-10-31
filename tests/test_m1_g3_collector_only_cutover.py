@@ -17,6 +17,10 @@ from unittest.mock import patch
 from scripts import m1_g3_collector_only_cutover as m
 from scripts import m1_collector_release_prepare as backup
 
+# Bind real inspectors before FakeHost patches module attributes.
+REAL_LOADED_INSPECTOR = m.approved_loaded_collector
+REAL_PRESENCE_INSPECTOR = m.current_loaded
+
 
 class FakeHost:
     def __init__(self, base, *, fail_v3_check=False, fail_v3_bootstrap=False):
@@ -259,7 +263,7 @@ class G3CutoverTests(unittest.TestCase):
             with self.host(d) as h:
                 unknown = SimpleNamespace(returncode=5, stdout="",
                                           stderr="Input/output error")
-                original = m.approved_loaded_collector
+                original = REAL_LOADED_INSPECTOR
                 with patch.object(m.subprocess, "run", return_value=unknown), \
                      patch.object(m, "approved_loaded_collector",
                                   side_effect=original):
@@ -285,7 +289,7 @@ class G3CutoverTests(unittest.TestCase):
                 with patch.object(m, "job", side_effect=reject_after_stop), \
                      patch.object(m, "approved_loaded_collector",
                                   side_effect=lambda _bundle:
-                                  m.current_loaded()), \
+                                  REAL_PRESENCE_INSPECTOR()), \
                      patch.object(m.subprocess, "run", return_value=status):
                     with self.assertRaisesRegex(
                             m.CutoverRejected, "^LAUNCHD_STATE_UNKNOWN$"):
