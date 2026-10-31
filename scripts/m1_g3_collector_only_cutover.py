@@ -254,11 +254,77 @@ def execute():
             os.close(fd)
 
 
+def recover_v2():
+    """Explicit crash/interruption recovery. Never installs unfamiliar bytes."""
+    uid = os.getuid()
+    require(platform.system() == "Darwin" and uid > 0
+            and os.geteuid() == uid and Path(LAUNCHCTL).is_file())
+    home = Path.home()
+    root = backup.backup_base(home)
+    with backup.checked_directory(root, uid) as rootfd:
+        fd = os.open("g3-collector-only.lock",
+                     os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600,
+                     dir_fd=rootfd)
+        try:
+            st = os.fstat(fd)
+            require(st.st_uid == uid and stat.S_ISREG(st.st_mode)
+                    and not st.st_mode & 0o077)
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            b = read_proven_bundle(home, uid)
+            old = plistlib.loads(b["collector-before.plist"])
+            new = plistlib.loads(b["collector-isolated-staged.plist"])
+            backup.assert_only_isolation_change(old, new)
+            require(old["Label"] == new["Label"] == LABEL
+                    and old["StartInterval"] == new["StartInterval"] == 60)
+            script = Path(old["ProgramArguments"][1])
+            plist = home / "Library" / "LaunchAgents" / (LABEL + ".plist")
+            require(script.is_absolute() and script.name.endswith(".py"))
+            actual_script, mode_script = safe_live_file(script, uid, 400000)
+            actual_plist, mode_plist = safe_live_file(plist, uid, 64000)
+            require(actual_script in (b["collector-before.py"],
+                                      b["collector-isolated-staged.py"])
+                    and actual_plist in (b["collector-before.plist"],
+                                         b["collector-isolated-staged.plist"])
+                    and mode_script in (0o600, 0o640, 0o644)
+                    and mode_plist in (0o600, 0o640, 0o644))
+            staged_script = disk_stage(script, b["collector-before.py"],
+                                       mode_script)
+            try:
+                staged_plist = disk_stage(plist, b["collector-before.plist"],
+                                          mode_plist)
+            except Exception:
+                staged_script.unlink(missing_ok=True)
+                raise
+            try:
+                if current_loaded():
+                    job(["bootout", f"gui/{uid}/{LABEL}"])
+                install(script, staged_script)
+                install(plist, staged_plist)
+                job(["bootstrap", f"gui/{uid}", str(plist)])
+                result = preflight.check(CANDIDATE, collector_phase="legacy-before",
+                                         home=home, uid=uid)
+                require(result["status"] ==
+                        "LEGACY_COLLECTOR_BASELINE_VERIFIED_NO_DEPLOY")
+                return {
+                    "status": "G3_OPERATOR_V2_RECOVERY_VERIFIED",
+                    "collector_only": True,
+                    "historical_evidence_modified": False,
+                    "financial_operations": 0,
+                }
+            finally:
+                staged_script.unlink(missing_ok=True)
+                staged_plist.unlink(missing_ok=True)
+        finally:
+            os.close(fd)
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--execute-collector-only", action="store_true")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--execute-collector-only", action="store_true")
+    mode.add_argument("--recover-v2", action="store_true")
     args = parser.parse_args(argv)
-    if not args.execute_collector_only:
+    if not (args.execute_collector_only or args.recover_v2):
         print(json.dumps({
             "status": "G3_PLAN_ONLY_NO_HOST_CHANGE",
             "candidate_sha": CANDIDATE,
@@ -269,7 +335,8 @@ def main(argv=None):
         }, sort_keys=True))
         return 0
     try:
-        print(json.dumps(execute(), sort_keys=True))
+        print(json.dumps(recover_v2() if args.recover_v2 else execute(),
+                         sort_keys=True))
         return 0
     except Exception as exc:
         # Do not leak private absolute paths, launchctl stdout or credentials.
