@@ -146,7 +146,7 @@ class G3CutoverTests(unittest.TestCase):
     def test_candidate_checkout_git_head_must_match_pinned_source(self):
         with tempfile.TemporaryDirectory(dir=str(Path.home())) as d:
             root = Path(d)
-            with patch.object(m.preflight, "assert_trusted_git_checkout") as trusted, \\
+            with patch.object(m.preflight, "assert_trusted_git_checkout") as trusted, \
                  patch.object(m.preflight, "command", side_effect=[
                      "0" * 40, ""]):
                 with self.assertRaises(m.CutoverRejected):
@@ -155,7 +155,7 @@ class G3CutoverTests(unittest.TestCase):
 
     def test_preflight_uses_pinned_candidate_checkout_not_controller(self):
         root = Path("/safe/candidate-checkout")
-        with patch.object(m.preflight, "check", return_value={"status": "PASS"}) as check, \\
+        with patch.object(m.preflight, "check", return_value={"status": "PASS"}) as check, \
              patch.object(m.preflight.canary, "inspect",
                           return_value={"result": "PASS"}) as inspect:
             self.assertEqual(
