@@ -96,6 +96,29 @@ def current_loaded():
     return proc.returncode == 0
 
 
+def approved_loaded_collector(originals):
+    """Only stop a loaded service whose argv match the approved V2 or V3.
+
+    During recovery the live launchd job may be different from the plist on
+    disk (interrupted cutover). Refuse to bootout an unfamiliar job.
+    """
+    old = plistlib.loads(originals["collector-before.plist"])
+    new = plistlib.loads(originals["collector-isolated-staged.plist"])
+    try:
+        proc = subprocess.run(
+            [LAUNCHCTL, "print", f"gui/{os.getuid()}/{LABEL}"],
+            check=False, capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        raise CutoverRejected("LAUNCHD_STATE_UNKNOWN") from None
+    require(len(proc.stdout) <= 128_000)
+    if proc.returncode != 0:
+        return False
+    program, argv = preflight.loaded_collector_arguments(proc.stdout)
+    require(program == old["ProgramArguments"][0] and
+            argv in (old["ProgramArguments"], new["ProgramArguments"]))
+    return True
+
+
 def safe_live_file(path, uid, limit):
     fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
     with os.fdopen(fd, "rb") as stream:
@@ -223,7 +246,7 @@ def rollback(script, plist, originals, modes, *, service_loaded, candidate_root)
     """Attempt to return only the collector to its exact backed-up V2 bytes."""
     # A rejected bootstrap may leave no registered service. Only bootout
     # when the random-access launchd inventory confirms a loaded job.
-    if current_loaded():
+    if approved_loaded_collector(originals):
         job(["bootout", f"gui/{os.getuid()}/{LABEL}"])
     old_code = disk_stage(script, originals["collector-before.py"], modes[0])
     old_plist = disk_stage(plist, originals["collector-before.plist"], modes[1])
@@ -384,7 +407,7 @@ def recover_v2(candidate_checkout=None):
                 try:
                     sync_dir(script.parent)
                     sync_dir(plist.parent)
-                    if current_loaded():
+                    if approved_loaded_collector(b):
                         job(["bootout", f"gui/{uid}/{LABEL}"])
                     install(script, staged_script)
                     install(plist, staged_plist)
