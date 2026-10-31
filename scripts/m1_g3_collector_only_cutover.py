@@ -62,7 +62,7 @@ def current_loaded():
             [LAUNCHCTL, "print", f"gui/{os.getuid()}/{LABEL}"],
             check=False, capture_output=True, text=True, timeout=10)
     except (OSError, subprocess.SubprocessError):
-        return False
+        raise CutoverRejected("LAUNCHD_STATE_UNKNOWN") from None
     return proc.returncode == 0
 
 
@@ -246,7 +246,20 @@ def execute():
                     except Exception:
                         raise CutoverRejected("ROLLBACK_UNVERIFIED_MANUAL_RECOVERY") from None
                     raise CutoverRejected("G3_FAILED_V2_ROLLBACK_VERIFIED") from None
-                raise CutoverRejected("G3_STOP_REJECTED_NO_FILE_CHANGE") from None
+                # An unsuccessful bootout may still have stopped launchd.
+                # Do not leave the old collector silently disabled.
+                if current_loaded():
+                    raise CutoverRejected("G3_STOP_REJECTED_OLD_JOB_LOADED") from None
+                try:
+                    job(["bootstrap", f"gui/{uid}", str(plist)])
+                    recovered = preflight.check(
+                        CANDIDATE, collector_phase="legacy-before",
+                        home=home, uid=uid)
+                    require(recovered["status"] ==
+                            "LEGACY_COLLECTOR_BASELINE_VERIFIED_NO_DEPLOY")
+                except Exception:
+                    raise CutoverRejected("G3_STOP_FAILED_RECOVERY_UNVERIFIED") from None
+                raise CutoverRejected("G3_STOP_FAILED_V2_RESTARTED_VERIFIED") from None
             finally:
                 staged_script.unlink(missing_ok=True)
                 staged_plist.unlink(missing_ok=True)
