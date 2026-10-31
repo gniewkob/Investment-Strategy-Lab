@@ -9,6 +9,7 @@ import json
 import os
 from pathlib import Path
 import plistlib
+import signal
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -227,6 +228,47 @@ class G3CutoverTests(unittest.TestCase):
                 self.assertEqual(h.plist.read_bytes(), h.old_plist_bytes)
                 self.assertTrue(h.loaded)
                 self.assertEqual([x[0] for x in h.actions], ["bootout"])
+
+    def test_sigint_during_cutover_defers_signal_until_v2_rollback(self):
+        with tempfile.TemporaryDirectory(dir=str(Path.home())) as d:
+            with self.host(d) as h:
+                prior = signal.getsignal(signal.SIGINT)
+                interrupted = [False]
+
+                def interrupt_once(argv):
+                    result = h.fake_job(argv)
+                    if argv[0] == "bootout" and not interrupted[0]:
+                        interrupted[0] = True
+                        signal.raise_signal(signal.SIGINT)
+                    return result
+
+                with patch.object(m, "job", side_effect=interrupt_once):
+                    with self.assertRaisesRegex(
+                            m.CutoverRejected,
+                            "G3_FAILED_V2_ROLLBACK_VERIFIED"):
+                        m.execute()
+                self.assertIs(signal.getsignal(signal.SIGINT), prior)
+                self.assertTrue(interrupted[0])
+                self.assertTrue(h.loaded)
+                self.assertEqual(h.script.read_bytes(), h.old_code)
+                self.assertEqual(h.plist.read_bytes(), h.old_plist_bytes)
+                self.assertEqual([a[0] for a in h.actions],
+                                 ["bootout", "bootstrap"])
+
+    def test_pre_stop_directory_fsync_rejected_without_bootout(self):
+        with tempfile.TemporaryDirectory(dir=str(Path.home())) as d:
+            with self.host(d) as h:
+                with patch.object(m, "sync_dir", side_effect=OSError):
+                    with self.assertRaisesRegex(
+                            m.CutoverRejected,
+                            "G3_STOP_REJECTED_OLD_JOB_LOADED"):
+                        m.execute()
+                self.assertTrue(h.loaded)
+                self.assertEqual(h.actions, [])
+                self.assertEqual(h.script.read_bytes(), h.old_code)
+                self.assertEqual(h.plist.read_bytes(), h.old_plist_bytes)
+                self.assertFalse(list(h.script.parent.glob(".isl-g3-pending-*")))
+                self.assertFalse(list(h.plist.parent.glob(".isl-g3-pending-*")))
 
     def test_explicit_v2_recovery_from_partially_written_cutover(self):
         with tempfile.TemporaryDirectory(dir=str(Path.home())) as d:
