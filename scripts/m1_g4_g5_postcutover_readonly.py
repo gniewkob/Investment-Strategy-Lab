@@ -127,6 +127,18 @@ def evaluate(rows, cutover, now):
     if bad_cadence:
         g4_reasons.append("NATURAL_CADENCE_OUT_OF_RANGE")
 
+    # Intervals only BETWEEN completed checkpoints miss starvation at the
+    # window boundaries. The collector may keep polling old healthy
+    # snapshots for up to 1800 seconds while the natural supervisor stalls.
+    # G4 and G5 must therefore enforce BOTH endpoint coverage constraints.
+    if times:
+        if times[0] - cutover > 1020:
+            g4_reasons.append("CHECKPOINT_START_BOUNDARY_UNCOVERED")
+        if post and post[-1]["observed_at"] - times[-1] > 1020:
+            g4_reasons.append("CHECKPOINT_END_BOUNDARY_UNCOVERED")
+    elif post and post[-1]["observed_at"] - cutover > 1020:
+        g4_reasons.append("NO_NATURAL_CHECKPOINT_AFTER_START")
+
     identities = {
         (r.get("runtime", {}).get("pid"),
          r.get("runtime", {}).get("process_start"))
