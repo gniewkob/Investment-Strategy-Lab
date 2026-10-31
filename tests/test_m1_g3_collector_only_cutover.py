@@ -129,7 +129,9 @@ class G3CutoverTests(unittest.TestCase):
                           return_value=h.home / "pinned-candidate"), \
              patch.object(m.preflight, "check", side_effect=h.fake_preflight), \
              patch.object(m, "job", side_effect=h.fake_job), \
-             patch.object(m, "current_loaded", side_effect=lambda: h.loaded):
+             patch.object(m, "current_loaded", side_effect=lambda: h.loaded), \
+             patch.object(m, "approved_loaded_collector",
+                          side_effect=lambda _bundle: h.loaded):
             yield h
 
     def test_candidate_checkout_required_and_fails_before_service_action(self):
@@ -166,6 +168,51 @@ class G3CutoverTests(unittest.TestCase):
                              {"result": "PASS"})
             self.assertEqual(inspect.call_args.kwargs["repository_root"], root)
             self.assertEqual(inspect.call_args.args[1], m.CANDIDATE)
+
+
+    def test_recovery_refuses_unexpected_loaded_service_before_bootout(self):
+        with tempfile.TemporaryDirectory(dir=str(Path.home())) as d:
+            with self.host(d) as h:
+                with patch.object(m, "approved_loaded_collector",
+                                  side_effect=m.CutoverRejected("WRONG_JOB")):
+                    with self.assertRaisesRegex(m.CutoverRejected, "WRONG_JOB"):
+                        m.recover_v2()
+                self.assertTrue(h.loaded)
+                self.assertEqual(h.actions, [])
+                self.assertEqual(h.script.read_bytes(), h.old_code)
+                self.assertEqual(h.plist.read_bytes(), h.old_plist_bytes)
+
+    def test_actual_loaded_inspector_refuses_unknown_argv(self):
+        with tempfile.TemporaryDirectory(dir=str(Path.home())) as d:
+            h = FakeHost(d)
+            from types import SimpleNamespace
+            wrong = ("program = /bin/sleep\\n"
+                     "arguments = {\\n"
+                     "/bin/sleep\\n"
+                     "500\\n"
+                     "}\\n"
+                     "pid = 1234\\n")
+            with patch.object(m.subprocess, "run",
+                              return_value=SimpleNamespace(returncode=0,
+                                                           stdout=wrong)):
+                with self.assertRaises(m.CutoverRejected):
+                    m.approved_loaded_collector(h.bundle)
+
+    def test_loaded_inspector_accepts_only_pinned_v2_v3(self):
+        with tempfile.TemporaryDirectory(dir=str(Path.home())) as d:
+            h = FakeHost(d)
+            from types import SimpleNamespace
+            for argv in (h.old_plist["ProgramArguments"],
+                         h.new_plist["ProgramArguments"]):
+                text = ("program = /usr/bin/python3\\n"
+                        "arguments = {\\n" +
+                        "".join(str(token) + "\\n" for token in argv) +
+                        "}\\n"
+                        "pid = 1234\\n")
+                with patch.object(m.subprocess, "run",
+                                  return_value=SimpleNamespace(returncode=0,
+                                                               stdout=text)):
+                    self.assertTrue(m.approved_loaded_collector(h.bundle))
 
     def test_plan_only_never_touches_host(self):
         out = StringIO()
