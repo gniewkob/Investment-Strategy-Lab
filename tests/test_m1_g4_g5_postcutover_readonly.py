@@ -24,11 +24,22 @@ class G4G5ReadOnlyTests(unittest.TestCase):
                 "status": "OBSERVATION_OK",
                 "financial_operations": 0,
                 "http_429_count": 0,
+                "coverage_ok": True,
+                "watchdog_fresh": True,
+                "watchdog_matches": True,
+                "backfill": {"available": True},
+                "sources": {name: "OK" for name in m.acceptance.SOURCE_NAMES},
                 "runtime": {
                     "unique_natural_supervisor": True,
                     "pid": 1324,
                     "process_start": "constant-start",
                     "launchagent_hashes": ["supervisor-sha", "watchdog-sha"],
+                    "clean": True,
+                    "launchagents_ok": True,
+                    "publicnode": True,
+                    "runtime_bound": True,
+                    "commit": m.acceptance.EXPECTED_SHA,
+                    "expected_commit": m.acceptance.EXPECTED_SHA,
                 },
             })
         return rows
@@ -36,9 +47,7 @@ class G4G5ReadOnlyTests(unittest.TestCase):
     def assess(self, rows, *, age=20):
         now = (rows[-1]["observed_at"] + age
                if rows else self.CUTOVER + age)
-        with patch.object(m.acceptance, "healthy",
-                          side_effect=lambda r: r["status"] == "OBSERVATION_OK"):
-            return m.evaluate(rows, self.CUTOVER, now)
+        return m.evaluate(rows, self.CUTOVER, now)
 
     def test_one_natural_checkpoint_remains_pending(self):
         result = self.assess(self.rows(23))
@@ -127,6 +136,70 @@ class G4G5ReadOnlyTests(unittest.TestCase):
         self.assertEqual(result["g4_natural_cycles"], "PASS")
         self.assertEqual(result["g5_24h"], "REVIEW")
         self.assertEqual(result["http429_unknown_samples"], 1)
+
+
+    def test_real_health_predicate_is_not_mocked(self):
+        rows = self.rows(33)
+        self.assertTrue(m.safe_healthy(rows[0]))
+        for mutate in (
+            lambda r: r["sources"].update({"rpc_ethereum": "PARTIAL"}),
+            lambda r: r.update({"coverage_ok": False}),
+            lambda r: r.update({"watchdog_fresh": False}),
+            lambda r: r.update({"watchdog_matches": False}),
+            lambda r: r["backfill"].update({"available": False}),
+            lambda r: r["runtime"].update({"runtime_bound": False}),
+            lambda r: r["runtime"].update({"commit": "0" * 40}),
+        ):
+            case = self.rows(33)
+            mutate(case[20])
+            self.assertEqual(case[20]["status"], "OBSERVATION_OK")
+            self.assertFalse(m.safe_healthy(case[20]))
+            self.assertEqual(self.assess(case)["g4_natural_cycles"],
+                             "REVIEW")
+
+    def test_missing_natural_checkpoint_at_end_rejected_even_when_24h_full(self):
+        # Collector keeps delivering healthy observations although the
+        # supervisor stops producing checkpoints near the window end.
+        rows = self.rows(1442)
+        newest = self.CUTOVER + 93 * 900
+        for r in rows:
+            if r["checkpoint_at"] > newest:
+                r["checkpoint_at"] = newest
+        report = self.assess(rows)
+        self.assertGreaterEqual(report["natural_checkpoints"], 90)
+        self.assertGreaterEqual(report["post_g3_observed_span_seconds"], 86400)
+        self.assertEqual(report["bad_checkpoint_intervals"], 0)
+        self.assertEqual(report["unhealthy_samples"], 0)
+        self.assertIn("CHECKPOINT_END_BOUNDARY_UNCOVERED", report["g4_reasons"])
+        self.assertEqual(report["g4_natural_cycles"], "REVIEW")
+        self.assertEqual(report["g5_24h"], "REVIEW")
+
+    def test_first_natural_checkpoint_must_cover_start_boundary(self):
+        rows = self.rows(33)
+        first = self.CUTOVER + 900
+        for r in rows:
+            if r["checkpoint_at"] == first:
+                r["checkpoint_at"] = self.CUTOVER - 300
+        result = self.assess(rows)
+        self.assertEqual(result["natural_checkpoints"], 1)
+        self.assertIn("CHECKPOINT_START_BOUNDARY_UNCOVERED",
+                      result["g4_reasons"])
+        self.assertEqual(result["g4_natural_cycles"], "REVIEW")
+
+    def test_no_natural_checkpoint_after_1020_seconds_is_review(self):
+        result = self.assess(self.rows(19))
+        self.assertEqual(result["natural_checkpoints"], 1)
+        # One natural checkpoint at 900s is still within endpoint coverage.
+        self.assertEqual(result["g4_natural_cycles"],
+                         "PENDING_NATURAL_CYCLES")
+        rows = self.rows(33)
+        for r in rows:
+            r["checkpoint_at"] = self.CUTOVER - 300
+        result = self.assess(rows)
+        self.assertEqual(result["natural_checkpoints"], 0)
+        self.assertIn("NO_NATURAL_CHECKPOINT_AFTER_START",
+                      result["g4_reasons"])
+        self.assertEqual(result["g4_natural_cycles"], "REVIEW")
 
     def test_receipt_rejects_wrong_version_and_insecure_permissions(self):
         record = {
