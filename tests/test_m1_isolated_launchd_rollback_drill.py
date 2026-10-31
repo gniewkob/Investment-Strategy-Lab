@@ -44,9 +44,9 @@ class FakeLaunchctl:
                 "program = /bin/sleep\n"
                 "arguments = {\n"
                 "    /bin/sleep\n"
-                "    {}\n"
+                f"    {seconds}\n"
                 "}\n"
-                "pid = 12345\n".format(seconds)
+                "pid = 12345\n"
             )
         if action == "bootout":
             label = argv[2].split("/", 2)[2]
@@ -56,6 +56,15 @@ class FakeLaunchctl:
 
 
 class IsolatedLaunchdDrillTests(unittest.TestCase):
+    def test_fake_launchctl_print_is_valid_and_has_exact_argument(self):
+        fake = FakeLaunchctl()
+        label = drill.LABEL_PREFIX + "c" * 16
+        fake.loaded[label] = [drill.SLEEP, drill.V2_SECONDS]
+        payload = fake([drill.LAUNCHCTL, "print", "gui/501/" + label])
+        self.assertIn("arguments = {", payload)
+        self.assertIn("600", payload)
+        drill.verify_loaded(payload, label, drill.V2_SECONDS)
+
     def test_synthetic_v2_v3_v2_then_unload(self):
         with tempfile.TemporaryDirectory() as directory:
             fake = FakeLaunchctl()
