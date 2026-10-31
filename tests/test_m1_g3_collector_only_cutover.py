@@ -172,6 +172,44 @@ class G3CutoverTests(unittest.TestCase):
                 self.assertEqual([x[0] for x in h.actions],
                                  ["bootout", "bootstrap", "bootstrap"])
 
+    def test_bootout_reports_error_but_stopped_old_job_is_restarted(self):
+        with tempfile.TemporaryDirectory(dir=str(Path.home())) as d:
+            with self.host(d) as h:
+                def failed_bootout(argv):
+                    if argv[0] == "bootout":
+                        h.actions.append(tuple(argv))
+                        h.loaded = False
+                        raise m.CutoverRejected("MOCK_BOOTOUT_FAILED_AFTER_STOP")
+                    return h.fake_job(argv)
+                with patch.object(m, "job", side_effect=failed_bootout):
+                    with self.assertRaisesRegex(
+                            m.CutoverRejected,
+                            "G3_STOP_FAILED_V2_RESTARTED_VERIFIED"):
+                        m.execute()
+                self.assertEqual(h.script.read_bytes(), h.old_code)
+                self.assertEqual(h.plist.read_bytes(), h.old_plist_bytes)
+                self.assertTrue(h.loaded)
+                self.assertEqual([x[0] for x in h.actions],
+                                 ["bootout", "bootstrap"])
+
+    def test_bootout_rejected_before_stop_preserves_old_job(self):
+        with tempfile.TemporaryDirectory(dir=str(Path.home())) as d:
+            with self.host(d) as h:
+                def failed_bootout(argv):
+                    if argv[0] == "bootout":
+                        h.actions.append(tuple(argv))
+                        raise m.CutoverRejected("MOCK_BOOTOUT_REJECTED")
+                    return h.fake_job(argv)
+                with patch.object(m, "job", side_effect=failed_bootout):
+                    with self.assertRaisesRegex(
+                            m.CutoverRejected,
+                            "G3_STOP_REJECTED_OLD_JOB_LOADED"):
+                        m.execute()
+                self.assertEqual(h.script.read_bytes(), h.old_code)
+                self.assertEqual(h.plist.read_bytes(), h.old_plist_bytes)
+                self.assertTrue(h.loaded)
+                self.assertEqual([x[0] for x in h.actions], ["bootout"])
+
     def test_explicit_v2_recovery_from_partially_written_cutover(self):
         with tempfile.TemporaryDirectory(dir=str(Path.home())) as d:
             with self.host(d) as h:
