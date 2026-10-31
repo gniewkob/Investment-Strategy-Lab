@@ -214,6 +214,86 @@ class G3CutoverTests(unittest.TestCase):
                                                                stdout=text)):
                     self.assertTrue(m.approved_loaded_collector(h.bundle))
 
+
+    def test_generic_launchctl_error_never_means_collector_is_unloaded(self):
+        from types import SimpleNamespace
+        with tempfile.TemporaryDirectory(dir=str(Path.home())) as d:
+            h = FakeHost(d)
+            status = SimpleNamespace(returncode=5, stdout="",
+                                     stderr="Input/output error")
+            with patch.object(m.subprocess, "run", return_value=status):
+                with self.assertRaisesRegex(
+                        m.CutoverRejected, "^LAUNCHD_STATE_UNKNOWN$"):
+                    m.approved_loaded_collector(h.bundle)
+                with self.assertRaisesRegex(
+                        m.CutoverRejected, "^LAUNCHD_STATE_UNKNOWN$"):
+                    m.current_loaded()
+
+    def test_only_exact_missing_service_response_certifies_absence(self):
+        from types import SimpleNamespace
+        uid = os.getuid()
+        target = (f'Could not find service "{m.LABEL}" '
+                  f'in domain for user gui: {uid}')
+        for code, message, expected in [
+            (113, "Bad request.\n" + target + "\n", True),
+            (5, "Bad request.\n" + target, False),
+            (113, "Could not find service other in domain", False),
+            (113, "Access denied", False),
+        ]:
+            with self.subTest(code=code, message=message):
+                result = SimpleNamespace(returncode=code,
+                                         stdout="", stderr=message)
+                self.assertEqual(m.confirmed_unregistered(result, uid),
+                                 expected)
+        missing = SimpleNamespace(returncode=113, stdout="",
+                                  stderr=target)
+        with patch.object(m.subprocess, "run", return_value=missing):
+            self.assertFalse(m.current_loaded())
+            with tempfile.TemporaryDirectory(dir=str(Path.home())) as d:
+                h = FakeHost(d)
+                self.assertFalse(m.approved_loaded_collector(h.bundle))
+
+    def test_recovery_unknown_launchctl_error_preserves_files_and_service(self):
+        from types import SimpleNamespace
+        with tempfile.TemporaryDirectory(dir=str(Path.home())) as d:
+            with self.host(d) as h:
+                unknown = SimpleNamespace(returncode=5, stdout="",
+                                          stderr="Input/output error")
+                original = m.approved_loaded_collector
+                with patch.object(m.subprocess, "run", return_value=unknown), \
+                     patch.object(m, "approved_loaded_collector",
+                                  side_effect=original):
+                    with self.assertRaisesRegex(
+                            m.CutoverRejected, "^LAUNCHD_STATE_UNKNOWN$"):
+                        m.recover_v2()
+                self.assertEqual(h.actions, [])
+                self.assertTrue(h.loaded)
+                self.assertEqual(h.script.read_bytes(), h.old_code)
+                self.assertEqual(h.plist.read_bytes(), h.old_plist_bytes)
+
+    def test_bootout_ambiguous_state_must_not_bootstrap_over_unknown_job(self):
+        from types import SimpleNamespace
+        with tempfile.TemporaryDirectory(dir=str(Path.home())) as d:
+            with self.host(d) as h:
+                def reject_after_stop(argv):
+                    if argv[0] == "bootout":
+                        h.actions.append(tuple(argv))
+                        raise m.CutoverRejected("MOCK_UNCERTAIN_STOP")
+                    return h.fake_job(argv)
+                status = SimpleNamespace(returncode=5, stdout="",
+                                         stderr="Input/output error")
+                with patch.object(m, "job", side_effect=reject_after_stop), \
+                     patch.object(m, "approved_loaded_collector",
+                                  side_effect=lambda _bundle:
+                                  m.current_loaded()), \
+                     patch.object(m.subprocess, "run", return_value=status):
+                    with self.assertRaisesRegex(
+                            m.CutoverRejected, "^LAUNCHD_STATE_UNKNOWN$"):
+                        m.execute()
+                self.assertEqual([x[0] for x in h.actions], ["bootout"])
+                self.assertEqual(h.script.read_bytes(), h.old_code)
+                self.assertEqual(h.plist.read_bytes(), h.old_plist_bytes)
+
     def test_plan_only_never_touches_host(self):
         out = StringIO()
         with redirect_stdout(out):
