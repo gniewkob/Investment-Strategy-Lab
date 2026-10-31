@@ -125,10 +125,47 @@ class G3CutoverTests(unittest.TestCase):
              patch.object(m, "LAUNCHCTL", str(h.fake_launchctl)), \
              patch.object(backup, "backup_base", return_value=h.backup_root), \
              patch.object(m, "read_proven_bundle", return_value=h.bundle), \
+             patch.object(m, "validate_candidate_checkout",
+                          return_value=h.home / "pinned-candidate"), \
              patch.object(m.preflight, "check", side_effect=h.fake_preflight), \
              patch.object(m, "job", side_effect=h.fake_job), \
              patch.object(m, "current_loaded", side_effect=lambda: h.loaded):
             yield h
+
+    def test_candidate_checkout_required_and_fails_before_service_action(self):
+        with tempfile.TemporaryDirectory(dir=str(Path.home())) as d:
+            with self.host(d) as h:
+                with patch.object(m, "validate_candidate_checkout",
+                                  side_effect=m.CutoverRejected("NO_CANDIDATE")):
+                    with self.assertRaisesRegex(
+                            m.CutoverRejected, "^NO_CANDIDATE$"):
+                        m.execute()
+                self.assertEqual(h.actions, [])
+                self.assertTrue(h.loaded)
+
+    def test_candidate_checkout_git_head_must_match_pinned_source(self):
+        with tempfile.TemporaryDirectory(dir=str(Path.home())) as d:
+            root = Path(d)
+            with patch.object(m.preflight, "assert_trusted_git_checkout") as trusted, \\
+                 patch.object(m.preflight, "command", side_effect=[
+                     "0" * 40, ""]):
+                with self.assertRaises(m.CutoverRejected):
+                    m.validate_candidate_checkout(root, os.getuid())
+                trusted.assert_called_once_with(root, os.getuid())
+
+    def test_preflight_uses_pinned_candidate_checkout_not_controller(self):
+        root = Path("/safe/candidate-checkout")
+        with patch.object(m.preflight, "check", return_value={"status": "PASS"}) as check, \\
+             patch.object(m.preflight.canary, "inspect",
+                          return_value={"result": "PASS"}) as inspect:
+            self.assertEqual(
+                m.candidate_preflight(root, collector_phase="legacy-before"),
+                {"status": "PASS"})
+            cb = check.call_args.kwargs["probe"]
+            self.assertEqual(cb("config", m.CANDIDATE, "before", "now"),
+                             {"result": "PASS"})
+            self.assertEqual(inspect.call_args.kwargs["repository_root"], root)
+            self.assertEqual(inspect.call_args.args[1], m.CANDIDATE)
 
     def test_plan_only_never_touches_host(self):
         out = StringIO()
