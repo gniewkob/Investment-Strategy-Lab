@@ -51,10 +51,13 @@ known HTTP429 counters; and zero financial-operations evidence. A missing
 or unknown source fails closed. Earlier samples cannot be used to satisfy
 the new acceptance window.
 
-The incident section groups pre-recovery PARTIAL observations by natural
-checkpoint, counts fixed-schema source statuses and gives bounded timing
-and gap summaries. No credentials, wallet, provider payload, source file
-paths, raw notes, or arbitrary ledger data are echoed.
+Two **separate** incident sections (`prior_incidents` and
+`recovery_incidents`) group PARTIAL observations by distinct natural checkpoint,
+count fixed-schema RPC/source statuses, watchdog mismatches, and coverage
+failures, and give bounded UTC timings/gap summaries. The second section
+shows why the fixed recovery attempt fails, including recurring RPC incidents.
+No credentials, wallet, provider payload, source file paths, raw notes,
+or arbitrary ledger data are echoed.
 
 `g6` remains `BLOCKED_PENDING_FINAL_SIGNOFF` even when recovery G5 is
 PASS. The result is local **metadata attestation**, not a provider-side
@@ -94,3 +97,19 @@ if the recovery window itself fails.
 - **G6:** BLOCKED until valid recovery evidence and explicit acceptance.
 
 Reference: [Issue #80](https://github.com/gniewkob/Investment-Strategy-Lab/issues/80).
+
+### Real recovery attempt receipt (2026-11-02)
+
+The initial exact-head Mac validation of PR #91 `17a7a3e0b2d3e0ccfb024800f75e74aab07100ac`
+returned **35/35 offline test PASS**, but the actual fixed recovery window
+reported **G5=REVIEW** at 76,181s (~21h10m) and 83 natural checkpoints:
+1,226 samples, **75 PARTIAL**, **89 unhealthy**, zero >120s collector gaps
+and zero failed natural checkpoint intervals, finance invariant PASS.
+
+The initial recovery result is **not** PENDING_WINDOW: the existing unhealthy
+samples already disqualify that fixed attempt, regardless of whether 24h
+and 90 checkpoints are later reached. Do not conceal them by adjusting
+its recovery start, dropping records, or relabeling the original G5 failure.
+This new source revision includes post-recovery incident grouping and extra
+tests; it requires fresh exact-head test validation and read-only output
+before claiming those new diagnostics work on Mac.
