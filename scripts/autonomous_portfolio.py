@@ -23,7 +23,8 @@ from scripts import history_backfill
 from scripts import ntfy_notifications
 from scripts.coinbase_deposit_history import _cursor
 from scripts.operational_read_only import read_private, write_private, observe_wallets, TOKENS, reconcile_events
-from scripts.operational_read_only import capture_rpc_metadata, rpc_metadata_snapshot
+from scripts.operational_read_only import (capture_rpc_metadata, rpc_metadata_snapshot,
+                                          rpc_failure_metadata_snapshot)
 from scripts.operational_read_only import HISTORY_FAILURE_CODES
 from scripts.read_only_portfolio_monitor import fetch_markets, fetch_usdpln
 
@@ -360,6 +361,7 @@ def _cycle(config, state, clock, *, signer_factory=history.make_sdk_signer,
     checked_at = clock()
     report = {"mode": MODE, "checked_at_utc": checked_at.isoformat(),
         "rpc_diagnostics": rpc_metadata_snapshot(),
+        "rpc_failure_diagnostics": rpc_failure_metadata_snapshot(),
         "expires_at_utc": (checked_at + timedelta(minutes=30)).isoformat(),
         "status": "OBSERVATION_OK" if ready else "PARTIAL", "sources": sources,
         "holdings": priced, "known_priced_subtotal_usd": format(subtotal, "f"),
