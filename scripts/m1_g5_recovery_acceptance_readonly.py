@@ -51,10 +51,15 @@ def safe_status(value, allowed):
     return value if type(value) is str and value in allowed else "UNKNOWN"
 
 
-def incident_analysis(rows, g3_time):
-    """Summarize failures before recovery, without exposing private data."""
+def incident_analysis(rows, start, *, end=None):
+    """Summarize failures within a bounded ledger window, without raw data."""
+    if end is None:
+        end = RECOVERY_START
+    require(type(start) in (int, float) and math.isfinite(start)
+            and type(end) in (int, float) and math.isfinite(end)
+            and start < end)
     earlier = [r for r in rows
-               if g3_time < r["observed_at"] <= RECOVERY_START]
+               if start < r["observed_at"] <= end]
     status_counts = Counter(safe_status(r.get("status"), KNOWN_STATUSES)
                             for r in earlier)
     failed_sources = Counter()
@@ -73,7 +78,7 @@ def incident_analysis(rows, g3_time):
             continue
         cp = row.get("checkpoint_at")
         valid = (type(cp) in (float, int) and math.isfinite(cp)
-                 and cp > g3_time and cp <= row["observed_at"] + 5)
+                 and cp > start and cp <= row["observed_at"] + 5)
         key = cp if valid else None
         if key not in groups:
             groups[key] = {
@@ -111,11 +116,21 @@ def incident_analysis(rows, g3_time):
                 "seconds": round(duration, 3)
             })
     return {
-        "period": "AFTER_G3_THROUGH_FIXED_RECOVERY_BOUNDARY",
+        "period": ("AFTER_G3_THROUGH_FIXED_RECOVERY_BOUNDARY"
+                   if end == RECOVERY_START else
+                   "FIXED_RECOVERY_THROUGH_LATEST_OBSERVATION"),
         "samples": len(earlier),
         "status_counts": dict(sorted(status_counts.items())),
         "unhealthy_samples": sum(
             not original.safe_healthy(r) for r in earlier),
+        "last_partial_utc": (
+            utc(next(r["observed_at"] for r in reversed(earlier)
+                     if r.get("status") == "PARTIAL"))
+            if status_counts.get("PARTIAL", 0) else None),
+        "last_unhealthy_utc": (
+            utc(next(r["observed_at"] for r in reversed(earlier)
+                     if not original.safe_healthy(r)))
+            if any(not original.safe_healthy(r) for r in earlier) else None),
         "coverage_failed_samples": sum(
             r.get("coverage_ok") is not True for r in earlier),
         "watchdog_mismatch_samples": sum(
@@ -144,6 +159,7 @@ def assess(rows, g3_boundary, now):
     historic = original.evaluate(rows, g3_boundary, now)
     recovery = original.evaluate(rows, RECOVERY_START, now)
     prior = incident_analysis(rows, g3_boundary)
+    recovery_incidents = incident_analysis(rows, RECOVERY_START, end=now)
     return {
         "mode": MODE,
         "scope": "READ_ONLY_EXISTING_EVIDENCE_NOT_PROVIDER_ATTESTATION",
@@ -157,6 +173,7 @@ def assess(rows, g3_boundary, now):
             "preserved_not_reclassified": True,
         },
         "prior_incidents": prior,
+        "recovery_incidents": recovery_incidents,
         "recovery_window": {
             "g4_status": recovery["g4_natural_cycles"],
             "g5_status": recovery["g5_24h"],
