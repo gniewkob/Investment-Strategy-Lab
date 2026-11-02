@@ -90,7 +90,6 @@ RPC_FAILURE_CATEGORIES = frozenset({
     'RPC_HTTP_FAILURE', 'RPC_UNEXPECTED_RESPONSE', 'RPC_UPSTREAM_ERROR',
     'RPC_NETWORK_FAILURE', 'RPC_INVALID_RESPONSE',
 })
-_RPC_RETRY_POLICIES = frozenset({'RETRY_ELIGIBLE', 'NOT_ELIGIBLE'})
 
 
 @contextmanager
@@ -139,7 +138,7 @@ def _rpc_failure_note(chain, method, category, status=None, *,
         return
     if (type(chain) is not int or chain not in RPC_URLS
             or type(method) is not str or method not in READ_METHODS
-            or category not in RPC_FAILURE_CATEGORIES
+            or type(category) is not str or category not in RPC_FAILURE_CATEGORIES
             or type(attempt) is not int or not 1 <= attempt <= 3):
         return
     if len(value['events']) >= RPC_FAILURE_LIMIT:
