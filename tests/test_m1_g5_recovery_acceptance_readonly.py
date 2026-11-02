@@ -166,6 +166,67 @@ class G5RecoveryReadOnlyTests(unittest.TestCase):
                          ["rpc_ethereum:PARTIAL"], 24)
         self.assertNotIn("SECRET_SHOULD_NEVER_APPEAR", json.dumps(result))
 
+    def test_recovery_recurrence_groups_distinct_natural_checkpoints(self):
+        rows = self.rows(1442)
+        for n, index in enumerate((100, 300, 500, 700, 900)):
+            for row in rows[index:index + 3]:
+                row["status"] = "PARTIAL"
+                row["coverage_ok"] = False
+                row["private_credential"] = "RECOVERY_PRIVATE_TOKEN"
+                row["sources"]["rpc_ethereum" if n % 2 == 0
+                               else "rpc_base"] = (
+                    "PARTIAL" if n % 2 == 0 else "UNAVAILABLE")
+        report = self.assess(rows)
+        incident = report["recovery_incidents"]
+        self.assertEqual(incident["partial_unique_checkpoint_groups"], 5)
+        self.assertEqual(incident["status_counts"]["PARTIAL"], 15)
+        self.assertEqual(incident["unhealthy_samples"], 15)
+        self.assertEqual(incident["source_failure_counts"]
+                         ["rpc_ethereum:PARTIAL"], 9)
+        self.assertEqual(incident["source_failure_counts"]
+                         ["rpc_base:UNAVAILABLE"], 6)
+        self.assertIsNotNone(incident["last_partial_utc"])
+        self.assertEqual(incident["last_partial_utc"],
+                         m.utc(rows[902]["observed_at"]))
+        self.assertNotIn("RECOVERY_PRIVATE_TOKEN", json.dumps(report))
+        self.assertEqual(report["recovery_window"]["g5_status"], "REVIEW")
+
+    def test_original_incidents_not_confused_with_recovery_incidents(self):
+        historic = self.row(m.RECOVERY_START - 60,
+                            m.RECOVERY_START - 900)
+        historic["status"] = "PARTIAL"
+        historic["sources"]["rpc_ethereum"] = "PARTIAL"
+        rows = [historic] + self.rows(1442)
+        rows[100]["status"] = "PARTIAL"
+        rows[100]["sources"]["rpc_base"] = "UNAVAILABLE"
+        result = self.assess(rows)
+        self.assertEqual(result["prior_incidents"]
+                         ["source_failure_counts"]["rpc_ethereum:PARTIAL"], 1)
+        self.assertEqual(result["recovery_incidents"]
+                         ["source_failure_counts"]["rpc_base:UNAVAILABLE"], 1)
+        self.assertNotIn("rpc_ethereum:PARTIAL",
+                         result["recovery_incidents"]["source_failure_counts"])
+        self.assertEqual(result["historical_g3_based_acceptance"]["g5_status"],
+                         "REVIEW")
+
+    def test_recovery_window_incident_gap_detected_separately(self):
+        rows = self.rows(1442)
+        del rows[120:122]
+        output = self.assess(rows)
+        self.assertEqual(output["recovery_incidents"]["poll_gaps_over_120s"], 1)
+        self.assertEqual(output["recovery_window"]["collector_gaps_over_120s"], 1)
+        self.assertEqual(output["recovery_window"]["g5_status"], "REVIEW")
+
+    def test_clean_recovery_has_empty_recurrence_diagnostics(self):
+        result = self.assess(self.rows(1442))
+        incident = result["recovery_incidents"]
+        self.assertEqual(incident["partial_unique_checkpoint_groups"], 0)
+        self.assertEqual(incident["unhealthy_samples"], 0)
+        self.assertEqual(incident["poll_gaps_over_120s"], 0)
+        self.assertIsNone(incident["last_partial_utc"])
+        self.assertIsNone(incident["last_unhealthy_utc"])
+        self.assertEqual(result["recovery_window"]["g5_status"], "PASS")
+
     def test_gap_is_preserved_in_historical_incident_summary(self):
         a = self.row(m.RECOVERY_START - 190, m.RECOVERY_START - 900)
         b = self.row(m.RECOVERY_START - 67.6, m.RECOVERY_START - 900)
