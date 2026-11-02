@@ -80,17 +80,27 @@ def history_failure_category(error):
 
 
 _RPC_METADATA = ContextVar('isl_rpc_metadata', default=None)
+_RPC_FAILURE_METADATA = ContextVar('isl_rpc_failure_metadata', default=None)
 RPC_COUNTERS = ('requests', 'http_200', 'http_429', 'http_other', 'network_errors',
                 'rpc_capacity_errors', 'rpc_other_errors', 'rejected_responses', 'retries')
+RPC_FAILURE_LIMIT = 32
+# This is a closed vocabulary: no RPC parameter, address, URL, header,
+# provider error message, exception string or response body enters the audit.
+RPC_FAILURE_CATEGORIES = frozenset({
+    'RPC_HTTP_FAILURE', 'RPC_UNEXPECTED_RESPONSE', 'RPC_UPSTREAM_ERROR',
+    'RPC_NETWORK_FAILURE', 'RPC_INVALID_RESPONSE',
+})
 
 
 @contextmanager
 def capture_rpc_metadata():
     """Per-cycle counters only. Never retain method params, URLs, bodies or exception text."""
     token = _RPC_METADATA.set({str(chain): dict.fromkeys(RPC_COUNTERS, 0) for chain in RPC_URLS})
+    failures_token = _RPC_FAILURE_METADATA.set({'events': [], 'truncated': False})
     try:
         yield
     finally:
+        _RPC_FAILURE_METADATA.reset(failures_token)
         _RPC_METADATA.reset(token)
 
 
@@ -107,6 +117,44 @@ def _rpc_note(chain, counter):
     value = _RPC_METADATA.get()
     if value is not None:
         value[str(chain)][counter] += 1
+
+
+def rpc_failure_metadata_snapshot():
+    """Only allowlisted per-attempt method failure metadata; separate from V1 counters."""
+    value = _RPC_FAILURE_METADATA.get()
+    if value is None:
+        return None
+    return {'mode': 'SCOPED_RPC_METHOD_FAILURE_METADATA_V1',
+            'scope': 'ETHEREUM_BASE_RPC_ONLY',
+            'events': [dict(item) for item in value['events']],
+            'truncated': value['truncated']}
+
+
+def _rpc_failure_note(chain, method, category, status=None, *,
+                      retry_eligible=False, attempt=1):
+    """No caller-controlled metadata beyond a previously validated enum/code."""
+    value = _RPC_FAILURE_METADATA.get()
+    if value is None:
+        return
+    if (type(chain) is not int or chain not in RPC_URLS
+            or type(method) is not str or method not in READ_METHODS
+            or type(category) is not str or category not in RPC_FAILURE_CATEGORIES
+            or type(attempt) is not int or not 1 <= attempt <= 3):
+        return
+    if len(value['events']) >= RPC_FAILURE_LIMIT:
+        value['truncated'] = True
+        return
+    status_code = (status if type(status) is int and 100 <= status <= 599
+                   else None)
+    value['events'].append({
+        'chain_id': chain,
+        'method': method,
+        'failure_category': category,
+        'http_status': status_code,
+        'retry_policy': ('RETRY_ELIGIBLE' if retry_eligible is True
+                         else 'NOT_ELIGIBLE'),
+        'attempt': attempt,
+    })
 
 
 class _NoRedirect(HTTPRedirectHandler):
@@ -139,6 +187,8 @@ def rpc_read(chain, method, params, *, opener=None, sleep=time.sleep):
                 _rpc_note(chain, 'http_200' if response.status == 200 else
                           'http_429' if response.status == 429 else 'http_other')
                 if response.status != 200 or response.geturl() != url:
+                    _rpc_failure_note(chain, method, 'RPC_UNEXPECTED_RESPONSE',
+                                      response.status, attempt=attempt + 1)
                     raise ReadOnlyError('RPC_UNEXPECTED_RESPONSE')
                 raw = response.read(MAX_BYTES+1)
             if len(raw) > MAX_BYTES:
@@ -150,6 +200,9 @@ def rpc_read(chain, method, params, *, opener=None, sleep=time.sleep):
                 # Retry rate/capacity errors, never print upstream message.
                 capacity = isinstance(data['error'], dict) and data['error'].get('code') in (-32005, -32016, -32002)
                 _rpc_note(chain, 'rpc_capacity_errors' if capacity else 'rpc_other_errors')
+                _rpc_failure_note(chain, method, 'RPC_UPSTREAM_ERROR', 200,
+                                  retry_eligible=capacity and attempt < 2,
+                                  attempt=attempt + 1)
                 if isinstance(data['error'], dict) and data['error'].get('code') in (-32005, -32016, -32002) and attempt < 2:
                     _rpc_note(chain, 'retries')
                     sleep(delay); continue
@@ -166,6 +219,9 @@ def rpc_read(chain, method, params, *, opener=None, sleep=time.sleep):
         except HTTPError as exc:
             _rpc_note(chain, 'http_429' if exc.code == 429 else 'http_other')
             retry = exc.code in (429, 500, 502, 503, 504)
+            _rpc_failure_note(chain, method, 'RPC_HTTP_FAILURE', exc.code,
+                              retry_eligible=retry and attempt < 2,
+                              attempt=attempt + 1)
             retry_after = exc.headers.get('Retry-After', '') if exc.headers else ''
             if retry_after:
                 try:
@@ -182,9 +238,16 @@ def rpc_read(chain, method, params, *, opener=None, sleep=time.sleep):
                 raise ReadOnlyError('RPC_HTTP_FAILURE') from None
         except (URLError, TimeoutError, OSError):
             _rpc_note(chain, 'network_errors')
+            _rpc_failure_note(chain, method, 'RPC_NETWORK_FAILURE',
+                              retry_eligible=attempt < 2, attempt=attempt + 1)
             if attempt == 2: raise ReadOnlyError('RPC_NETWORK_FAILURE') from None
-        except (ValueError, TypeError, KeyError):
+        except (ValueError, TypeError, KeyError) as exc:
             _rpc_note(chain, 'rejected_responses')
+            # Existing ReadOnlyError conversions/behaviour remain untouched.
+            # Avoid double-recording a failure already counted above.
+            if not isinstance(exc, ReadOnlyError):
+                _rpc_failure_note(chain, method, 'RPC_INVALID_RESPONSE',
+                                  attempt=attempt + 1)
             raise ReadOnlyError('RPC_INVALID_RESPONSE') from None
         _rpc_note(chain, 'retries')
         sleep(delay)
