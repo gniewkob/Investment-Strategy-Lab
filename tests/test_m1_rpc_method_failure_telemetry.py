@@ -189,11 +189,19 @@ class MethodFailureTelemetryTests(unittest.TestCase):
             root = Path(temp)
             config = {"credentials_file": "synthetic", "portfolio_id": "synthetic",
                       "watchlist_file": None}
-            with patch.object(supervisor, "exchange_accounts", return_value=[]):
+            def synthetic_exchange(_):
+                # No network: exercise persistence while the capture context is active.
+                rpc._rpc_failure_note(1, "eth_getLogs", "RPC_HTTP_FAILURE", 403)
+                return []
+            with patch.object(supervisor, "exchange_accounts",
+                              side_effect=synthetic_exchange):
                 result = supervisor.cycle(config, root, lambda: NOW,
                     signer_factory=lambda _: None, client_factory=lambda *a: None,
                     market_reader=lambda now: {}, fx_reader=lambda now: {})
-            self.assertEqual(result["rpc_failure_diagnostics"]["events"], [])
+            events = result["rpc_failure_diagnostics"]["events"]
+            self.assertEqual(len(events), 1)
+            self.assertEqual(events[0]["method"], "eth_getLogs")
+            self.assertEqual(events[0]["http_status"], 403)
             self.assertEqual(result["rpc_diagnostics"]["mode"],
                              "SCOPED_RPC_TRANSPORT_METADATA_V1")
             self.assertEqual(result["financial_operations"], 0)
