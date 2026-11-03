@@ -2,6 +2,9 @@ name: Deposit evidence reconciliation
 on:
   pull_request:
     paths:
+      - 'scripts/unattended_acceptance.py'
+      - 'tests/test_unattended_acceptance.py'
+      - 'docs/UNATTENDED_ACCEPTANCE_ISSUE80_PL.md'
       - 'scripts/deposit_evidence_reconciliation.py'
       - 'tests/test_deposit_evidence_reconciliation.py'
       - 'scripts/coinbase_deposit_history.py'
