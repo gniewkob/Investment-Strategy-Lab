@@ -12,4 +12,6 @@ Ta iteracja nie wykonuje backtestu ani nie tworzy zdarzeń papierowych. `python 
 
 ## Kolejne kroki
 
+Adapter `python -m scripts.nbp_reference_capture 2026-10-01 2026-10-16` odczytuje tabelę A i cenę złota przez publiczne HTTPS API NBP, w przedziale do 93 dni włącznie, i wypisuje lokalnie potwierdzenie z URL, SHA-256 surowych odpowiedzi, datą publikacji i rzeczywistym czasem pobrania. Dokładny czas dostępności i historyczna wersja pozostają nieznane. Błędy HTTP, puste odpowiedzi i niepoprawne rekordy przerywają pobieranie; adapter nie uzupełnia luk i nie zapisuje do bazy. Hash dowodzi integralności pobranych bajtów, nie autentyczności historycznego wydania. Prawa do przechowywania i publikacji danych NBP wymagają weryfikacji przed trwałym udostępnieniem.
+
 Potwierdzić prawa i historyczne wersje danych, ustalić harmonogramy publikacji i kompletny wspólny kalendarz, przetestować odrębny silnik na fikcyjnych danych, a następnie wykonać porównanie z prowizją, spreadem, inflacją, obsunięciem i uprzednio ustalonym podziałem IS/OOS. Nie traktować dzisiejszego pobrania jako dowodu historycznej dostępności. Wkłady to ten sam fikcyjny budżet 100 PLN na każdy alternatywny model; listopad 2026 nie wcześniej niż 23.11. Żadnych zapisów do produkcyjnego Neon.
