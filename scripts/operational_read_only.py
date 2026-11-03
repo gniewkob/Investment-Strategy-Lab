@@ -7,6 +7,8 @@ Only public, allowlisted RPC reads are sent over the network. Outputs stay local
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, localcontext
 from hashlib import sha256
@@ -54,6 +56,36 @@ class ReadOnlyError(ValueError):
     pass
 
 
+_RPC_METADATA = ContextVar('isl_rpc_metadata', default=None)
+RPC_COUNTERS = ('requests', 'http_200', 'http_429', 'http_other', 'network_errors',
+                'rpc_capacity_errors', 'rpc_other_errors', 'rejected_responses', 'retries')
+
+
+@contextmanager
+def capture_rpc_metadata():
+    """Per-cycle counters only. Never retain method params, URLs, bodies or exception text."""
+    token = _RPC_METADATA.set({str(chain): dict.fromkeys(RPC_COUNTERS, 0) for chain in RPC_URLS})
+    try:
+        yield
+    finally:
+        _RPC_METADATA.reset(token)
+
+
+def rpc_metadata_snapshot():
+    value = _RPC_METADATA.get()
+    if value is None:
+        return None
+    return {'mode': 'SCOPED_RPC_TRANSPORT_METADATA_V1',
+            'scope': 'ETHEREUM_BASE_RPC_ONLY',
+            'chains': {chain: dict(counts) for chain, counts in value.items()}}
+
+
+def _rpc_note(chain, counter):
+    value = _RPC_METADATA.get()
+    if value is not None:
+        value[str(chain)][counter] += 1
+
+
 class _NoRedirect(HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         raise ReadOnlyError('RPC_REDIRECT_REJECTED')
@@ -79,7 +111,10 @@ def rpc_read(chain, method, params, *, opener=None, sleep=time.sleep):
         try:
             req = Request(url, data=body, headers={'Content-Type': 'application/json',
                           'User-Agent': 'ISL-readonly/1.0'})
+            _rpc_note(chain, 'requests')
             with op(req, timeout=15) as response:
+                _rpc_note(chain, 'http_200' if response.status == 200 else
+                          'http_429' if response.status == 429 else 'http_other')
                 if response.status != 200 or response.geturl() != url:
                     raise ReadOnlyError('RPC_UNEXPECTED_RESPONSE')
                 raw = response.read(MAX_BYTES+1)
@@ -90,7 +125,10 @@ def rpc_read(chain, method, params, *, opener=None, sleep=time.sleep):
                 raise ReadOnlyError('RPC_INVALID_ENVELOPE')
             if 'error' in data:
                 # Retry rate/capacity errors, never print upstream message.
+                capacity = isinstance(data['error'], dict) and data['error'].get('code') in (-32005, -32016, -32002)
+                _rpc_note(chain, 'rpc_capacity_errors' if capacity else 'rpc_other_errors')
                 if isinstance(data['error'], dict) and data['error'].get('code') in (-32005, -32016, -32002) and attempt < 2:
+                    _rpc_note(chain, 'retries')
                     sleep(delay); continue
                 raise ReadOnlyError('RPC_UPSTREAM_ERROR')
             if data.get('jsonrpc') != '2.0' or 'result' not in data or (data['result'] is None and method != 'eth_getTransactionReceipt'):
@@ -103,6 +141,7 @@ def rpc_read(chain, method, params, *, opener=None, sleep=time.sleep):
                 raise ReadOnlyError('RPC_RESULT_SHAPE_INVALID')
             return result
         except HTTPError as exc:
+            _rpc_note(chain, 'http_429' if exc.code == 429 else 'http_other')
             retry = exc.code in (429, 500, 502, 503, 504)
             retry_after = exc.headers.get('Retry-After', '') if exc.headers else ''
             if retry_after:
@@ -110,6 +149,7 @@ def rpc_read(chain, method, params, *, opener=None, sleep=time.sleep):
                     delay = int(retry_after) if retry_after.isdigit() else max(0, int(
                         (parsedate_to_datetime(retry_after)-datetime.now(timezone.utc)).total_seconds())+1)
                 except (ValueError, TypeError, OverflowError):
+                    exc.close()
                     raise ReadOnlyError('RPC_INVALID_RETRY_AFTER') from None
                 if delay > 30:
                     exc.close()
@@ -118,9 +158,12 @@ def rpc_read(chain, method, params, *, opener=None, sleep=time.sleep):
             if not retry or attempt == 2:
                 raise ReadOnlyError('RPC_HTTP_FAILURE') from None
         except (URLError, TimeoutError, OSError):
+            _rpc_note(chain, 'network_errors')
             if attempt == 2: raise ReadOnlyError('RPC_NETWORK_FAILURE') from None
         except (ValueError, TypeError, KeyError):
+            _rpc_note(chain, 'rejected_responses')
             raise ReadOnlyError('RPC_INVALID_RESPONSE') from None
+        _rpc_note(chain, 'retries')
         sleep(delay)
     raise ReadOnlyError('RPC_RETRY_EXHAUSTED')
 
