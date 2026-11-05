@@ -4,7 +4,7 @@
 
 **PASS for one bounded, manually triggered engine cycle using a real Neon
 production-derived market snapshot, on an isolated Neon acceptance branch.**
-This is not production authorization, a live trading engine, a certified
+There is no production environment in this project. This is not a live trading engine, a certified
 investment strategy or a complete equity/bond backtest. The engine runs one
 atomic SQL statement to read market and paper-model inputs, assess the three
 alternative models, append research runs, signals and audit entries, then return
@@ -94,8 +94,9 @@ on main or on the acceptance branch.
 
 ## Operational usage (manual, research-only)
 
-Run the complete SQL file using the approved Neon SQL action on the isolated
-branch, or an equivalently controlled staging-only SQL client. Read and
+Run the complete SQL file using the approved Neon SQL action on the private
+laboratory Neon main or its isolated test branch. The acceptance test above
+ran on the isolated branch; that does not make Neon main a production system. Read and
 inspect the returned persistence_state for each of the three models. Abort if
 the result contains REPLAY_INPUT_COLLISION, a missing model, an unexpected
 model version or any nonzero paper/financial operations. Verify separately:
@@ -105,9 +106,11 @@ model version or any nonzero paper/financial operations. Verify separately:
 - audit_events.record_id / metadata.input_sha256;
 - unchanged paper_events count and absence of paper buys/sells.
 
-Do not run this SQL automatically on main before separate production-readiness
-approval. No main Neon schema, grants, secrets, release configurations,
-automations or portfolio holdings were changed.
+The canonical Neon main is the private LIVE RESEARCH laboratory, not production.
+A recurring research-only cycle is permitted after verifying the runner's
+access, evidence receipt, audit and no-financial-operation boundary. The
+November 5 acceptance run did not modify Neon main, its permissions,
+secrets, schedules or portfolio records.
 
 ## What this PASS does NOT mean
 
@@ -119,7 +122,16 @@ automations or portfolio holdings were changed.
 - The isolated acceptance branch is a controlled persistence test, not
   the canonical ongoing paper ledger on main.
 
-**Next engineering increment:** wire an authorized, least-privileged
-staging execution trigger and fresh-source capture to the same SQL engine;
-add a read-only health/audit replay endpoint. Keep all fills disabled while
-source coverage and cost evidence remain incomplete.
+**Next engineering increment:** connect a recurring research-only trigger
+to the canonical live laboratory, refresh real market source captures and add
+read-only health/audit replay. Keep all actual and paper fills disabled until
+the data and cost evidence required for them are complete.
+
+
+## Correction of environment labels — 5 November 2026
+
+- GitHub main is the main development line, **not a production release**.
+- Neon main is the durable **private LIVE RESEARCH** database, not production.
+- Neon acceptance branch is a disposable **test clone** with separate research rows.
+- Engine-first roadmap: functional cycle -> repeated live-lab verification -> UX -> production later, only if separately chosen.
+- Prior references to a production-readiness approval before running paper research were overly restrictive. Research-only inserts are not production releases; continue to enforce no real finance operations, idempotency and provenance.
