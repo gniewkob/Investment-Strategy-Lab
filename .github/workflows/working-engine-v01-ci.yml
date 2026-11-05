@@ -3,12 +3,14 @@ on:
   pull_request:
     paths:
       - 'db/working_engine_v01_research_cycle.sql'
+      - 'db/working_engine_v01_health_READONLY.sql'
       - 'tests/integration/test_working_engine_v01.py'
       - '.github/workflows/working-engine-v01-ci.yml'
   push:
     branches: [main]
     paths:
       - 'db/working_engine_v01_research_cycle.sql'
+      - 'db/working_engine_v01_health_READONLY.sql'
       - 'tests/integration/test_working_engine_v01.py'
       - '.github/workflows/working-engine-v01-ci.yml'
 permissions:
