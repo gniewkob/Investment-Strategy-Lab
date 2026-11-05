@@ -194,6 +194,48 @@ class WorkingEngineAcceptance(unittest.TestCase):
         self.assertEqual(self.scalar(
             "SELECT count(*) FROM investment_lab.research_runs"), 3)
 
+    def test_nbp_import_is_idempotent_and_detects_price_collision(self):
+        import json
+        from datetime import datetime, timezone
+        from scripts.nbp_lab_prepare import prepare
+        from scripts.nbp_lab_ingest_sql import build_sql
+
+        fx = [{"table": "A", "no": "202/A/NBP/2026",
+               "effectiveDate": "2026-11-02", "rates": [
+                   {"code": "USD", "mid": 3.9123},
+                   {"code": "EUR", "mid": 4.3088}]}]
+        gold = [{"data": "2026-11-02", "cena": 500.43}]
+
+        def fetch(url):
+            return json.dumps(gold if "/cenyzlota/" in url else fx).encode()
+
+        receipt = prepare("2026-11-01", "2026-11-05", fetch=fetch,
+                          clock=lambda: datetime(2026, 11, 5, 21,
+                                                 tzinfo=timezone.utc))
+        sql = build_sql(receipt)
+        # Match the real Neon primary key, only in disposable test database.
+        self.conn.execute("""CREATE UNIQUE INDEX nbp_reference_fixture_pk
+          ON investment_lab.price_observations
+            (instrument_code,source_code,observed_for,interval_code)""")
+        first = self.conn.execute(sql).fetchone()
+        self.assertEqual(tuple(first), (3, 0, 3, 1, 0, 0))
+        repeated = self.conn.execute(sql).fetchone()
+        self.assertEqual(tuple(repeated), (3, 0, 0, 0, 0, 0))
+        self.assertEqual(self.scalar(
+            "SELECT count(*) FROM investment_lab.audit_events"), 1)
+        self.assertEqual(self.scalar(
+            "SELECT count(*) FROM investment_lab.paper_events"), 3)
+        # Fixture-only tampering: original input must NEVER silently overwrite.
+        self.conn.execute("""UPDATE investment_lab.price_observations
+          SET close_price=999 WHERE instrument_code='USDPLN_NBP'
+          AND observed_for='2026-11-02'::timestamptz""")
+        conflicting = self.conn.execute(sql).fetchone()
+        self.assertEqual(tuple(conflicting), (3, 1, 0, 0, 0, 0))
+        self.assertEqual(self.scalar(
+            "SELECT count(*) FROM investment_lab.audit_events"), 1)
+        self.assertEqual(self.scalar(
+            "SELECT count(*) FROM investment_lab.paper_events"), 3)
+
     def test_modified_historical_evidence_fails_replay_closed(self):
         self.assertEqual({r[11] for r in self.cycle()}, {"NEW_RESEARCH_RUN"})
         # Only in this disposable fixture: model a changed historical source.
