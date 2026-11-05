@@ -5,9 +5,11 @@ on:
       - 'scripts/data_readiness_v1.py'
       - 'scripts/nbp_reference_capture.py'
       - 'scripts/monthly_pit_calendar.py'
+      - 'scripts/gus_cpi_normalize.py'
       - 'tests/test_data_readiness_v1.py'
       - 'tests/test_nbp_reference_capture.py'
       - 'tests/test_monthly_pit_calendar.py'
+      - 'tests/test_gus_cpi_normalize.py'
       - '.github/workflows/data-readiness-v1-ci.yml'
   push:
     branches: [main]
@@ -32,3 +34,4 @@ jobs:
       - run: python -m unittest discover -s tests -p 'test_data_readiness_v1.py' -v
       - run: python -m unittest discover -s tests -p 'test_nbp_reference_capture.py' -v
       - run: python -m unittest discover -s tests -p 'test_monthly_pit_calendar.py' -v
+      - run: python -m unittest discover -s tests -p 'test_gus_cpi_normalize.py' -v
