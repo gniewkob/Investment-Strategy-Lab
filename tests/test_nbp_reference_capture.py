@@ -3,6 +3,7 @@ import unittest
 from datetime import datetime, timezone
 
 from scripts.nbp_reference_capture import capture
+from scripts.monthly_pit_calendar import assess_calendar
 
 
 class NBPCaptureTests(unittest.TestCase):
@@ -22,6 +23,20 @@ class NBPCaptureTests(unittest.TestCase):
         self.assertEqual(result["market_data_readiness"], "INSUFFICIENT_DATA")
         self.assertEqual(result["paper_events_created"], 0)
         self.assertEqual(len(result["receipts"]["fx"]["sha256"]), 64)
+
+    def test_capture_feeds_calendar_without_certifying_or_forward_filling(self):
+        captured = self.run_capture()
+        report = assess_calendar({"sessions": ["2020-01-02", "2020-01-03"],
+                                  "decision_dates": ["2020-01-02", "2020-01-03"],
+                                  "series": captured["series"]})
+        self.assertIn("gold", report["coverage_by_decision"][0]["missing_series"])
+        for name in ("usdpln", "eurpln", "gold"):
+            self.assertEqual(report["series"][name]["accepted_rows"], 1)
+            selected = report["coverage_by_decision"][1]["available_series"][name]
+            self.assertFalse(selected["license_verified"])
+            self.assertFalse(selected["historical_vintage_verified"])
+        self.assertEqual(captured["series"]["gold"][0]["basis"], "PRICE_ONLY_PLN_PER_GRAM")
+        self.assertEqual(report["backtest"], "NOT_RUN")
 
     def test_missing_currency_and_duplicate_dates_fail(self):
         self.fx[0]["rates"].pop()

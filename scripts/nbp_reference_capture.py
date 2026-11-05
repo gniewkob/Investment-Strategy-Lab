@@ -61,11 +61,13 @@ def capture(start, end, fetch=_fetch, clock=lambda: datetime.now(timezone.utc)):
             if day < begin or day > finish or day in seen:
                 raise ValueError("out of range or duplicate publication date")
             seen.add(day)
-            common = {"publication_date": published, "available_at": None,
+            common = {"observed_for": published, "publication_date": published, "available_at": None,
                       "retrieved_at": receipts[kind]["retrieved_at"], "source_url": url,
-                      "source_sha256": receipts[kind]["sha256"], "historical_vintage_verified": False}
+                      "source_sha256": receipts[kind]["sha256"], "historical_vintage_verified": False,
+                      "license_status": "unverified", "currency": "PLN"}
             if kind == "gold":
-                series["gold"].append({**common, "value": _positive(item.get("cena"))})
+                series["gold"].append({**common, "basis": "PRICE_ONLY_PLN_PER_GRAM",
+                                       "value": _positive(item.get("cena"))})
             else:
                 if item.get("table") != "A" or not isinstance(item.get("rates"), list):
                     raise ValueError("invalid table A")
@@ -73,7 +75,8 @@ def capture(start, end, fetch=_fetch, clock=lambda: datetime.now(timezone.utc)):
                     matches = [row for row in item["rates"] if isinstance(row, dict) and row.get("code") == code]
                     if len(matches) != 1:
                         raise ValueError("missing or duplicate exchange rate")
-                    series[code.lower() + "pln"].append({**common, "value": _positive(matches[0].get("mid")), "table_no": item.get("no")})
+                    series[code.lower() + "pln"].append({**common, "basis": "TABLE_A_MID_PLN_PER_FOREIGN_UNIT",
+                                                        "value": _positive(matches[0].get("mid")), "table_no": item.get("no")})
     for rows in series.values():
         rows.sort(key=lambda row: row["publication_date"])
     return {"source": "NBP", "start": start, "end": end, "receipts": receipts,
