@@ -121,14 +121,14 @@ class WorkingEngineAcceptance(unittest.TestCase):
         # Output order is part of the cycle contract.
         self.assertEqual([r[0] for r in rows],
                          ["M1_GLOBAL_EQ", "M2_DIVERSIFIED", "M3_TACTICAL"])
-        self.assertEqual({r[10] for r in rows}, {"NEW_RESEARCH_RUN"})
-        self.assertEqual({r[11] for r in rows}, {3})
+        self.assertEqual({r[11] for r in rows}, {"NEW_RESEARCH_RUN"})
+        self.assertEqual({r[14] for r in rows}, {3})
         self.assertEqual({r[12] for r in rows}, {3})
         self.assertEqual({r[13] for r in rows}, {3})
-        self.assertEqual({r[14] for r in rows}, {0})
+        self.assertEqual({r[16] for r in rows}, {0})
         self.assertEqual({r[15] for r in rows}, {0})
-        self.assertEqual({r[6] for r in rows}, {2})  # future ingest excluded
-        self.assertEqual({str(r[7]) for r in rows}, {"100"})
+        self.assertEqual({r[7] for r in rows}, {2})  # future ingest excluded
+        self.assertEqual({str(r[8]) for r in rows}, {"100"})
         self.assertEqual({r[5] for r in rows}, {"INSUFFICIENT_DATA"})
         self.assertEqual(self.scalar(
             "SELECT count(*) FROM investment_lab.research_runs"), 3)
@@ -141,8 +141,8 @@ class WorkingEngineAcceptance(unittest.TestCase):
 
         repeated = self.cycle()
         self.assertEqual(len(repeated), 3)
-        self.assertEqual({r[10] for r in repeated}, {"IDEMPOTENT_REPLAY"})
-        self.assertEqual({r[11] for r in repeated}, {0})
+        self.assertEqual({r[11] for r in repeated}, {"IDEMPOTENT_REPLAY"})
+        self.assertEqual({r[14] for r in repeated}, {0})
         self.assertEqual({r[12] for r in repeated}, {0})
         self.assertEqual({r[13] for r in repeated}, {0})
         self.assertEqual(self.scalar(
@@ -159,13 +159,13 @@ class WorkingEngineAcceptance(unittest.TestCase):
                  AND r.reproducibility_hash=a.metadata->>'input_sha256'"""), 3)
 
     def test_modified_historical_evidence_fails_replay_closed(self):
-        self.assertEqual({r[10] for r in self.cycle()}, {"NEW_RESEARCH_RUN"})
+        self.assertEqual({r[11] for r in self.cycle()}, {"NEW_RESEARCH_RUN"})
         # Only in this disposable fixture: model a changed historical source.
         self.conn.execute("""UPDATE investment_lab.price_observations
           SET close_price=close_price+1 WHERE instrument_code='USDPLN_NBP'""")
         collision = self.cycle()
-        self.assertEqual({r[10] for r in collision}, {"REPLAY_INPUT_COLLISION"})
-        self.assertEqual({r[11] for r in collision}, {0})
+        self.assertEqual({r[11] for r in collision}, {"REPLAY_INPUT_COLLISION"})
+        self.assertEqual({r[14] for r in collision}, {0})
         self.assertEqual({r[12] for r in collision}, {0})
         self.assertEqual({r[13] for r in collision}, {0})
         self.assertEqual(self.scalar(
