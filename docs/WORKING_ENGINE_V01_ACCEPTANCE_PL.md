@@ -135,3 +135,34 @@ the data and cost evidence required for them are complete.
 - Neon acceptance branch is a disposable **test clone** with separate research rows.
 - Engine-first roadmap: functional cycle -> repeated live-lab verification -> UX -> production later, only if separately chosen.
 - Prior references to a production-readiness approval before running paper research were overly restrictive. Research-only inserts are not production releases; continue to enforce no real finance operations, idempotency and provenance.
+
+
+## Live research laboratory validation — Neon main, 2026-11-05
+
+**There is NO production environment.** After the isolated-branch acceptance,
+the same audited research-only SQL (with audit metadata research_paper_only=true,
+financial_operations=0) was executed on canonical private LAB Neon main,
+branch br-shy-voice-badzlf0x, database investment_lab.
+
+**Observed SQL receipt:**
+- Cycle cutoff: 2026-11-05T19:00:00Z.
+- 3,777 eligible source price observations.
+- Model M1_GLOBAL_EQ: missing GLOBAL_EQUITY_TR_PLN.
+- Model M2_DIVERSIFIED: missing GLOBAL_EQUITY_TR_PLN,
+  PL_BONDS_TR_PLN, GOLD_TR_PLN.
+- Model M3_TACTICAL: same three missing series as M2.
+- Every model: INSUFFICIENT_DATA, paper-only HOLD_CASH.
+- First cycle: 3 NEW_RESEARCH_RUN, 3 signals, 3 VALIDATION audit entries.
+- Exact replay: 3 IDEMPOTENT_REPLAY, zero new research runs/signals/audit.
+- Independent read-only join: research input hash matches signal and audit
+  for all 3 models; research_paper_only=true 3/3.
+- paper_events remains contribution-only; zero buys/sells, zero new
+  contributions, no Coinbase/Wallet connection and zero financial operations.
+
+This is a **functional acceptance in the live private research laboratory**
+with durable state, not a historical strategy performance backtest. It proves
+that the fail-closed engine works on collected real observations; it does not
+prove source completeness or establish an investable edge. There is no
+ongoing scheduler yet. Next: enable and observe repeated LAB cycles using
+the existing research-only model and source pipeline, add read-only health
+verification; no UI or production release at this stage.
