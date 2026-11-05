@@ -1,5 +1,6 @@
 -- Working Engine v0.1: one bounded, idempotent, append-only research cycle.
--- Run ONLY on an isolated Neon acceptance/staging branch, never on main.
+-- Research-only execution on the private lab branch (main) or a test clone.
+-- No production environment exists. Disposable tests must run only locally.
 -- No brokerage integration, no virtual fills, no cash contributions, no trades.
 WITH
 clock AS (
@@ -166,7 +167,7 @@ inserted_audit AS (
         jsonb_build_object('model_code',p.model_code,
            'input_sha256',p.input_hash,'cutoff',p.cutoff,
            'signal_verdict',p.verdict,'new_paper_events',0,
-           'test_branch_only',true)
+           'research_paper_only',true,'financial_operations',0)
  FROM sealed p JOIN inserted_runs r USING(run_id)
  RETURNING audit_id,record_id
 )
