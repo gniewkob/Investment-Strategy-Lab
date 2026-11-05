@@ -32,7 +32,7 @@ CREATE TABLE investment_lab.price_observations (
  instrument_code text NOT NULL, source_code text NOT NULL,
  observed_for timestamptz NOT NULL, ingested_at timestamptz NOT NULL,
  interval_code text NOT NULL, return_basis text NOT NULL,
- close_price numeric NOT NULL
+ close_price numeric NOT NULL, source_url text
 );
 CREATE TABLE investment_lab.paper_events (
  event_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
