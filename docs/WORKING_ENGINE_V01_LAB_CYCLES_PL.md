@@ -37,10 +37,15 @@ Cel: automatyczna powtarzalna analiza **EDUKACYJNA**, nigdy realny handel.
    zmian nie generuj codziennie długich raportów. Tygodniowe wyniki
    pozostają w dotychczasowym raporcie ISL.
 
-Silnik działa na cutoff UTC 19:00 dziennie; domyślna pora kontroli
-22:00 Europe/Warsaw to po cutoff także w czasie letnim. Harmonogram
-jest zarządzany poza kodem w zleceniu cyklicznym; samo dodanie tego pliku
-NIE aktywuje automatyzacji.
+Silnik działa na cutoff UTC 19:00 dziennie.
+Zadanie jest teraz podłączone do ISTNIEJĄCEJ automatyzacji ChatGPT
+„Surowce i geopolityka” (ID 6ad3d88620708191a2feb6b7a44bf253),
+uruchamianej codziennie około 08:21 Europe/Warsaw. Ponieważ poranny
+termin przypada przed cutoff tego samego dnia, silnik weryfikuje cutoff
+19:00 UTC DNIA POPRZEDNIEGO, co jest zamierzone. Nie zmieniono
+dotychczasowej analizy surowcowej, tematu, czasu ani reguł powiadomień.
+Limit pięciu aktywnych automatyzacji uniemożliwił utworzenie osobnego
+szóstego zadania.
 
 ## Kryterium odbioru automatyzacji
 
@@ -66,3 +71,30 @@ finansowych. Nie usuwaj ani nie zmieniaj istniejących wyników tylko
 po to, aby ponownie uruchomić eksperyment. Nie zmieniaj harmonogramu
 miesięcznych wpłat wirtualnych — ten należy do osobnego raportu
 poniedziałkowego, nie do silnika codziennego.
+
+
+## Aktywacja w harmonogramie — potwierdzona 2026-11-05
+
+Odpowiedź narzędzia Automations: success=true, "Automation updated." dla
+istniejącego, aktywnego zadania „Surowce i geopolityka”, bez zmian
+RRULE (FREQ=DAILY;BYHOUR=8, Europe/Warsaw). Dopisany moduł używa
+tylko NIEZMIENNEGO commitu e9ca5e9ed37a55775df718cc8bbddc4a00676fb1,
+z oczekiwanymi Git blob SHA:
+- db/working_engine_v01_research_cycle.sql:
+  9eccf065151b512f166cafb7a9af2add73794f1c;
+- db/working_engine_v01_health_READONLY.sql:
+  9da8b3035150a757c8c658d46829b2e938f8102e.
+
+Wersja jest zamrożona na potrzeby cykli naturalnych; następna zmiana kodu
+NIE powinna automatycznie zmieniać wykonania bez rewalidacji.
+W teście CI na jednorazowym PostgreSQL 5/5 testów przeszło, obejmując
+dodatkowo SOURCE_MISSING, CYCLE_MISSING, zgodność audytu i jego
+naruszenie. Odczyt na Neon main 2026-11-05 po uruchomieniu silnika:
+ENGINE_OK 3/3, SOURCE_STALE 3/3 (ostatnie referencje
+NBP USD/PLN, EUR/PLN i złota 2026-10-16), 0 paper fills.
+To dowód działania monitora, nie dowód wykonanego jeszcze zadania
+automatycznego następnego dnia.
+
+Przy awarii zadania nie nadpisuj historii i nie podejmuj samodzielnie
+operacji portfelowych. Automat nie wnosi nowych wirtualnych miesięcznych
+wkładów i nie modyfikuje działającego raportu poniedziałkowego.
