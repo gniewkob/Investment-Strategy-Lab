@@ -55,3 +55,22 @@ wersje oraz momenty udostępnienia, kalendarz sesji i koszty. Dopiero później
 wykonać zamrożony IS/OOS, total return w PLN, FX, inflację, prowizje
 i spread na jednakowym harmonogramie M1/M2/M3. Security review
 wcześniejszego commitu zwrócił HTTP 400; NIE zaliczono kontroli.
+
+
+## Iteracja 2026-11-05 — GUS CPI, kontrolowany import pochodnych danych
+
+Nowy, **offline** moduł: scripts/gus_cpi_normalize.py. Nie parsuje bezpośrednio oryginalnego CSV GUS: format publikacji należy niezależnie skontrolować i **ręcznie odwzorować wyłącznie tabelę „poprzedni miesiąc = 100”** do UTF-8 CSV z nagłówkiem year;month;previous_month_100. Obsługuje przecinek dziesiętny, duplikaty, niepoprawne daty i wartości, rejestruje SHA-256 **pliku po transformacji**, zakres oraz wykryte luki miesięczne. Wymaga jawnego oryginalnego URL publikacji GUS, dnia wydania snapshotu oraz rzeczywistego czasu pobrania. Żadna z tych metadanych nie jest dowodem historycznej daty dostępności każdej pierwotnej miesięcznej wartości CPI. Nie udajemy, że hash eksportu jest hashem pliku oficjalnego.
+
+Przykład (po niezależnej weryfikacji oryginalnego wydania oraz mapowania kolumn):
+  python -m scripts.gus_cpi_normalize mapped-gus-cpi.csv --official-publication-url https://publikacje.new.stat.gov.pl/portal-publikacje/miesieczne-wskazniki-cen-towarow-i-uslug-konsumpcyjnych-od-1982-r --snapshot-published-on 2026-10-14
+
+Wynik jest zawsze INSUFFICIENT_DATA / NOT_RUN, bez modelowej transakcji, bez zmian w Neon. Nie przekazywać do backtestu jako historycznie PIT-verified. Brak pobierania oryginalnego pliku i brak rzeczywistych danych w repo.
+
+**Zweryfikowane źródła i rozdzielenie wymagań:**
+
+- [GUS: Miesięczne CPI od 1982 roku](https://publikacje.new.stat.gov.pl/portal-publikacje/miesieczne-wskazniki-cen-towarow-i-uslug-konsumpcyjnych-od-1982-r) opisuje pięć różnych podstaw i oficjalne pliki CSV/XLSX; odczytana data najnowszej wersji: 14.10.2026. [Warunki ponownego wykorzystania GUS](https://bip.stat.gov.pl/kontakt/ponowne-wykorzystywanie-informacji-sektora-publicznego/) wymagają wskazania źródła, czasu wytworzenia i pozyskania informacji oraz oznaczenia przetworzenia. To zasady ogólne, nie dowód prawidłowego mapowania konkretnego archiwalnego pliku.
+- [GUS API SDP](https://api.stat.gov.pl/Home/SDPApi) udostępnia metadane oraz wskaźniki, w tym typ prezentacji „okres poprzedni = 100”, z limitami żądań dla anonimowych klientów. Nie identyfikowano i nie importowano tutaj kompletnej serii o potwierdzonym identyfikatorze/wydaniu.
+- [Vanguard Acc ETF — NAV i ceny rynkowe](https://www.vanguard.co.uk/professional/product/etf/equity/9679/ftse-all-world-ucits-etf-usd-accumulating) pokazuje oddzielnie NAV USD i rynkową cenę GBP oraz historyczną tabelę; fundusz akumulujący reinwestuje dywidendy. Publiczna tabela nie jest jeszcze dowodem uprawnienia do automatycznego masowego gromadzenia ani danych PIT. Dane NAV nie są tym samym co cena transakcyjna ETF, a koszty funduszu ujęte w NAV nie mogą być naliczone ponownie.
+- [TBSP.Index — BondSpot](https://www.bondspot.pl/tbsp_index_archive_en) publikuje wybrane historyczne wartości; [Market Data Policy](https://www.bondspot.pl/1304) zawiera materiały licencyjne, w tym wersje obowiązujące od 1.10.2026. Indeks total-return polskich obligacji to benchmark, nie dostępny do handlu instrument. Zakres praw pobierania i pełnej serii nie został zatwierdzony; brak adaptera masowego pobierania.
+
+**Odbiór Data Readiness v1 nadal jest zablokowany:** potrzebna autentyczna pełna seria dla globalnych akcji i polskich obligacji, potwierdzone licencje i PIT/vintage, dane kosztów, reguły kalendarza oraz test IS/OOS. Wynik M1/M2/M3 nadal INSUFFICIENT_DATA. Poprzedni security review zakończył się błędem HTTP 400 i wymaga powtórzenia niezależnie od zielonego CI.
