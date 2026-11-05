@@ -13,6 +13,9 @@ import unittest
 ENGINE_SQL = (Path(__file__).resolve().parents[2] /
               "db/working_engine_v01_research_cycle.sql").read_text(encoding="utf-8")
 
+HEALTH_SQL = (Path(__file__).resolve().parents[2] /
+              "db/working_engine_v01_health_READONLY.sql").read_text(encoding="utf-8")
+
 FIXTURE = """
 CREATE TABLE investment_lab.models (
  model_code text PRIMARY KEY, base_currency text NOT NULL,
@@ -157,6 +160,39 @@ class WorkingEngineAcceptance(unittest.TestCase):
                  ON a.record_id=r.run_id::text
                WHERE r.reproducibility_hash=s.components->>'input_sha256'
                  AND r.reproducibility_hash=a.metadata->>'input_sha256'"""), 3)
+
+    def test_health_receipt_missing_before_cycle(self):
+        rows = self.conn.execute(HEALTH_SQL).fetchall()
+        self.assertEqual(len(rows), 3)
+        self.assertEqual({r[8] for r in rows}, {"CYCLE_MISSING"})
+        self.assertEqual(self.scalar(
+            "SELECT count(*) FROM investment_lab.research_runs"), 0)
+
+    def test_health_receipt_consistent_after_cycle(self):
+        self.cycle()
+        rows = self.conn.execute(HEALTH_SQL).fetchall()
+        self.assertEqual(len(rows), 3)
+        self.assertEqual({r[8] for r in rows}, {"ENGINE_OK"})
+        # Fixture intentionally lacks EUR/PLN: source availability is a
+        # separate signal and never incorrectly changes engine execution state.
+        self.assertEqual({r[9] for r in rows}, {"SOURCE_MISSING"})
+        self.assertEqual({r[6] for r in rows}, {1})  # signal_rows
+        self.assertEqual({r[7] for r in rows}, {1})  # audit_rows
+        self.assertEqual({r[14] for r in rows}, {3})  # contribution events
+        self.assertEqual({r[15] for r in rows}, {0})  # paper fills
+
+    def test_health_receipt_detects_modified_audit(self):
+        self.cycle()
+        self.conn.execute("""UPDATE investment_lab.audit_events
+          SET metadata=jsonb_set(metadata,'{input_sha256}','"tampered"')
+          WHERE metadata->>'model_code'='M1_GLOBAL_EQ'""")
+        rows = self.conn.execute(HEALTH_SQL).fetchall()
+        status = {r[0]: r[8] for r in rows}
+        self.assertEqual(status["M1_GLOBAL_EQ"], "CYCLE_INVALID")
+        self.assertEqual(status["M2_DIVERSIFIED"], "ENGINE_OK")
+        self.assertEqual(status["M3_TACTICAL"], "ENGINE_OK")
+        self.assertEqual(self.scalar(
+            "SELECT count(*) FROM investment_lab.research_runs"), 3)
 
     def test_modified_historical_evidence_fails_replay_closed(self):
         self.assertEqual({r[11] for r in self.cycle()}, {"NEW_RESEARCH_RUN"})
