@@ -74,3 +74,24 @@ Wynik jest zawsze INSUFFICIENT_DATA / NOT_RUN, bez modelowej transakcji, bez zmi
 - [TBSP.Index — BondSpot](https://www.bondspot.pl/tbsp_index_archive_en) publikuje wybrane historyczne wartości; [Market Data Policy](https://www.bondspot.pl/1304) zawiera materiały licencyjne, w tym wersje obowiązujące od 1.10.2026. Indeks total-return polskich obligacji to benchmark, nie dostępny do handlu instrument. Zakres praw pobierania i pełnej serii nie został zatwierdzony; brak adaptera masowego pobierania.
 
 **Odbiór Data Readiness v1 nadal jest zablokowany:** potrzebna autentyczna pełna seria dla globalnych akcji i polskich obligacji, potwierdzone licencje i PIT/vintage, dane kosztów, reguły kalendarza oraz test IS/OOS. Wynik M1/M2/M3 nadal INSUFFICIENT_DATA. Poprzedni security review zakończył się błędem HTTP 400 i wymaga powtórzenia niezależnie od zielonego CI.
+
+
+## Iteracja 2026-11-05 — walidacja kandydatów Vanguard NAV i TBSP.Index, bez pobierania nieuprawnionych danych
+
+**Status: INSUFFICIENT_DATA.** Oficjalne źródła potwierdzają:
+- [Vanguard FTSE All-World UCITS ETF (USD) Acc](https://www.vanguard.co.uk/professional/product/etf/equity/9679/ftse-all-world-ucits-etf-usd-accumulating) — historyczne NAV w USD i odrębną cenę rynkową ETF, zależną od waluty notowania. Akumulowanie dywidend zachodzi wewnątrz funduszu. NAV ≠ cena transakcyjna i fundusz ≠ indeks FTSE All-World.
+- [BondSpot TBSP.Index — archiwum](https://www.bondspot.pl/tbsp_index_archive_en) — historyczne wartości otwarcia i zamknięcia. Dla benchmarku przyjmujemy wyłącznie wartość zamknięcia, w PLN. Indeks dochodowy polskich obligacji skarbowych nie jest kupowalnym instrumentem.
+- [BondSpot Market Data Policy](https://www.bondspot.pl/1304) — udostępnia politykę, umowy i taryfy obowiązujące od 1.10.2026. Nie potwierdzono uprawnienia do automatycznego masowego pobierania, trwałego przechowywania lub redystrybucji kompletnej historii. Sam widok publiczny nie jest licencją.
+
+Nowy moduł: **scripts/verified_source_candidate_intake.py**. Przyjmuje **wyłącznie offline**, oddzielnie dla każdego źródła, wcześniej legalnie uzyskany i ręcznie przekształcony do UTF-8 plik CSV. Nie pobiera ani nie zapisuje surowej historii do repo. Nagłówek CSV to date,value; daty ISO, liczby dodatnie z kropką dziesiętną, bez separatorów tysięcy.
+
+Przykładowe uruchomienie na wcześniej uzyskanych uprawnionych plikach:
+
+    python -m scripts.verified_source_candidate_intake mapped-vanguard-nav.csv --series-id VANGUARD_ALL_WORLD_ACC_NAV_USD --official-url https://www.vanguard.co.uk/professional/product/etf/equity/9679/ftse-all-world-ucits-etf-usd-accumulating
+    python -m scripts.verified_source_candidate_intake mapped-tbsp-close.csv --series-id BONDSPOT_TBSP_CLOSE_PLN --official-url https://www.bondspot.pl/tbsp_index_archive_en
+
+Opcjonalny argument --original-copy path/to/source-bytes liczy oddzielny SHA-256 bajtów oryginalnego źródła, gdy ich lokalny użytek jest uprawniony. SHA-256 oryginału i pochodnego CSV **nie dowodzą** autentyczności źródła, praw licencyjnych ani poprawności mapowania.
+
+Kontrole: wymuszenie tożsamości serii, waluty, typu instrumentu i bazy wartości; zły nagłówek, duplikaty, liczby nieprawidłowe, daty poza okresem, miesiące całkowicie pozbawione obserwacji. Kontrola luk miesięcznych nie sprawdza kompletności wszystkich sesji. Dane nie mają potwierdzonych historycznych godzin publikacji ani pierwszej dostępności, praw, oryginalnych wersji i rewizji; wyjście zawsze INSUFFICIENT_DATA / NOT_RUN / paper_events_created=0.
+
+**Warunek następnej iteracji:** potwierdzić licencję i legalny sposób pobrania pełnej historii oraz zebrać źródłowe dowody historycznej dostępności. Dopiero później może powstać weryfikowalny model porównawczy w PLN z kosztami, inflacją, FX i IS/OOS.
