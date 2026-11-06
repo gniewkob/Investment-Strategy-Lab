@@ -67,7 +67,7 @@ class MonthlyBacktestReadinessTest(unittest.TestCase):
     def test_empty_live_equivalent_is_not_run(self):
         rows = self._query()
         self.assertEqual(len(rows), 3)
-        self.assertEqual({r[7] for r in rows}, {"NOT_RUN_SERIES_MISSING"})
+        self.assertEqual({r[7] for r in rows.values()}, {"NOT_RUN_SERIES_MISSING"})
         self.assertEqual({r[3] for r in rows}, {0})
         self.assertEqual({r[4] for r in rows}, {0})
         self.assertEqual({r[9:] for r in rows}, {(0, 0)})
