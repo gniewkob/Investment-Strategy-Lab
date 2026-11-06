@@ -9,7 +9,8 @@
 - That run independently queried GitHub run/artifact metadata, downloaded the previous capture and produced `GITHUB_API_AND_CAPTURE_MATCHED_NOT_TRUSTED_TIMESTAMP_CERTIFICATE`.
 - The v0.9 integration constructed a **minimal evidence bundle** (v0.7 capture, limited GitHub API run/artifact metadata, v0.8 checkpoint) and appended one receipt into disposable local SQLite. Read-back: `entries=1`, `NEW_EVIDENCE`, head SHA-256 `c1947c81a81a2699f59f67f1438eb6950afa1c45e3f34aebc87d62fac604ef66`. Six offline ledger regression tests passed in that same live workflow.
 - Exported Actions artifact id `13545961762` (90-day retention), downloaded and separately SHA-256 checked as **`1d4134d00fad8bdcadf1aed5fd5d75fe2a76e33e53fffe7b07fac535daf7646f`**, matching GitHub API artifact `digest`. It contains a 924-byte v0.8 receipt, 3870-byte bounded JSON evidence bundle and a 20480-byte SQLite example database.
-- [Full Working Engine CI #42305280176](https://github.com/gniewkob/Investment-Strategy-Lab/actions/runs/42305280176) **SUCCESS**, including six v0.9 SQLite tests. Later CI on exact docs revision should be reviewed separately.
+- [Full Working Engine CI #42305280176](https://github.com/gniewkob/Investment-Strategy-Lab/actions/runs/42305280176) **SUCCESS**, including six initial v0.9 SQLite tests.
+- The source evidence JSON was versioned in Git at `evidence/shadow/v09/checkpoint-bundle-run-42305280062.json` to survive normal Actions artifact expiry **while the Git branch/repository is retained**. The complete source bytes matched their original SHA-256 `4a4fece5c84996cf7e663abae81d5c583e5397904bbe17ab57b8f0a150b797d3`, and the saved bundle reproduced ledger head `c1947c81a81a2699f59f67f1438eb6950afa1c45e3f34aebc87d62fac604ef66`. [Latest full engine CI #42306067897](https://github.com/gniewkob/Investment-Strategy-Lab/actions/runs/42306067897) **SUCCESS**, seven v0.9 tests including this actual archived-bundle regression.
 
 ## What append-only means here
 
@@ -30,7 +31,7 @@ python3 -m scripts.shadow_evidence_ledger_v09 \
   --ledger "$HOME/.investment-strategy-lab/shadow-evidence.sqlite3" --verify
 ```
 
-Use encrypted storage and independently backed-up copies for the database and source bundle. Also keep each accepted `head_sha256` with its capture time in separately administered write-once/version-protected storage. This is a **deployment procedure**, not confirmation that Mac mini persistence or independent WORM anchoring has happened.
+The Git archived bundle is a **historical API snapshot**, not a live assertion that the source GitHub artifact remains unexpired; the SQLite instance shown in CI is disposable. Do not treat the branch as WORM or assume it survives deletion/rewrite. Use encrypted storage and independently backed-up copies for the database and source bundle. Also keep each accepted `head_sha256` with its capture time in separately administered write-once/version-protected storage. This is a **deployment procedure**, not confirmation that Mac mini persistence or independent WORM anchoring has happened.
 
 ## Evidence confidence boundaries
 
@@ -39,7 +40,8 @@ Use encrypted storage and independently backed-up copies for the database and so
 | Official GitHub run/artifact metadata agreed with captured decision | **PASS**, actual run |
 | Archive ZIP SHA-256 matched GitHub's published artifact digest | **PASS**, exact ZIP inspected |
 | Full locally generated SQLite record reproduced on read-back | **PASS**, disposable runner |
-| Research-level ledger durable after CI runner destruction | **NOT YET**; persist externally |
+| Sanitized evidence bundle retained as versioned Git file | **PASS**, conditional on preserving repo/branch history; not WORM |
+| SQLite ledger persisted on owner-controlled Mac/offsite storage | **NOT YET**; CI database is disposable |
 | Independent trusted-time/TSA attestation | **NOT CERTIFIED** |
 | Qualifying equity, bonds, gold PLN TR + legal entitlements | **BLOCKED** |
 | Historical investable M1–M3 performance or real trades | **NOT RUN** |
