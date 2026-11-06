@@ -42,6 +42,9 @@ on:
       - 'tests/integration/test_working_engine_v01.py'
       - 'scripts/world_bank_gem_audit_v04.py'
       - 'tests/test_world_bank_gem_audit_v04.py'
+      - 'scripts/worldpulse_nav_availability_v04.py'
+      - 'tests/test_worldpulse_nav_availability_v04.py'
+      - '.github/workflows/worldpulse-nav-audit-v04.yml'
       - '.github/workflows/working-engine-v01-ci.yml'
   push:
     branches: [main]
@@ -72,6 +75,9 @@ on:
       - 'tests/integration/test_working_engine_v01.py'
       - 'scripts/world_bank_gem_audit_v04.py'
       - 'tests/test_world_bank_gem_audit_v04.py'
+      - 'scripts/worldpulse_nav_availability_v04.py'
+      - 'tests/test_worldpulse_nav_availability_v04.py'
+      - '.github/workflows/worldpulse-nav-audit-v04.yml'
       - '.github/workflows/working-engine-v01-ci.yml'
 permissions:
   contents: read
@@ -116,6 +122,8 @@ jobs:
         run: bash -n scripts/run_local_vanguard_nav_preflight_v04.sh
       - name: Validate complete local NAV XLSX and exact-date NBP source bundle
         run: python -m unittest discover -s tests -p 'test_vanguard_nav_intake_bundle_v04.py' -v
+      - name: Validate WorldPulse.ai financial source availability fail-close
+        run: python -m unittest discover -s tests -p 'test_worldpulse_nav_availability_v04.py' -v
       - name: Validate safe original NAV XLSX intake with no fund-identity assumptions
         run: python -m unittest discover -s tests -p 'test_vanguard_xlsx_offline_intake_v04.py' -v
       - name: Validate authenticated offline NAV USD to exact-day NBP PLN conversion
