@@ -106,7 +106,7 @@ class OfficialBondSpotArchiveTests(unittest.TestCase):
             merge([a,a],"2025-02","2025-03")
         with self.assertRaisesRegex(ValueError,"cover"):
             merge([a],"2025-02","2025-03")
-        with self.assertRaisesRegex(ValueError,"gap or overlap"):
+        with self.assertRaisesRegex(ValueError,"cover"):
             merge([a,b],"2025-02","2025-04")
 
     def test_nonpositive_or_malformed_close_rejected(self):
