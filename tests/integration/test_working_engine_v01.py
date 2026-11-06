@@ -19,6 +19,9 @@ HEALTH_SQL = (Path(__file__).resolve().parents[2] /
 V02_SQL = (Path(__file__).resolve().parents[2] /
            "db/working_engine_v02_research_cycle.sql").read_text(encoding="utf-8")
 
+V03_SQL = (Path(__file__).resolve().parents[2] /
+           "db/working_engine_v03_research_cycle.sql").read_text(encoding="utf-8")
+
 V02_HEALTH_SQL = (Path(__file__).resolve().parents[2] /
                   "db/working_engine_v02_health_READONLY.sql").read_text(encoding="utf-8")
 
@@ -284,6 +287,106 @@ class WorkingEngineAcceptance(unittest.TestCase):
         self.assertEqual({r[12] for r in again}, {0})
         self.assertEqual(self.scalar(
             "SELECT count(*) FROM investment_lab.audit_events"), 6)
+        self.assertEqual(self.scalar(
+            "SELECT count(*) FROM investment_lab.paper_events"), 3)
+
+    def test_v03_persists_real_reference_context_and_ledger_in_one_cycle(self):
+        receipts = self.conn.execute(V03_SQL).fetchall()
+        self.assertEqual({r[11] for r in receipts}, {"NEW_RESEARCH_RUN"})
+        self.assertEqual({r[18] for r in receipts},
+                         {"REFERENCE_INCOMPLETE_AT_CUTOFF"})
+        self.assertEqual({len(r[19]) for r in receipts}, {64})
+        self.assertEqual({r[15:17] for r in receipts}, {(0, 0)})
+        details = self.conn.execute("""SELECT r.model_code,r.metrics,
+             r.reproducibility_hash,
+             s.components,a.metadata
+           FROM investment_lab.research_runs r
+           JOIN investment_lab.signal_events s
+              ON s.components->>'run_id'=r.run_id::text
+           JOIN investment_lab.audit_events a ON a.record_id=r.run_id::text
+           WHERE r.assumptions->>'engine'='working-engine-v03'
+           ORDER BY r.model_code""").fetchall()
+        self.assertEqual(len(details), 3)
+        for model, metrics, fingerprint, signal, audit in details:
+            self.assertEqual(len(metrics["nbp_reference_context"]), 3)
+            self.assertEqual(len(metrics["paper_event_ledger"]), 1)
+            self.assertEqual(metrics["virtual_contributions_pln"], 100)
+            self.assertEqual(metrics["new_paper_events"], 0)
+            self.assertEqual(metrics["real_financial_operations"], 0)
+            self.assertTrue(all(reference["status_at_cutoff"]
+                                == "SOURCE_MISSING_AT_CUTOFF"
+                                for reference in metrics["nbp_reference_context"]))
+            self.assertEqual(metrics["nbp_reference_status_at_cutoff"],
+                             "REFERENCE_INCOMPLETE_AT_CUTOFF")
+            self.assertEqual(signal["engine"], "working-engine-v03")
+            self.assertEqual(signal["input_sha256"], fingerprint)
+            self.assertEqual(audit["input_sha256"], fingerprint)
+            self.assertEqual(signal["paper_event_ledger_sha256"],
+                             metrics["paper_event_ledger_sha256"])
+            self.assertEqual(audit["paper_event_ledger_sha256"],
+                             metrics["paper_event_ledger_sha256"])
+        replay = self.conn.execute(V03_SQL).fetchall()
+        self.assertEqual({r[11] for r in replay}, {"IDEMPOTENT_REPLAY"})
+        self.assertEqual({r[12:15] for r in replay}, {(0, 0, 0)})
+        self.assertEqual(self.scalar(
+            "SELECT count(*) FROM investment_lab.paper_events"), 3)
+
+    def test_v03_persists_nbp_five_and_twenty_observation_metrics(self):
+        self.conn.execute("""INSERT INTO investment_lab.price_observations
+          (instrument_code,source_code,observed_for,ingested_at,
+           interval_code,return_basis,close_price,source_url)
+          SELECT 'USDPLN_NBP','nbp_rates',
+                 now()-interval '28 days'+s.i*interval '1 day',
+                 now()-interval '27 days'+s.i*interval '1 day',
+                 '1d','FX_RATE',100+s.i,
+                 'https://api.nbp.pl/api/exchangerates/tables/a/'
+          FROM generate_series(0,20) s(i)""")
+        self.conn.execute(V03_SQL)
+        entries = self.conn.execute("""SELECT metrics->'nbp_reference_context'
+          FROM investment_lab.research_runs
+          WHERE assumptions->>'engine'='working-engine-v03'
+          AND model_code='M1_GLOBAL_EQ'""").fetchone()[0]
+        self.assertEqual(len(entries), 3)
+        usd = next(x for x in entries if x["instrument_code"]=="USDPLN_NBP")
+        self.assertEqual(usd["observations_in_window"], 21)
+        self.assertEqual(str(usd["change_five_observations_pct"]), "4.3478")
+        self.assertEqual(str(usd["change_twenty_observations_pct"]), "20.0")
+        self.assertEqual(str(usd["range_twenty_observations_pct"]), "20.0")
+        self.assertEqual(usd["status_at_cutoff"], "SOURCE_RECENT_AT_CUTOFF")
+        self.assertEqual(usd["interpretation"],
+                         "DESCRIPTIVE_REFERENCE_ONLY_NOT_TOTAL_RETURN")
+        self.assertEqual(self.scalar(
+            "SELECT count(*) FROM investment_lab.paper_events"), 3)
+
+    def test_v03_detects_paper_ledger_change_without_budget_change(self):
+        self.conn.execute(V03_SQL)
+        self.conn.execute("""UPDATE investment_lab.paper_events
+          SET event_time=event_time+interval '1 second'
+          WHERE model_code='M1_GLOBAL_EQ'""")
+        receipts = self.conn.execute(V03_SQL).fetchall()
+        states = {r[0]:r[11] for r in receipts}
+        self.assertEqual(states["M1_GLOBAL_EQ"], "REPLAY_INPUT_COLLISION")
+        self.assertEqual(states["M2_DIVERSIFIED"], "IDEMPOTENT_REPLAY")
+        self.assertEqual(states["M3_TACTICAL"], "IDEMPOTENT_REPLAY")
+        self.assertEqual({r[12:15] for r in receipts}, {(0, 0, 0)})
+        self.assertEqual(self.scalar(
+            "SELECT count(*) FROM investment_lab.research_runs"), 3)
+
+    def test_v03_rejects_unauthorized_source_reference(self):
+        self.conn.execute("""INSERT INTO investment_lab.price_observations
+          (instrument_code,source_code,observed_for,ingested_at,
+           interval_code,return_basis,close_price,source_url)
+          VALUES ('USDPLN_NBP','nbp_rates',now()-interval '3 days',
+                  now()-interval '2 days','1d','FX_RATE',900,
+                  'https://not-nbp.example/api/rate')""")
+        self.conn.execute(V03_SQL)
+        entries = self.conn.execute("""SELECT metrics->'nbp_reference_context'
+          FROM investment_lab.research_runs
+          WHERE assumptions->>'engine'='working-engine-v03'
+          AND model_code='M1_GLOBAL_EQ'""").fetchone()[0]
+        usd = next(x for x in entries if x["instrument_code"] == "USDPLN_NBP")
+        self.assertIsNone(usd["latest_value"])
+        self.assertEqual(usd["status_at_cutoff"], "SOURCE_MISSING_AT_CUTOFF")
         self.assertEqual(self.scalar(
             "SELECT count(*) FROM investment_lab.paper_events"), 3)
 
