@@ -95,10 +95,9 @@ class GithubCheckpointV08Tests(unittest.TestCase):
         with self.assertRaisesRegex(ShadowInputError, "complete before"):
             verify(cap, run, arts, cutoff_utc="2026-11-06T18:01:00Z")
         cap, run, arts = scenario()
+        run["updated_at"] = "2026-11-06T18:01:00Z"
         with self.assertRaisesRegex(ShadowInputError, "preserved before cutoff"):
-            verify(cap, run, arts, cutoff_utc="2026-11-06T18:01:30Z") if False else verify(
-                cap, {**run, "updated_at": "2026-11-06T18:01:00Z"}, arts,
-                cutoff_utc="2026-11-06T18:01:30Z")
+            verify(cap, run, arts, cutoff_utc="2026-11-06T18:01:30Z")
 
     def test_mismatched_frozen_decision_rejected(self):
         cap, run, arts = scenario()
