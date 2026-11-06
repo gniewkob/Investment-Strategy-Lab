@@ -29,4 +29,4 @@ jobs:
       - name: Read NBP reference prices (no writes, no secrets)
         run: python -m scripts.nbp_lab_prepare --start 2026-10-17 --end 2026-11-05
       - name: Prepare validated daily import SQL for scheduler (never executed here)
-        run: python -m scripts.nbp_lab_daily_source --lookback-days 31
+        run: python -m scripts.nbp_lab_daily_source --lookback-days 14
