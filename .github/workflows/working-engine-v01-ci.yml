@@ -11,6 +11,8 @@ on:
       - 'tests/test_monthly_proxy_backtest_v04.py'
       - 'scripts/nbp_long_history_monthly.py'
       - 'scripts/official_market_source_probe_v04.py'
+      - 'scripts/bondspot_monthly_archive_v04.py'
+      - 'tests/test_bondspot_monthly_archive_v04.py'
       - 'tests/test_official_market_source_probe_v04.py'
       - 'tests/test_nbp_long_history_monthly.py'
       - 'scripts/tbsp_official_archive_v04.py'
@@ -90,6 +92,8 @@ jobs:
           python -m unittest discover -s tests -p 'test_nbp_lab_daily_source.py' -v
       - name: Validate TBSP dated-source and digest controls offline
         run: python -m unittest discover -s tests -p 'test_tbsp_official_archive_v04.py' -v
+      - name: Validate month-end BondSpot history parser offline
+        run: python -m unittest discover -s tests -p 'test_bondspot_monthly_archive_v04.py' -v
       - name: Validate official provider source candidate detection offline
         run: python -m unittest discover -s tests -p 'test_official_market_source_probe_v04.py' -v
       - name: Validate 60-month NBP archive window controls offline
