@@ -1,9 +1,7 @@
 name: ISL v0.4 Vanguard official retail NAV public export capability
+# Live provider probes run by explicit research dispatch, not every PR push.
+# All offline parser and safety tests remain in working-engine-v01-ci.yml.
 on:
-  pull_request:
-    paths:
-      - 'scripts/vanguard_nav_retail_public_probe_v04.mjs'
-      - '.github/workflows/v04-vanguard-retail-nav-probe.yml'
   workflow_dispatch:
 permissions:
   contents: read
