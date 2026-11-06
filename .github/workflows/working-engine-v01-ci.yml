@@ -4,6 +4,7 @@ on:
     paths:
       - 'db/working_engine_v01_research_cycle.sql'
       - 'db/working_engine_v02_research_cycle.sql'
+      - 'db/working_engine_v02_health_READONLY.sql'
       - 'db/working_engine_v01_health_READONLY.sql'
       - 'scripts/nbp_reference_capture.py'
       - 'scripts/nbp_lab_prepare.py'
@@ -19,6 +20,7 @@ on:
     paths:
       - 'db/working_engine_v01_research_cycle.sql'
       - 'db/working_engine_v02_research_cycle.sql'
+      - 'db/working_engine_v02_health_READONLY.sql'
       - 'db/working_engine_v01_health_READONLY.sql'
       - 'scripts/nbp_reference_capture.py'
       - 'scripts/nbp_lab_prepare.py'
