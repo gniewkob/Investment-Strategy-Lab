@@ -25,6 +25,8 @@ jobs:
       - name: Verify offline capture contracts
         run: python -m unittest discover -s tests -p 'test_shadow_capture_v07.py' -v
       - name: Capture independent-run-context candidate, never orders or market returns
+        env:
+          GITHUB_CAPTURE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: python -m scripts.shadow_capture_v07 --output shadow-capture-v07.json
       - name: Fail closed on non-HOLD signals or accidental financial actions
         run: |
