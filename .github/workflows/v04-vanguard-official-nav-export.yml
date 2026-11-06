@@ -1,0 +1,34 @@
+name: ISL v0.4 official Vanguard NAV public export probe
+on:
+  pull_request:
+    paths:
+      - 'scripts/vanguard_nav_public_export_probe_v04.mjs'
+      - '.github/workflows/v04-vanguard-official-nav-export.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+
+jobs:
+  read-public-fund-page:
+    runs-on: ubuntu-latest
+    timeout-minutes: 11
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install disposable browser without repository changes
+        run: |
+          npm install --no-save --package-lock=false --ignore-scripts playwright@1.57.0
+          npx playwright install --with-deps chromium
+      - name: Inspect public historical NAV export control, no login
+        run: node scripts/vanguard_nav_public_export_probe_v04.mjs
+      - name: Save official export bytes only if a download occurred
+        uses: actions/upload-artifact@v4
+        with:
+          name: vanguard-public-nav-export-raw-unverified
+          path: vanguard-nav-public-probe/*
+          if-no-files-found: ignore
+          retention-days: 7
