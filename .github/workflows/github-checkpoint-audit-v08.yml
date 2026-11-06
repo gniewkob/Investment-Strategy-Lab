@@ -1,0 +1,65 @@
+name: ISL v0.8 independent GitHub checkpoint audit
+on:
+  pull_request:
+    paths:
+      - 'scripts/github_checkpoint_verify_v08.py'
+      - 'tests/test_github_checkpoint_verify_v08.py'
+      - '.github/workflows/github-checkpoint-audit-v08.yml'
+  workflow_dispatch:
+    inputs:
+      capture_run_id:
+        description: 'Existing successful v0.7 GitHub Actions capture run ID'
+        required: true
+        type: string
+      cutoff_utc:
+        description: 'Declared independent audit cutoff, ISO UTC (not a trusted timestamp)'
+        required: true
+        type: string
+permissions:
+  contents: read
+  actions: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Offline integrity and cutoff regression
+        run: python -m unittest discover -s tests -p 'test_github_checkpoint_verify_v08.py' -v
+      - name: Collect independent GitHub API records and previous capture artifact
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ inputs.capture_run_id }}
+          CUTOFF_UTC: ${{ inputs.cutoff_utc }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$RUN_ID" =~ ^[1-9][0-9]{0,17}$ ]] || { echo 'invalid run id'; exit 1; }
+          mkdir -p checkpoint-evidence/source
+          gh api "repos/gniewkob/Investment-Strategy-Lab/actions/runs/$RUN_ID" > checkpoint-evidence/run.json
+          gh api --paginate "repos/gniewkob/Investment-Strategy-Lab/actions/runs/$RUN_ID/artifacts?per_page=100" > checkpoint-evidence/artifacts.json
+          RUN_ATTEMPT="$(python -c 'import json; print(json.load(open("checkpoint-evidence/run.json"))["run_attempt"])')"
+          NAME="isl-v07-shadow-capture-run-${RUN_ID}-attempt-${RUN_ATTEMPT}"
+          gh run download "$RUN_ID" --repo gniewkob/Investment-Strategy-Lab \
+            --name "$NAME" --dir checkpoint-evidence/source
+          test -s checkpoint-evidence/source/shadow-capture-v07.json
+          python -m scripts.github_checkpoint_verify_v08 \
+            --capture checkpoint-evidence/source/shadow-capture-v07.json \
+            --run checkpoint-evidence/run.json \
+            --artifacts checkpoint-evidence/artifacts.json \
+            --cutoff-utc "$CUTOFF_UTC" \
+            --output github-checkpoint-audit-v08.json
+      - name: Save only bounded audit receipt (not source archive)
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: isl-v08-checkpoint-audit-${{ github.run_id }}
+          path: github-checkpoint-audit-v08.json
+          if-no-files-found: error
+          retention-days: 90
