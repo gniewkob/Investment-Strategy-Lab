@@ -43,8 +43,9 @@ try{
     result.page_has_isin=body.includes("IE00BK5BQT80");
     result.page_has_nav=body.includes("NAV");
     result.page_has_historical=/Historical Prices|Ceny historyczne|Ceny historyczne|Notowania historyczne/i.test(body);
-    const buttons=page.locator('button[data-cy="download-button"]');
+    const buttons=page.locator('button[data-cy="download-button"]:visible');
     result.visible_download_buttons=await buttons.count();
+    result.all_download_buttons=await page.locator('button[data-cy="download-button"]').count();
     if(!result.page_has_isin||!result.page_has_nav){
       result.download_status="RETAIL_PRODUCT_IDENTITY_NOT_VERIFIED";
     }else if(!result.visible_download_buttons){
