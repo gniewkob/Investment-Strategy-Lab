@@ -18,6 +18,8 @@ on:
       - 'scripts/reference_archive_calendar_v04.py'
       - 'scripts/nbp_bondspot_exact_date_v04.py'
       - 'tests/test_reference_archive_calendar_v04.py'
+      - 'scripts/vanguard_nav_to_pln_reference_v04.py'
+      - 'tests/test_vanguard_nav_to_pln_reference_v04.py'
       - 'scripts/tbsp_official_archive_v04.py'
       - 'scripts/tbsp_archive_merge_v04.py'
       - 'tests/test_tbsp_official_archive_v04.py'
@@ -99,6 +101,8 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_bondspot_monthly_archive_v04.py' -v
       - name: Validate official provider source candidate detection offline
         run: python -m unittest discover -s tests -p 'test_official_market_source_probe_v04.py' -v
+      - name: Validate authenticated offline NAV USD to exact-day NBP PLN conversion
+        run: python -m unittest discover -s tests -p 'test_vanguard_nav_to_pln_reference_v04.py' -v
       - name: Validate calendar mismatches and proof integrity offline
         run: python -m unittest discover -s tests -p 'test_reference_archive_calendar_v04.py' -v
       - name: Validate 60-month NBP archive window controls offline
