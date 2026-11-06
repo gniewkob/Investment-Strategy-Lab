@@ -75,7 +75,9 @@ def main():
             "repository": os.environ["GITHUB_REPOSITORY"],
             "run_id": int(os.environ["GITHUB_RUN_ID"]),
             "run_attempt": int(os.environ["GITHUB_RUN_ATTEMPT"]),
-            "head_sha": os.environ["GITHUB_SHA"],
+            # pull_request GITHUB_SHA denotes the temporary merge commit,
+            # whereas Actions run metadata uses the PR HEAD commit SHA.
+            "head_sha": os.environ.get("GITHUB_CAPTURE_HEAD_SHA") or os.environ["GITHUB_SHA"],
             "event": os.environ["GITHUB_EVENT_NAME"],
         }
     except (KeyError, ValueError) as exc:
