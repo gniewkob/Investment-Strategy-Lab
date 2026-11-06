@@ -328,6 +328,48 @@ class WorkingEngineAcceptance(unittest.TestCase):
         self.assertEqual(self.scalar(
             "SELECT count(*) FROM investment_lab.paper_events"), 3)
 
+    def test_v02_health_distinguishes_current_from_cutoff_freshness(self):
+        # New references arrived after the research cutoff. They are fresh
+        # TODAY, but were not available to the earlier model decision.
+        self.conn.execute("""INSERT INTO investment_lab.price_observations
+          (instrument_code,source_code,observed_for,ingested_at,
+           interval_code,return_basis,close_price)
+          VALUES
+          ('USDPLN_NBP','nbp_rates',now()-interval '1 day',now(),
+           '1d','FX_RATE',3.82),
+          ('EURPLN_NBP','nbp_rates',now()-interval '1 day',now(),
+           '1d','FX_RATE',4.32),
+          ('GOLD_NBP_PLN_G','nbp_gold',now()-interval '1 day',now(),
+           '1d','PRICE_ONLY',502)""")
+        self.conn.execute(V02_SQL)
+        rows = self.conn.execute(V02_HEALTH_SQL).fetchall()
+        self.assertEqual(len(rows), 3)
+        self.assertEqual({r[11] for r in rows}, {"ENGINE_OK"})
+        self.assertEqual({r[12] for r in rows}, {"SOURCE_RECENT"})
+        self.assertEqual({r[13] for r in rows}, {"SOURCE_MISSING_AT_CUTOFF"})
+        self.assertTrue(all(r[14] is None and r[15] is None
+                            and r[16] is None for r in rows))
+        self.assertEqual(self.scalar(
+            "SELECT count(*) FROM investment_lab.paper_events"), 3)
+
+    def test_v02_health_cutoff_freshness_recovers_with_prior_ingestion(self):
+        self.conn.execute("""INSERT INTO investment_lab.price_observations
+          (instrument_code,source_code,observed_for,ingested_at,
+           interval_code,return_basis,close_price)
+          VALUES
+          ('USDPLN_NBP','nbp_rates',now()-interval '3 days',
+           now()-interval '2 days','1d','FX_RATE',3.82),
+          ('EURPLN_NBP','nbp_rates',now()-interval '3 days',
+           now()-interval '2 days','1d','FX_RATE',4.32),
+          ('GOLD_NBP_PLN_G','nbp_gold',now()-interval '3 days',
+           now()-interval '2 days','1d','PRICE_ONLY',502)""")
+        self.conn.execute(V02_SQL)
+        rows = self.conn.execute(V02_HEALTH_SQL).fetchall()
+        self.assertEqual({r[11] for r in rows}, {"ENGINE_OK"})
+        self.assertEqual({r[13] for r in rows}, {"SOURCE_RECENT_AT_CUTOFF"})
+        self.assertTrue(all(r[14] is not None and r[15] is not None
+                            and r[16] is not None for r in rows))
+
     def test_nbp_reference_metrics_fail_closed_when_source_missing(self):
         rows = self.conn.execute(NBP_METRICS_SQL).fetchall()
         self.assertEqual(len(rows), 3)
