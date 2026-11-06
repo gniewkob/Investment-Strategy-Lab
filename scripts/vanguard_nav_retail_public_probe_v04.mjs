@@ -68,6 +68,20 @@ try{
                            id:e.id,classes:String(e.className).slice(0,100),
                            short_text:(e.innerText||"").trim().slice(0,180)})));
       result.visible_modals=blockers;
+      // Read-only classification of an nds-modal overlay. Do not dismiss
+      // legal eligibility, investor-type or age declarations automatically.
+      result.nds_modal_details=await page.locator("nds-modal").evaluateAll(els=>
+        els.map(el=>{const r=el.getBoundingClientRect();return {
+          visible:r.width>0&&r.height>0,
+          text:(el.innerText||"").trim().slice(0,950),
+          buttons:Array.from(el.querySelectorAll("button"))
+            .slice(0,10).map(b=>({
+               text:(b.innerText||"").trim().slice(0,90),
+               aria:b.getAttribute("aria-label"),
+               title:b.getAttribute("title")
+            }))
+        };}).filter(x=>x.visible).slice(0,3));
+
       const network=[];
       page.on("response",response=>{try{const url=new URL(response.url());
         if(official(response.url()) && /download|historical|price|export|nav/i.test(url.pathname)
