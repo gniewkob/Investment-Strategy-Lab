@@ -1,0 +1,74 @@
+name: Working Engine v0.1 E2E
+on:
+  pull_request:
+    paths:
+      - 'db/working_engine_v01_research_cycle.sql'
+      - 'db/working_engine_v02_research_cycle.sql'
+      - 'db/working_engine_v03_research_cycle.sql'
+      - 'db/working_engine_v03_health_READONLY.sql'
+      - 'db/working_engine_v02_health_READONLY.sql'
+      - 'db/nbp_reference_metrics_v01_READONLY.sql'
+      - 'db/working_engine_v01_health_READONLY.sql'
+      - 'scripts/nbp_reference_capture.py'
+      - 'scripts/nbp_lab_prepare.py'
+      - 'scripts/nbp_lab_ingest_sql.py'
+      - 'scripts/nbp_lab_daily_source.py'
+      - 'tests/test_nbp_lab_prepare.py'
+      - 'tests/test_nbp_lab_ingest_sql.py'
+      - 'tests/test_nbp_lab_daily_source.py'
+      - 'tests/integration/test_working_engine_v01.py'
+      - '.github/workflows/working-engine-v01-ci.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'db/working_engine_v01_research_cycle.sql'
+      - 'db/working_engine_v02_research_cycle.sql'
+      - 'db/working_engine_v03_research_cycle.sql'
+      - 'db/working_engine_v03_health_READONLY.sql'
+      - 'db/working_engine_v02_health_READONLY.sql'
+      - 'db/nbp_reference_metrics_v01_READONLY.sql'
+      - 'db/working_engine_v01_health_READONLY.sql'
+      - 'scripts/nbp_reference_capture.py'
+      - 'scripts/nbp_lab_prepare.py'
+      - 'scripts/nbp_lab_ingest_sql.py'
+      - 'scripts/nbp_lab_daily_source.py'
+      - 'tests/test_nbp_lab_prepare.py'
+      - 'tests/test_nbp_lab_ingest_sql.py'
+      - 'tests/test_nbp_lab_daily_source.py'
+      - 'tests/integration/test_working_engine_v01.py'
+      - '.github/workflows/working-engine-v01-ci.yml'
+permissions:
+  contents: read
+jobs:
+  postgres-e2e:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: investment_lab
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d investment_lab"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install isolated database test driver
+        run: python -m pip install 'psycopg[binary]>=3.1,<4'
+      - name: Validate NBP capture and SQL compilation without network
+        run: |
+          python -m unittest discover -s tests -p 'test_nbp_lab_prepare.py' -v
+          python -m unittest discover -s tests -p 'test_nbp_lab_ingest_sql.py' -v
+          python -m unittest discover -s tests -p 'test_nbp_lab_daily_source.py' -v
+      - name: Verify live SQL script against disposable Postgres
+        env:
+          ISL_TEST_POSTGRES_DSN: postgresql://postgres:postgres@localhost:5432/investment_lab
+        run: python -m unittest discover -s tests/integration -p 'test_working_engine_v01.py' -v
