@@ -56,7 +56,7 @@ class BondSpotMonthlyArchiveTests(unittest.TestCase):
         raw = b"<table>2024-02-16 1966.95 1965.16 2024-02-16 1966.95 1965.15</table>"
         with self.assertRaisesRegex(ValueError, "ambiguous"):
             parse_close(d, raw)
-        with self.assertRaisesRegex(ValueError, "positive"):
+        with self.assertRaisesRegex(ValueError, "invalid TBSP closing value"):
             parse_close(d, b"<table>2024-02-16 1966.95 0000.00</table>")
 
     def test_source_query_pins_official_archive(self):
