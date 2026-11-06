@@ -1,0 +1,50 @@
+name: ISL v0.7 read-only shadow capture candidate
+on:
+  pull_request:
+    paths:
+      - 'scripts/shadow_capture_v07.py'
+      - 'tests/test_shadow_capture_v07.py'
+      - '.github/workflows/shadow-capture-v07.yml'
+  workflow_dispatch:
+  schedule:
+    # Applies only once this workflow is merged into the default branch.
+    - cron: '17 6 * * 1'
+permissions:
+  contents: read
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify offline capture contracts
+        run: python -m unittest discover -s tests -p 'test_shadow_capture_v07.py' -v
+      - name: Capture independent-run-context candidate, never orders or market returns
+        run: python -m scripts.shadow_capture_v07 --output shadow-capture-v07.json
+      - name: Fail closed on non-HOLD signals or accidental financial actions
+        run: |
+          python - <<'PY'
+          import json
+          from scripts.shadow_decision_engine_v05 import _digest
+          with open('shadow-capture-v07.json', encoding='utf-8') as f:
+              x = json.load(f)
+          assert x['capture_sha256'] == _digest({k:v for k,v in x.items() if k != 'capture_sha256'})
+          assert not x['decision']['eligible_models']
+          assert all(v['status'] == 'HOLD_CASH' for v in x['decision']['model_decisions'].values())
+          assert x['orders_sent'] == x['paper_fills'] == x['database_writes'] == 0
+          assert x['prospective_timing_certified'] is False
+          assert x['github_metadata_independently_verified'] is False
+          print('PASS: research-only HOLD_CASH capture candidate, no orders or database writes')
+          PY
+      - name: Retain bounded provenance receipt, not prices
+        uses: actions/upload-artifact@v4
+        with:
+          name: isl-v07-shadow-capture-run-${{ github.run_id }}-attempt-${{ github.run_attempt }}
+          path: shadow-capture-v07.json
+          if-no-files-found: error
+          retention-days: 90
