@@ -1,47 +1,37 @@
--- v0.4: read-only, live-Neon readiness gate for M1/M2/M3.
--- An index name or a reference quote is NOT a tradable instrument.
--- Existence of rows alone NEVER proves source vintage or fill feasibility.
+-- v0.4: read-only Neon source readiness. No strategy performance here.
+-- 36 consecutive months and source vintage verification are separate gates.
 WITH required(instrument_code,model_scope) AS (
- VALUES
- ('GLOBAL_EQUITY_TR_PLN','M1+M2+M3'),
- ('PL_BONDS_TR_PLN','M2+M3'),
- ('GOLD_TR_PLN','M2+M3')
+ VALUES ('GLOBAL_EQUITY_TR_PLN','M1+M2+M3'),
+        ('PL_BONDS_TR_PLN','M2+M3'),
+        ('GOLD_TR_PLN','M2+M3')
+),
+structurally_qualified AS (
+ SELECT p.instrument_code,p.observed_for
+ FROM investment_lab.price_observations p
+ JOIN investment_lab.instruments i USING(instrument_code)
+ WHERE p.interval_code='1mo' AND p.return_basis='TOTAL_RETURN'
+   AND i.quote_currency='PLN' AND p.close_price>0
+   AND p.source_url LIKE 'https://%'
+   AND p.observed_for<=now() AND p.ingested_at<=now()
 ),
 present AS (
  SELECT r.instrument_code,r.model_scope,
-        count(p.instrument_code) FILTER (
-          WHERE p.interval_code='1mo'
-            AND p.return_basis='TOTAL_RETURN'
-            AND i.quote_currency='PLN'
-            AND p.close_price>0
-            AND p.source_url LIKE 'https://%'
-        ) AS monthly_qualified_rows,
-        count(DISTINCT to_char(p.observed_for AT TIME ZONE 'UTC','YYYY-MM')) FILTER (
-          WHERE p.interval_code='1mo'
-            AND p.return_basis='TOTAL_RETURN'
-            AND i.quote_currency='PLN'
-            AND p.close_price>0
-            AND p.source_url LIKE 'https://%'
-        ) AS distinct_qualified_months,
-        min(p.observed_for) FILTER (
-          WHERE p.interval_code='1mo' AND p.return_basis='TOTAL_RETURN'
-            AND i.quote_currency='PLN'
-        ) AS first_month,
-        max(p.observed_for) FILTER (
-          WHERE p.interval_code='1mo' AND p.return_basis='TOTAL_RETURN'
-            AND i.quote_currency='PLN'
-        ) AS last_month,
+        COUNT(q.instrument_code) AS monthly_qualified_rows,
+        COUNT(DISTINCT to_char(q.observed_for AT TIME ZONE 'UTC','YYYY-MM'))
+           AS distinct_qualified_months,
+        MIN(q.observed_for) AS first_month,
+        MAX(q.observed_for) AS last_month,
         bool_or(i.instrument_code IS NOT NULL) AS instrument_registered
  FROM required r
  LEFT JOIN investment_lab.instruments i ON i.instrument_code=r.instrument_code
- LEFT JOIN investment_lab.price_observations p ON p.instrument_code=r.instrument_code
+ LEFT JOIN structurally_qualified q ON q.instrument_code=r.instrument_code
  GROUP BY r.instrument_code,r.model_scope
 )
 SELECT instrument_code,model_scope,instrument_registered,
        monthly_qualified_rows,distinct_qualified_months,
        first_month,last_month,
        CASE WHEN monthly_qualified_rows=0 THEN 'NOT_RUN_SERIES_MISSING'
-            WHEN distinct_qualified_months<10 THEN 'NOT_RUN_INSUFFICIENT_MONTHS'
+            WHEN distinct_qualified_months<36 THEN 'NOT_RUN_INSUFFICIENT_MONTHS'
             ELSE 'NEEDS_VINTAGE_AND_EXECUTION_EVIDENCE'
        END AS model_research_readiness,
        'NEVER_INTERPRET_REFERENCE_INDEX_AS_EXECUTABLE_PRICE' AS execution_guard,
