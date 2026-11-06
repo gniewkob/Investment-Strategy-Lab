@@ -111,6 +111,9 @@ class NAVUSDPLNSourceTests(unittest.TestCase):
     def test_wrong_fx_basis_or_fake_NBP_receipt_rejected(self):
         nav,raw,nbp=fixture()
         nbp["series_contract"]["usdpln"]["return_basis"]="PRICE_ONLY"
+        from scripts.reference_archive_calendar_v04 import _digest
+        nbp["evidence_sha256"]=_digest({k:v for k,v in nbp.items()
+                                         if k!="evidence_sha256"})
         with self.assertRaisesRegex(ValueError,"official FX_RATE"):
             match_official_nav_to_fx(nav,raw,nbp)
         nav,raw,nbp=fixture()
