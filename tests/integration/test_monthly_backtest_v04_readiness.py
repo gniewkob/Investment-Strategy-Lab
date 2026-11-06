@@ -35,7 +35,9 @@ class MonthlyBacktestReadinessTest(unittest.TestCase):
           quote_currency text NOT NULL)""")
         self.conn.execute("""CREATE TABLE investment_lab.price_observations(
           instrument_code text NOT NULL,source_code text NOT NULL,
-          observed_for timestamptz NOT NULL,interval_code text NOT NULL,
+          observed_for timestamptz NOT NULL,
+          ingested_at timestamptz NOT NULL DEFAULT now(),
+          interval_code text NOT NULL,
           return_basis text NOT NULL,close_price numeric NOT NULL,
           source_url text)""")
 
@@ -53,7 +55,7 @@ class MonthlyBacktestReadinessTest(unittest.TestCase):
                 "INSERT INTO investment_lab.instruments VALUES (%s,%s)",
                 (asset, currency))
             for i in range(months):
-                year = 2024 + i // 12
+                year = 2023 + i // 12
                 month = i % 12 + 1
                 day = date(year, month, 28)
                 self.conn.execute("""INSERT INTO
@@ -94,19 +96,30 @@ class MonthlyBacktestReadinessTest(unittest.TestCase):
                          {"NOT_RUN_INSUFFICIENT_MONTHS"})
         self.assertEqual({r[4] for r in rows.values()}, {9})
 
+    def test_future_retrieval_not_counted_as_historical_evidence(self):
+        self._insert(months=36)
+        self.conn.execute("""UPDATE investment_lab.price_observations
+          SET ingested_at=now()+interval '1 day'
+          WHERE instrument_code='GLOBAL_EQUITY_TR_PLN'""")
+        rows = self._query()
+        self.assertEqual(rows["GLOBAL_EQUITY_TR_PLN"][7],
+                         "NOT_RUN_SERIES_MISSING")
+        self.assertEqual(rows["PL_BONDS_TR_PLN"][4], 36)
+        self.assertEqual(rows["GOLD_TR_PLN"][4], 36)
+
     def test_even_complete_index_not_marked_tradable(self):
-        self._insert(months=12)
+        self._insert(months=36)
         first = self._query()
         self.assertEqual({r[7] for r in first.values()},
                          {"NEEDS_VINTAGE_AND_EXECUTION_EVIDENCE"})
-        self.assertEqual({r[4] for r in first.values()}, {12})
+        self.assertEqual({r[4] for r in first.values()}, {36})
         self.assertEqual({r[2] for r in first.values()}, {True})
         self.assertTrue(all("NEVER_INTERPRET_REFERENCE_INDEX" in r[8]
                             for r in first.values()))
         self.assertEqual(self._query(), first)
         self.assertEqual(
             self.conn.execute("""SELECT count(*) FROM
-                investment_lab.price_observations""").fetchone()[0], 36)
+                investment_lab.price_observations""").fetchone()[0], 108)
 
 
 if __name__ == "__main__":
