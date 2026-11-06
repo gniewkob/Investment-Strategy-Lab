@@ -13,10 +13,12 @@ on:
       - 'scripts/shadow_journal_v06.py'
       - 'scripts/shadow_capture_v07.py'
       - 'scripts/github_checkpoint_verify_v08.py'
+      - 'scripts/shadow_evidence_ledger_v09.py'
       - 'tests/test_shadow_forward_evaluation_v05.py'
       - 'tests/test_shadow_journal_v06.py'
       - 'tests/test_shadow_capture_v07.py'
       - 'tests/test_github_checkpoint_verify_v08.py'
+      - 'tests/test_shadow_evidence_ledger_v09.py'
       - 'tests/test_shadow_decision_engine_v05.py'
       - 'tests/test_monthly_proxy_backtest_v04.py'
       - 'scripts/nbp_long_history_monthly.py'
@@ -70,10 +72,12 @@ on:
       - 'scripts/shadow_journal_v06.py'
       - 'scripts/shadow_capture_v07.py'
       - 'scripts/github_checkpoint_verify_v08.py'
+      - 'scripts/shadow_evidence_ledger_v09.py'
       - 'tests/test_shadow_forward_evaluation_v05.py'
       - 'tests/test_shadow_journal_v06.py'
       - 'tests/test_shadow_capture_v07.py'
       - 'tests/test_github_checkpoint_verify_v08.py'
+      - 'tests/test_shadow_evidence_ledger_v09.py'
       - 'tests/test_shadow_decision_engine_v05.py'
       - 'tests/test_monthly_proxy_backtest_v04.py'
       - 'scripts/nbp_long_history_monthly.py'
@@ -160,6 +164,8 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_shadow_capture_v07.py' -v
       - name: Validate v0.8 GitHub checkpoint integrity and fail-closed retrospective gates
         run: python -m unittest discover -s tests -p 'test_github_checkpoint_verify_v08.py' -v
+      - name: Validate v0.9 durable local evidence ledger, idempotency and tamper detection
+        run: python -m unittest discover -s tests -p 'test_shadow_evidence_ledger_v09.py' -v
       - name: Validate read-only shadow decisions and source-quality fail-close
         run: python -m unittest discover -s tests -p 'test_shadow_decision_engine_v05.py' -v
       - name: Validate v0.4 monthly backtester, no database/network
