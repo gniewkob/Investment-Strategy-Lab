@@ -1,0 +1,78 @@
+name: ISL v0.4 official 60-month BondSpot TBSP research archive
+on:
+  pull_request:
+    paths:
+      - 'scripts/tbsp_official_archive_v04.py'
+      - 'scripts/tbsp_archive_merge_v04.py'
+      - 'tests/test_tbsp_official_archive_v04.py'
+      - '.github/workflows/tbsp-official-60months-v04.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        include:
+          - {id: '01', start: '2021-11', end: '2022-10'}
+          - {id: '02', start: '2022-11', end: '2023-10'}
+          - {id: '03', start: '2023-11', end: '2024-10'}
+          - {id: '04', start: '2024-11', end: '2025-10'}
+          - {id: '05', start: '2025-11', end: '2026-10'}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test source parser and artifact hash validation
+        run: python -m unittest discover -s tests -p 'test_tbsp_official_archive_v04.py' -v
+      - name: Retrieve official monthly TBSP closing index levels
+        run: |
+          python -m scripts.tbsp_official_archive_v04 \
+            --start-month "${{ matrix.start }}" \
+            --end-month "${{ matrix.end }}" \
+            --out "bondspot-tbsp-${{ matrix.id }}.json"
+      - name: Keep source evidence (index level, dated URL and raw SHA)
+        uses: actions/upload-artifact@v4
+        with:
+          name: tbsp-chunk-${{ matrix.id }}
+          path: bondspot-tbsp-${{ matrix.id }}.json
+          if-no-files-found: error
+          retention-days: 14
+
+  merge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    needs: collect
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: tbsp-chunk-*
+          path: tbsp-chunks
+      - name: Check full 60-month continuity, raw-source hashes and status
+        run: |
+          python -m scripts.tbsp_archive_merge_v04 \
+            --chunks-dir tbsp-chunks \
+            --start-month 2021-11 --end-month 2026-10 \
+            --out tbsp-5y-nonexecuting-research-evidence.json
+      - name: Retain independently checked full archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: tbsp-60months-verified-reference
+          path: tbsp-5y-nonexecuting-research-evidence.json
+          if-no-files-found: error
+          retention-days: 14
