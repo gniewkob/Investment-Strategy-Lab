@@ -1,11 +1,7 @@
 name: ISL v0.4 actual-source NBP and TBSP 60-month calendar audit
+# Live provider probes run by explicit research dispatch, not every PR push.
+# All offline parser and safety tests remain in working-engine-v01-ci.yml.
 on:
-  pull_request:
-    paths:
-      - 'scripts/reference_archive_calendar_v04.py'
-      - 'scripts/nbp_bondspot_exact_date_v04.py'
-      - 'tests/test_reference_archive_calendar_v04.py'
-      - '.github/workflows/v04-nbp-bondspot-calendar-e2e.yml'
   workflow_dispatch:
 permissions:
   actions: read
