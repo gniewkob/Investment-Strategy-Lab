@@ -1,0 +1,40 @@
+name: ISL NBP daily public source receipt
+
+# This is source acquisition ONLY; no Neon, wallets, brokerage or paper events.
+# Scheduled workflows run exclusively from GitHub default branch (main).
+on:
+  schedule:
+    - cron: '17 4 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: isl-nbp-daily-public-source
+  cancel-in-progress: false
+
+jobs:
+  official-reference-receipt:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Checkout tested frozen lab source code (not default branch)
+        uses: actions/checkout@v4
+        with:
+          ref: '9bebd1aabb66019d3de0556c0ff1733d155bdbc1'
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate importer, time window and source contract offline
+        run: |
+          python -m unittest discover -s tests -p 'test_nbp_lab_prepare.py' -v
+          python -m unittest discover -s tests -p 'test_nbp_lab_ingest_sql.py' -v
+          python -m unittest discover -s tests -p 'test_nbp_lab_daily_source.py' -v
+      - name: Fetch NBP official public API and compile vetted ingestion receipt
+        run: |
+          python -m scripts.nbp_lab_daily_source --lookback-days 31
+      # Do not add a Neon secret or a database client to this workflow.
+      # The existing private lab automation independently validates the
+      # completed run and explicitly applies only this research-source SQL.
