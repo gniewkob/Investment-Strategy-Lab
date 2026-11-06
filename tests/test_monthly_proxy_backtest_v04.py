@@ -13,7 +13,7 @@ from scripts.monthly_proxy_backtest_v04 import (
 )
 
 
-def fixture(n=18, *, fee="20", slip="10", train=10):
+def fixture(n=18, *, fee="20", slip="10", train=10, start_year=2024):
     periods = []
     series = {}
     for asset in ASSETS:
@@ -26,7 +26,7 @@ def fixture(n=18, *, fee="20", slip="10", train=10):
             "rows": [],
         }
     for i in range(n):
-        year = 2024 + i // 12
+        year = start_year + i // 12
         month = (i % 12) + 1
         end = date(year, month, calendar.monthrange(year, month)[1])
         first_next_year = year + (month == 12)
@@ -257,7 +257,14 @@ class MonthlyProxyBacktestTests(unittest.TestCase):
             run_backtest(p)
 
     def test_reconstruction_not_misreported_as_certified_or_real_return(self):
-        p = fixture()
+        short = fixture()
+        short["source_vintage"] = "HISTORICAL_RESEARCH_RECONSTRUCTION"
+        insufficient = run_backtest(short)
+        self.assertEqual(insufficient["status"], "NOT_RUN_INSUFFICIENT_HISTORY")
+        self.assertEqual(insufficient["available_months"], 18)
+        self.assertEqual(insufficient["minimum_historical_months"], 36)
+        self.assertEqual(insufficient["results"], [])
+        p = fixture(n=48, train=30, start_year=2022)
         p["source_vintage"] = "HISTORICAL_RESEARCH_RECONSTRUCTION"
         r = run_backtest(p)
         self.assertEqual(r["status"], "CONDITIONAL_HISTORICAL_RECONSTRUCTION")
@@ -267,6 +274,28 @@ class MonthlyProxyBacktestTests(unittest.TestCase):
                          "NON_EXECUTABLE_FRACTIONAL_TOTAL_RETURN_INDEX_PROXY")
         self.assertEqual(r["real_orders"], 0)
         self.assertEqual(r["paper_events_created"], 0)
+
+    def test_five_year_monthly_synthetic_scenario_not_real_performance(self):
+        r = run_backtest(fixture(n=60, train=36))
+        self.assertEqual(r["status"], "SYNTHETIC_TEST_ONLY")
+        self.assertEqual((r["training_periods"], r["test_periods"]), (36, 24))
+        self.assertEqual({x["contributed_pln"] for x in r["results"]},
+                         {"6000.00"})
+        self.assertEqual({len(x["timeline"]) for x in r["results"]}, {60})
+        self.assertEqual(r["real_orders"], 0)
+        self.assertFalse(r["investment_performance_proven"])
+
+    def test_historical_reconstruction_must_not_use_future_data(self):
+        p = fixture(n=48, train=30, start_year=2024)
+        p["source_vintage"] = "HISTORICAL_RESEARCH_RECONSTRUCTION"
+        with self.assertRaisesRegex(BacktestValidationError, "future date"):
+            run_backtest(p)
+
+    def test_nonboolean_self_certification_field_rejected(self):
+        p = fixture()
+        p["historical_pit_certified"] = "true"
+        with self.assertRaisesRegex(BacktestValidationError, "self-certify"):
+            run_backtest(p)
 
     def test_allocation_leverage_never_exceeds_one(self):
         r = run_backtest(fixture())
