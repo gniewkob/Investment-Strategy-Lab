@@ -198,8 +198,8 @@ def validate(payload: object) -> tuple[dict, list[dict]] | tuple[dict, None]:
             raise BacktestValidationError("decision timestamps out of order")
         # These are observed month-end benchmark values; the decision is
         # AFTER their availability, never a fill at the historical close.
-        if decision.date().year * 12 + decision.date().month <= ym[0] * 12 + ym[1]:
-            raise BacktestValidationError("decision must follow observed month")
+        if (decision.date().year, decision.date().month) != _next_month(ym):
+            raise BacktestValidationError("decision must be in the immediately following month")
         levels = {}
         references = {}
         for asset in ASSETS:
