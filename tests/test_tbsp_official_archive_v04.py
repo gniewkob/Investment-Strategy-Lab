@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 import unittest
 
 from scripts.tbsp_official_archive_v04 import collect, _url, _parse, _day_row
+from scripts.tbsp_archive_merge_v04 import merge, check_chunk
 
 NOW=datetime(2026,11,6,13,tzinfo=timezone.utc)
 
@@ -77,6 +78,36 @@ class OfficialBondSpotArchiveTests(unittest.TestCase):
     def test_future_clock_in_historical_month(self):
         with self.assertRaisesRegex(ValueError,"completed months"):
             collect("2026-11","2026-11",fetch=fixture,clock=lambda:NOW)
+
+    def test_merge_two_source_provenance_chunks(self):
+        a=collect("2025-02","2025-02",fetch=fixture,clock=lambda:NOW)
+        b=collect("2025-03","2025-03",fetch=fixture,clock=lambda:NOW)
+        merged=merge([b,a],"2025-02","2025-03")
+        self.assertEqual(merged["monthly_count"],2)
+        self.assertEqual(len(merged["chunk_receipts"]),2)
+        self.assertEqual(merged["monthly_observations"][0]["month"],"2025-02")
+        self.assertEqual(merged["monthly_observations"][-1]["month"],"2025-03")
+        self.assertEqual(len(merged["evidence_sha256"]),64)
+        self.assertEqual(merged["backtest"],"NOT_RUN_SOURCE_ONLY")
+        self.assertFalse(merged["historical_pit_certified"])
+        self.assertFalse(merged["trading_price_proven"])
+        self.assertEqual(merged["financial_operations"],0)
+
+    def test_merge_rejects_modified_source_receipt(self):
+        a=collect("2025-02","2025-02",fetch=fixture,clock=lambda:NOW)
+        a["observations"][0]["level"]="9999.99"
+        with self.assertRaisesRegex(ValueError,"SHA-256 mismatch"):
+            check_chunk(a)
+
+    def test_merge_rejects_missing_and_overlapping_months(self):
+        a=collect("2025-02","2025-02",fetch=fixture,clock=lambda:NOW)
+        b=collect("2025-03","2025-03",fetch=fixture,clock=lambda:NOW)
+        with self.assertRaisesRegex(ValueError,"gap or overlap"):
+            merge([a,a],"2025-02","2025-03")
+        with self.assertRaisesRegex(ValueError,"cover"):
+            merge([a],"2025-02","2025-03")
+        with self.assertRaisesRegex(ValueError,"gap or overlap"):
+            merge([a,b],"2025-02","2025-04")
 
     def test_nonpositive_or_malformed_close_rejected(self):
         def corrupted(u):
