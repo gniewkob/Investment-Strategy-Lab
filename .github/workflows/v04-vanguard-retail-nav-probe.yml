@@ -23,11 +23,17 @@ jobs:
           npm install --no-save --package-lock=false --ignore-scripts playwright@1.57.0
           npx playwright install --with-deps chromium
       - name: Check official Polish individual-investor NAV export
+        env:
+          ISL_OFFICIAL_RETAIL_REGION: pl
+        run: node scripts/vanguard_nav_retail_public_probe_v04.mjs
+      - name: Check official Swiss private-investor NAV export
+        env:
+          ISL_OFFICIAL_RETAIL_REGION: ch
         run: node scripts/vanguard_nav_retail_public_probe_v04.mjs
       - name: Retain only successfully downloaded verified-host source bytes
         uses: actions/upload-artifact@v4
         with:
           name: vanguard-retail-public-nav-raw-unverified
-          path: vanguard-nav-retail-evidence/*
+          path: vanguard-nav-retail-evidence-*/*
           if-no-files-found: ignore
           retention-days: 7
