@@ -1,5 +1,7 @@
 """Disposable local SQLite integrity suite; no real trading or Neon I/O."""
 from copy import deepcopy
+from hashlib import sha256
+import json
 from pathlib import Path
 import sqlite3
 import tempfile
@@ -89,6 +91,21 @@ class ShadowEvidenceLedgerV09Tests(unittest.TestCase):
             audit(self.db)
         with self.assertRaisesRegex(ShadowInputError, "previous hash corrupted"):
             append(self.db, valid_bundle(42303069320, 1234568))
+
+    def test_versioned_evidence_bundle_matches_original_archive_digest(self):
+        archived = (Path(__file__).resolve().parents[1] / "evidence/shadow/v09"
+                    / "checkpoint-bundle-run-42305280062.json")
+        raw = archived.read_bytes()
+        self.assertEqual(
+            sha256(raw).hexdigest(),
+            "4a4fece5c84996cf7e663abae81d5c583e5397904bbe17ab57b8f0a150b797d3"
+        )
+        result = append(self.db, json.loads(raw))
+        self.assertEqual(result["entries"], 1)
+        self.assertEqual(
+            result["head_sha256"],
+            "c1947c81a81a2699f59f67f1438eb6950afa1c45e3f34aebc87d62fac604ef66"
+        )
 
     def test_uninitialized_or_absent_ledger_not_accepted_as_evidence(self):
         with self.assertRaisesRegex(ShadowInputError, "ledger does not exist"):
