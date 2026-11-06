@@ -77,7 +77,7 @@ INSERT INTO investment_lab.model_versions
 ('M3_TACTICAL',1,'{"execution":"PAPER_ONLY"}');
 INSERT INTO investment_lab.instruments
 (instrument_code,quote_currency) VALUES
-('USDPLN_NBP','PLN'),('GOLD_NBP_PLN_G','PLN'),
+('USDPLN_NBP','PLN'),('EURPLN_NBP','PLN'),('GOLD_NBP_PLN_G','PLN'),
 ('GLOBAL_EQUITY_TR_PLN','PLN');
 INSERT INTO investment_lab.price_observations
 (instrument_code,source_code,observed_for,ingested_at,
