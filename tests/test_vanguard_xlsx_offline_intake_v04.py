@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import calendar
-from datetime import date
+from datetime import date, datetime
 from io import BytesIO
 from zipfile import ZipFile
 from xml.sax.saxutils import escape
@@ -98,6 +98,28 @@ class VanguardOfflineXLSXIntakeTests(unittest.TestCase):
             inspect_export(fake_xlsx(36,formula=True),"2021-11","2024-10")
         with self.assertRaisesRegex(InvalidVanguardXLSX,"macros"):
             inspect_export(fake_xlsx(36,macro=True),"2021-11","2024-10")
+
+    def test_current_month_not_falsely_classified_as_complete_history(self):
+        raw=fake_xlsx(60)
+        with self.assertRaisesRegex(InvalidVanguardXLSX,"only completed historical months"):
+            inspect_export(raw,"2021-11","2026-10",as_of=date(2026,10,31))
+        approved=inspect_export(raw,"2021-11","2026-10",
+                                as_of=date(2026,11,6))
+        self.assertEqual(approved["months"],60)
+
+    def test_future_nav_rows_rejected_even_outside_requested_months(self):
+        raw=fake_xlsx(61)
+        with self.assertRaisesRegex(InvalidVanguardXLSX,"future NAV observation"):
+            inspect_export(raw,"2021-11","2026-10",as_of=date(2026,11,6))
+
+    def test_invalid_asof_type_or_preinception_range_blocked(self):
+        raw=fake_xlsx(60)
+        with self.assertRaisesRegex(InvalidVanguardXLSX,"as_of must be"):
+            inspect_export(raw,"2021-11","2026-10",
+                           as_of=datetime(2026,11,6))
+        with self.assertRaisesRegex(InvalidVanguardXLSX,"predates Vanguard"):
+            inspect_export(raw,"2018-11","2023-10",
+                           as_of=date(2026,11,6))
 
     def test_not_zip_and_short_month_span_rejected(self):
         with self.assertRaises(InvalidVanguardXLSX):
