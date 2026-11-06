@@ -14,6 +14,8 @@ from hashlib import sha256
 from urllib.parse import urlsplit
 import json
 import re
+import csv
+import io
 
 from scripts.reference_archive_calendar_v04 import _verify_digest, _digest
 
@@ -97,6 +99,44 @@ def match_official_nav_to_fx(nav_document: dict, original_download_bytes: bytes,
     monthly = nav_document.get("monthly")
     if not isinstance(monthly, list) or not 36 <= len(monthly) <= 72:
         raise ValueError("36-72 monthly verified NAV observations required")
+    # The monthly values are NOT trusted just because they appear beside
+    # the raw-file hash. Independently reproduce each value from the actual
+    # source bytes. Supported CSV format is a deliberately narrow candidate;
+    # official Vanguard Excel bytes require separate format validation.
+    if nav_document.get("raw_file_format") != "CSV_DATE_NAV_USD_V1":
+        raise ValueError("Vanguard XLSX/raw format not independently parsed")
+    try:
+        raw_text = original_download_bytes.decode("utf-8-sig")
+    except UnicodeDecodeError as e:
+        raise ValueError("NAV file is not UTF-8 CSV") from e
+    reader = csv.DictReader(io.StringIO(raw_text, newline=""))
+    if reader.fieldnames != ["date", "nav_usd"]:
+        raise ValueError("NAV CSV header must be date,nav_usd")
+    parsed = {}
+    seen_dates = set()
+    for idx, row in enumerate(reader):
+        if idx >= 6000 or set(row) != {"date", "nav_usd"}:
+            raise ValueError("unbounded or ambiguous NAV CSV rows")
+        try:
+            observed = date.fromisoformat(row["date"])
+        except (TypeError,ValueError) as e:
+            raise ValueError("invalid original NAV source date") from e
+        if observed in seen_dates:
+            raise ValueError("duplicated original NAV source day")
+        seen_dates.add(observed)
+        value = _positive(row["nav_usd"], "source NAV USD")
+        month = observed.strftime("%Y-%m")
+        previous = parsed.get(month)
+        if previous is None or observed > previous[0]:
+            parsed[month] = (observed, value)
+    for row in monthly:
+        if not isinstance(row, dict) or row.get("month") not in parsed:
+            raise ValueError("NAV month absent from original export")
+        expected_day, expected_price = parsed[row["month"]]
+        if (row.get("observed_for") != expected_day.isoformat()
+                or _positive(row.get("nav_usd"), "NAV manifest USD")
+                   != expected_price):
+            raise ValueError("NAV manifest cannot be reproduced from original source bytes")
     _verify_digest(nbp_document)
     if (nbp_document.get("source") != "NBP_OFFICIAL_API"
             or nbp_document.get("data_kind") != "NON_EXECUTABLE_REFERENCE_ONLY"
