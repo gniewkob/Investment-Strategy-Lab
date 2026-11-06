@@ -1,0 +1,66 @@
+name: ISL v0.4 actual-source NBP and TBSP 60-month calendar audit
+on:
+  pull_request:
+    paths:
+      - 'scripts/reference_archive_calendar_v04.py'
+      - 'tests/test_reference_archive_calendar_v04.py'
+      - '.github/workflows/v04-nbp-bondspot-calendar-e2e.yml'
+  workflow_dispatch:
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  real-reference-calendar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Offline data-integrity and fail-closed tests
+        run: python -m unittest discover -s tests -p 'test_reference_archive_calendar_v04.py' -v
+      - name: Retrieve the two already verified official source artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p source-evidence/nbp source-evidence/bondspot
+          gh run download 42228167332 --repo gniewkob/Investment-Strategy-Lab \
+            --name nbp-5y-reference-202111-202610 --dir source-evidence/nbp
+          gh run download 42238752683 --repo gniewkob/Investment-Strategy-Lab \
+            --name bondspot-month-end-source-proof-v04 --dir source-evidence/bondspot
+          test -s source-evidence/nbp/nbp-research-evidence-202111-202610.json
+          test -s source-evidence/bondspot/bondspot-month-end-source-proof-v04.json
+      - name: Reconcile real 60-month source observations without a backtest
+        run: |
+          python -m scripts.reference_archive_calendar_v04 \
+            --nbp source-evidence/nbp/nbp-research-evidence-202111-202610.json \
+            --bondspot source-evidence/bondspot/bondspot-month-end-source-proof-v04.json \
+            --out source-evidence/reference-calendar-v04-audit.json
+      - name: Enforce expected verified historical evidence boundaries
+        run: |
+          python - <<'PY'
+          import json
+          p="source-evidence/reference-calendar-v04-audit.json"
+          d=json.load(open(p))
+          assert d["months"] == 60
+          assert d["first_month"] == "2021-11"
+          assert d["last_month"] == "2026-10"
+          assert d["nbp_evidence_sha256"] == "58b22c10b7fab1fc09fbf07b1ff627cd8993e9df05b8ec8b308df31cd53b86b3"
+          assert d["bondspot_evidence_sha256"] == "757dc284d64a472f6d759afa252c5a9b86726b66ac0af9b4137919f735d03d4d"
+          assert d["same_calendar_date_months"] == 55
+          assert d["different_calendar_date_months"] == 5
+          assert d["backtest_status"].startswith("NOT_RUN")
+          assert d["paper_events_created"] == d["financial_operations"] == 0
+          print("REAL_REFERENCE_CALENDAR_AUDIT_PASS: 60 months, 55 identical dates, 5 mismatches; no forward-looking join or performance calculations")
+          PY
+      - name: Keep research audit only, no portfolio/account writes
+        uses: actions/upload-artifact@v4
+        with:
+          name: audited-nbp-bondspot-60-month-reference-calendar
+          path: source-evidence/reference-calendar-v04-audit.json
+          if-no-files-found: error
+          retention-days: 14
