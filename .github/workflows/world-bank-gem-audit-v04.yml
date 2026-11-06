@@ -1,0 +1,22 @@
+name: World Bank GEM availability audit v04
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Offline audit tests
+        run: python -m unittest discover -s tests -p 'test_world_bank_gem_audit_v04.py' -v
+      - name: Live availability audit (BLOCKED is a valid audit result)
+        run: python scripts/world_bank_gem_audit_v04.py --output gem-audit.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gem-availability-audit
+          path: gem-audit.json
+          retention-days: 14

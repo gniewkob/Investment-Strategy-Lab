@@ -40,6 +40,8 @@ on:
       - 'tests/test_nbp_lab_ingest_sql.py'
       - 'tests/test_nbp_lab_daily_source.py'
       - 'tests/integration/test_working_engine_v01.py'
+      - 'scripts/world_bank_gem_audit_v04.py'
+      - 'tests/test_world_bank_gem_audit_v04.py'
       - '.github/workflows/working-engine-v01-ci.yml'
   push:
     branches: [main]
@@ -68,6 +70,8 @@ on:
       - 'tests/test_nbp_lab_ingest_sql.py'
       - 'tests/test_nbp_lab_daily_source.py'
       - 'tests/integration/test_working_engine_v01.py'
+      - 'scripts/world_bank_gem_audit_v04.py'
+      - 'tests/test_world_bank_gem_audit_v04.py'
       - '.github/workflows/working-engine-v01-ci.yml'
 permissions:
   contents: read
@@ -100,6 +104,8 @@ jobs:
           python -m unittest discover -s tests -p 'test_nbp_lab_prepare.py' -v
           python -m unittest discover -s tests -p 'test_nbp_lab_ingest_sql.py' -v
           python -m unittest discover -s tests -p 'test_nbp_lab_daily_source.py' -v
+      - name: Validate GEM availability audit offline
+        run: python -m unittest discover -s tests -p 'test_world_bank_gem_audit_v04.py' -v
       - name: Validate TBSP dated-source and digest controls offline
         run: python -m unittest discover -s tests -p 'test_tbsp_official_archive_v04.py' -v
       - name: Validate month-end BondSpot history parser offline
