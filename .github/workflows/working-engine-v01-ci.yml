@@ -16,6 +16,7 @@ on:
       - 'tests/test_official_market_source_probe_v04.py'
       - 'tests/test_nbp_long_history_monthly.py'
       - 'scripts/reference_archive_calendar_v04.py'
+      - 'scripts/nbp_bondspot_exact_date_v04.py'
       - 'tests/test_reference_archive_calendar_v04.py'
       - 'scripts/tbsp_official_archive_v04.py'
       - 'scripts/tbsp_archive_merge_v04.py'
