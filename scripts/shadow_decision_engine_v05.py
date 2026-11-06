@@ -213,6 +213,7 @@ def evaluate(payload):
                 "decision_month": next(iter({data[code][-1][0] for code in required})).strftime("%Y-%m"),
                 "observation_dates": {c:data[c][-1][1].isoformat() for c in required},
                 "source_sha256": {c:checks[c]["raw_sha256"] for c in required},
+                "baseline_level_sha256": {c:_digest({"month":data[c][-1][0].strftime("%Y-%m"),"level_pln":str(data[c][-1][3])}) for c in required},
                 "assumptions_are_not_independent_proof": True,
             },
         }
