@@ -191,10 +191,29 @@ def main():
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument("--start-month",required=True)
     p.add_argument("--end-month",required=True)
+    p.add_argument("--out",help="write full original-source evidence JSON; console prints only summary")
     args=p.parse_args()
     result=collect(args.start_month,args.end_month)
-    # The archive sample is deliberately small in the first probe.
-    print("TBSP_ARCHIVE_PROBE_JSON="+json.dumps(result,sort_keys=True,separators=(",",":")))
+    if args.out:
+        from pathlib import Path
+        dest=Path(args.out)
+        dest.parent.mkdir(parents=True,exist_ok=True)
+        dest.write_text(json.dumps(result,sort_keys=True,indent=2)+"\n",encoding="utf-8")
+        summary={
+            "series_id":result["series_id"],
+            "first_month":result["first_month"],
+            "last_month":result["last_month"],
+            "months":result["months"],
+            "evidence_sha256":result["evidence_sha256"],
+            "first_observation":result["observations"][0]["observed_for"],
+            "last_observation":result["observations"][-1]["observed_for"],
+            "historical_pit_certified":False,
+            "backtest":"NOT_RUN_SOURCE_ONLY",
+            "financial_operations":0,
+        }
+        print("TBSP_ARCHIVE_SUMMARY="+json.dumps(summary,sort_keys=True,separators=(",",":")))
+    else:
+        print("TBSP_ARCHIVE_PROBE_JSON="+json.dumps(result,sort_keys=True,separators=(",",":")))
 
 
 if __name__=="__main__":
