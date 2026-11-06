@@ -8,16 +8,20 @@ import {chromium} from "playwright";
 import {createHash} from "node:crypto";
 import {readFileSync,mkdirSync} from "node:fs";
 import path from "node:path";
-const PAGE="https://www.pl.vanguard/inwestorzy-indywidualni/produkt/etf/akcje/9679/ftse-all-world-ucits-etf-usd-accumulating";
-const ROOT="vanguard-nav-retail-evidence";
-const result={source:"VANGUARD_OFFICIAL_RETAIL_PUBLIC",isin:"IE00BK5BQT80",
+const CH_PAGE="https://www.ch.vanguard/en/private-investor/product/fund/equity/9679/ftse-all-world-ucits-etf-usd-accumulating";
+const PL_PAGE="https://www.pl.vanguard/inwestorzy-indywidualni/produkt/etf/akcje/9679/ftse-all-world-ucits-etf-usd-accumulating";
+const region=process.env.ISL_OFFICIAL_RETAIL_REGION??"pl";
+if(!["pl","ch"].includes(region))throw Error("Unrecognized official Vanguard retail region");
+const PAGE=region==="ch"?CH_PAGE:PL_PAGE;
+const ROOT="vanguard-nav-retail-evidence-"+region;
+const result={source:"VANGUARD_OFFICIAL_RETAIL_PUBLIC",region,isin:"IE00BK5BQT80",
   origin:PAGE,download_status:"NOT_VERIFIED",historical_nav_36_months_validated:false,
   historical_first_usable_at_verified:false,executable_fill_price:false,
   research_backtest:"NOT_RUN",financial_operations:0,paper_events_created:0};
 let browser;
 function receipt(){console.log("VANGUARD_RETAIL_NAV_PROBE="+JSON.stringify(result));}
 const official=(url)=>{try{const v=new URL(url);return v.protocol==="https:" &&
-  ["www.pl.vanguard","pl.vanguard","www.vanguard.co.uk"].includes(v.hostname) &&
+  (region==="ch"?["www.ch.vanguard","ch.vanguard"]:["www.pl.vanguard","pl.vanguard"]).includes(v.hostname) &&
   !v.username && !v.password;}catch{return false;}};
 try{
   browser=await chromium.launch({headless:true});
@@ -42,7 +46,7 @@ try{
     const body=await page.locator("body").innerText({timeout:18000});
     result.page_has_isin=body.includes("IE00BK5BQT80");
     result.page_has_nav=body.includes("NAV");
-    result.page_has_historical=/Historical Prices|Ceny historyczne|Ceny historyczne|Notowania historyczne/i.test(body);
+    result.page_has_historical=/Historical Prices|Ceny historyczne|Notowania historyczne/i.test(body);
     const allButtons=page.locator('button[data-cy="download-button"]');
     const buttonLabels=await allButtons.evaluateAll(els=>els.map(el=>({
       label:el.getAttribute("aria-label"), title:el.getAttribute("title"),
