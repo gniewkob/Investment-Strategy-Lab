@@ -16,6 +16,9 @@ ENGINE_SQL = (Path(__file__).resolve().parents[2] /
 HEALTH_SQL = (Path(__file__).resolve().parents[2] /
               "db/working_engine_v01_health_READONLY.sql").read_text(encoding="utf-8")
 
+V02_SQL = (Path(__file__).resolve().parents[2] /
+           "db/working_engine_v02_research_cycle.sql").read_text(encoding="utf-8")
+
 FIXTURE = """
 CREATE TABLE investment_lab.models (
  model_code text PRIMARY KEY, base_currency text NOT NULL,
@@ -233,6 +236,59 @@ class WorkingEngineAcceptance(unittest.TestCase):
         self.assertEqual(tuple(conflicting), (3, 1, 0, 0, 0, 0))
         self.assertEqual(self.scalar(
             "SELECT count(*) FROM investment_lab.audit_events"), 1)
+        self.assertEqual(self.scalar(
+            "SELECT count(*) FROM investment_lab.paper_events"), 3)
+
+    def test_v02_seals_non_latest_historical_price_and_detects_collision(self):
+        # Price ingested before cutoff but not the latest USDPLN observation.
+        # v0.1 hashes only latest per instrument and total row count:
+        # therefore v0.1 misses this mutation, while v0.2 must detect it.
+        self.conn.execute("""INSERT INTO investment_lab.price_observations
+           (instrument_code,source_code,observed_for,ingested_at,
+            interval_code,return_basis,close_price)
+           VALUES ('USDPLN_NBP','nbp_old',now()-interval '9 days',
+             now()-interval '8 days','1d','FX_RATE',3.70)""")
+        self.cycle()
+        first_v2 = self.conn.execute(V02_SQL).fetchall()
+        self.assertEqual({r[11] for r in first_v2}, {"NEW_RESEARCH_RUN"})
+        self.assertEqual({len(r[17]) for r in first_v2}, {64})
+        self.assertEqual({r[17] for r in first_v2}, {first_v2[0][17]})
+        self.conn.execute("""UPDATE investment_lab.price_observations
+             SET close_price=3.71 WHERE source_code='nbp_old'""")
+        self.assertEqual({r[11] for r in self.cycle()}, {"IDEMPOTENT_REPLAY"})
+        collision = self.conn.execute(V02_SQL).fetchall()
+        self.assertEqual({r[11] for r in collision}, {"REPLAY_INPUT_COLLISION"})
+        self.assertEqual({r[12] for r in collision}, {0})
+        self.assertEqual({r[13] for r in collision}, {0})
+        self.assertEqual({r[14] for r in collision}, {0})
+        self.assertEqual(self.scalar(
+            "SELECT count(*) FROM investment_lab.research_runs"), 6)
+        self.assertEqual(self.scalar(
+            "SELECT count(*) FROM investment_lab.paper_events"), 3)
+
+    def test_v02_same_cutoff_uses_independent_immutable_identity(self):
+        old_rows = self.cycle()
+        new_rows = self.conn.execute(V02_SQL).fetchall()
+        self.assertEqual({r[11] for r in new_rows}, {"NEW_RESEARCH_RUN"})
+        self.assertFalse({r[3] for r in old_rows} & {r[3] for r in new_rows})
+        self.assertEqual(self.scalar(
+            "SELECT count(*) FROM investment_lab.research_runs"), 6)
+        again = self.conn.execute(V02_SQL).fetchall()
+        self.assertEqual({r[11] for r in again}, {"IDEMPOTENT_REPLAY"})
+        self.assertEqual({r[12] for r in again}, {0})
+        self.assertEqual(self.scalar(
+            "SELECT count(*) FROM investment_lab.audit_events"), 6)
+        self.assertEqual(self.scalar(
+            "SELECT count(*) FROM investment_lab.paper_events"), 3)
+
+    def test_v02_excludes_future_ingestion_even_if_revised(self):
+        before = self.conn.execute(V02_SQL).fetchall()
+        self.conn.execute("""UPDATE investment_lab.price_observations
+          SET close_price=close_price+50
+          WHERE source_code='test_future'""")
+        after = self.conn.execute(V02_SQL).fetchall()
+        self.assertEqual({r[11] for r in after}, {"IDEMPOTENT_REPLAY"})
+        self.assertEqual({r[17] for r in before}, {r[17] for r in after})
         self.assertEqual(self.scalar(
             "SELECT count(*) FROM investment_lab.paper_events"), 3)
 
