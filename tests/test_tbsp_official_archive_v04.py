@@ -58,7 +58,7 @@ class OfficialBondSpotArchiveTests(unittest.TestCase):
             collect("2025-01","2025-01",fetch=lambda u:fixture(u,missing=True),clock=lambda:NOW)
 
     def test_duplicate_close_row_fails_closed(self):
-        with self.assertRaisesRegex(ValueError,"not exactly one"):
+        with self.assertRaisesRegex(ValueError,"ambiguous"):
             collect("2025-03","2025-03",
                     fetch=lambda u:fixture(u,duplicate=True),clock=lambda:NOW)
 
@@ -78,6 +78,22 @@ class OfficialBondSpotArchiveTests(unittest.TestCase):
     def test_future_clock_in_historical_month(self):
         with self.assertRaisesRegex(ValueError,"completed months"):
             collect("2026-11","2026-11",fetch=fixture,clock=lambda:NOW)
+
+    def test_calendar_links_without_close_are_recorded_not_interpolated(self):
+        def no_last_close(url):
+            if "date=20250328" in url:
+                return b"<html><h1>TBSP.Index</h1><h2>Dane archiwalne TBSP.Index</h2><p>Brak notowania</p></html>"
+            return fixture(url)
+        out=collect("2025-03","2025-03",fetch=no_last_close,clock=lambda:NOW)
+        row=out["observations"][0]
+        self.assertEqual(row["observed_for"],"2025-03-20")
+        self.assertEqual(row["level"],"2024.22")
+        self.assertEqual(len(row["calendar_dates_without_close"]),1)
+        missing=row["calendar_dates_without_close"][0]
+        self.assertEqual(missing["date"],"2025-03-28")
+        self.assertEqual(len(missing["raw_sha256"]),64)
+        self.assertTrue(missing["source_url"].startswith("https://www.bondspot.pl/"))
+        self.assertFalse(out["historical_pit_certified"])
 
     def test_merge_two_source_provenance_chunks(self):
         a=collect("2025-02","2025-02",fetch=fixture,clock=lambda:NOW)
