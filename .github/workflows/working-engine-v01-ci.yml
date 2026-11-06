@@ -6,6 +6,10 @@ on:
       - 'db/working_engine_v02_research_cycle.sql'
       - 'db/working_engine_v03_research_cycle.sql'
       - 'db/working_engine_v03_health_READONLY.sql'
+      - 'db/monthly_backtest_v04_readiness_READONLY.sql'
+      - 'scripts/monthly_proxy_backtest_v04.py'
+      - 'tests/test_monthly_proxy_backtest_v04.py'
+      - 'tests/integration/test_monthly_backtest_v04_readiness.py'
       - 'db/working_engine_v02_health_READONLY.sql'
       - 'db/nbp_reference_metrics_v01_READONLY.sql'
       - 'db/working_engine_v01_health_READONLY.sql'
@@ -25,6 +29,10 @@ on:
       - 'db/working_engine_v02_research_cycle.sql'
       - 'db/working_engine_v03_research_cycle.sql'
       - 'db/working_engine_v03_health_READONLY.sql'
+      - 'db/monthly_backtest_v04_readiness_READONLY.sql'
+      - 'scripts/monthly_proxy_backtest_v04.py'
+      - 'tests/test_monthly_proxy_backtest_v04.py'
+      - 'tests/integration/test_monthly_backtest_v04_readiness.py'
       - 'db/working_engine_v02_health_READONLY.sql'
       - 'db/nbp_reference_metrics_v01_READONLY.sql'
       - 'db/working_engine_v01_health_READONLY.sql'
@@ -68,7 +76,11 @@ jobs:
           python -m unittest discover -s tests -p 'test_nbp_lab_prepare.py' -v
           python -m unittest discover -s tests -p 'test_nbp_lab_ingest_sql.py' -v
           python -m unittest discover -s tests -p 'test_nbp_lab_daily_source.py' -v
+      - name: Validate v0.4 monthly backtester, no database/network
+        run: python -m unittest discover -s tests -p 'test_monthly_proxy_backtest_v04.py' -v
       - name: Verify live SQL script against disposable Postgres
         env:
           ISL_TEST_POSTGRES_DSN: postgresql://postgres:postgres@localhost:5432/investment_lab
-        run: python -m unittest discover -s tests/integration -p 'test_working_engine_v01.py' -v
+        run: |
+          python -m unittest discover -s tests/integration -p 'test_working_engine_v01.py' -v
+          python -m unittest discover -s tests/integration -p 'test_monthly_backtest_v04_readiness.py' -v
