@@ -43,13 +43,21 @@ try{
     result.page_has_isin=body.includes("IE00BK5BQT80");
     result.page_has_nav=body.includes("NAV");
     result.page_has_historical=/Historical Prices|Ceny historyczne|Ceny historyczne|Notowania historyczne/i.test(body);
-    const buttons=page.locator('button[data-cy="download-button"]:visible');
+    const allButtons=page.locator('button[data-cy="download-button"]');
+    const buttonLabels=await allButtons.evaluateAll(els=>els.map(el=>({
+      label:el.getAttribute("aria-label"), title:el.getAttribute("title"),
+      text:(el.innerText||"").trim().slice(0,100),
+      visible:!!(el.offsetWidth||el.offsetHeight||el.getClientRects().length)
+    })));
+    result.all_button_labels=buttonLabels;
+    const buttons=page.locator('button[data-cy="download-button"]:visible')
+      .filter({hasText:/\b(?:prices|cen(?:y)?)\b/i});
     result.visible_download_buttons=await buttons.count();
-    result.all_download_buttons=await page.locator('button[data-cy="download-button"]').count();
+    result.all_download_buttons=buttonLabels.length;
     if(!result.page_has_isin||!result.page_has_nav){
       result.download_status="RETAIL_PRODUCT_IDENTITY_NOT_VERIFIED";
     }else if(!result.visible_download_buttons){
-      result.download_status="RETAIL_EXPORT_BUTTON_NOT_PRESENT";
+      result.download_status="HISTORICAL_NAV_EXPORT_BUTTON_NOT_IDENTIFIED";
     }else{
       const button=buttons.first();
       const modalCandidates=page.locator('[role="dialog"],[aria-modal="true"],.onetrust-pc-dark-filter, #onetrust-banner-sdk');
@@ -79,7 +87,7 @@ try{
         if(click[0].status!=="fulfilled"||click[1].status!=="fulfilled"){
           result.download_status="RETAIL_EXPORT_DID_NOT_PRODUCE_FILE";
           result.diagnostic=click.map((x,i)=>x.status==="rejected"?
-            (i===0?"download:":"click:")+String(x.reason?.message||x.reason).slice(0,450)
+            (i===0?"download:":"click:")+String(x.reason?.message||x.reason).slice(0,1550)
             :null).filter(Boolean).join(" / ");
         }else{
           const dl=click[0].value;
