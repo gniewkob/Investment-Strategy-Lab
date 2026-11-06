@@ -19,6 +19,9 @@ HEALTH_SQL = (Path(__file__).resolve().parents[2] /
 V02_SQL = (Path(__file__).resolve().parents[2] /
            "db/working_engine_v02_research_cycle.sql").read_text(encoding="utf-8")
 
+V02_HEALTH_SQL = (Path(__file__).resolve().parents[2] /
+                  "db/working_engine_v02_health_READONLY.sql").read_text(encoding="utf-8")
+
 FIXTURE = """
 CREATE TABLE investment_lab.models (
  model_code text PRIMARY KEY, base_currency text NOT NULL,
@@ -278,6 +281,47 @@ class WorkingEngineAcceptance(unittest.TestCase):
         self.assertEqual({r[12] for r in again}, {0})
         self.assertEqual(self.scalar(
             "SELECT count(*) FROM investment_lab.audit_events"), 6)
+        self.assertEqual(self.scalar(
+            "SELECT count(*) FROM investment_lab.paper_events"), 3)
+
+    def test_v02_health_requires_v02_run_not_legacy_v01(self):
+        self.cycle()
+        rows = self.conn.execute(V02_HEALTH_SQL).fetchall()
+        self.assertEqual({r[11] for r in rows}, {"CYCLE_MISSING"})
+        self.assertEqual({r[9] for r in rows}, {0})
+        self.assertEqual({r[10] for r in rows}, {0})
+        self.assertEqual(self.scalar(
+            "SELECT count(*) FROM investment_lab.research_runs"), 3)
+
+    def test_v02_health_matches_recomputed_market_fingerprint(self):
+        self.conn.execute(V02_SQL)
+        rows = self.conn.execute(V02_HEALTH_SQL).fetchall()
+        self.assertEqual(len(rows), 3)
+        self.assertEqual({r[11] for r in rows}, {"ENGINE_OK"})
+        self.assertEqual({r[6] for r in rows}, {2})
+        self.assertEqual({r[7] for r in rows}, {rows[0][7]})
+        self.assertTrue(all(r[7] == r[8] and len(r[7]) == 64 for r in rows))
+        self.assertEqual({r[9] for r in rows}, {1})
+        self.assertEqual({r[10] for r in rows}, {1})
+        self.assertEqual(self.scalar(
+            "SELECT count(*) FROM investment_lab.paper_events"), 3)
+
+    def test_v02_health_alerts_on_non_latest_source_mutation(self):
+        self.conn.execute("""INSERT INTO investment_lab.price_observations
+          (instrument_code,source_code,observed_for,ingested_at,
+           interval_code,return_basis,close_price)
+          VALUES ('USDPLN_NBP','nbp_backfill',now()-interval '12 days',
+                   now()-interval '11 days','1d','FX_RATE',3.7)""")
+        self.cycle()
+        self.conn.execute(V02_SQL)
+        self.conn.execute("""UPDATE investment_lab.price_observations
+          SET close_price=3.75 WHERE source_code='nbp_backfill'""")
+        # Legacy health only checked the saved run/signal/audit references.
+        self.assertEqual({r[8] for r in self.conn.execute(HEALTH_SQL).fetchall()},
+                         {"ENGINE_OK"})
+        rows = self.conn.execute(V02_HEALTH_SQL).fetchall()
+        self.assertEqual({r[11] for r in rows}, {"SOURCE_INPUT_CHANGED"})
+        self.assertTrue(all(r[7] != r[8] for r in rows))
         self.assertEqual(self.scalar(
             "SELECT count(*) FROM investment_lab.paper_events"), 3)
 
