@@ -46,7 +46,8 @@ try {
       result.download_status="EXPORT_CONTROL_NOT_VISIBLE";
       done();
     }else{
-      const button=terms.first();
+      // The visible label is a nested SPAN: interact with the actual BUTTON.
+      const button=terms.first().locator("xpath=..");
       await button.scrollIntoViewIfNeeded({timeout:15000});
       const observedNetwork=[];
       page.on("response",(res)=>{
@@ -67,7 +68,10 @@ try {
         role:el.getAttribute("role"),
         disabled:el.getAttribute("disabled"),
         class_excerpt:(el.className||"").toString().slice(0,120),
-        parent_tag:el.parentElement?.tagName??null
+        parent_tag:el.parentElement?.tagName??null,
+        outer_html_excerpt:el.outerHTML.slice(0,500),
+        visible:!!(el.offsetWidth||el.offsetHeight||el.getClientRects().length),
+        aria_disabled:el.getAttribute("aria-disabled")
       }));
       try {
         // Await BOTH outcomes. A failed click must not leave an unhandled
@@ -82,7 +86,7 @@ try {
           result.download_status="DOWNLOAD_CONTROL_DID_NOT_PRODUCE_FILE";
           result.reason=attempts.map((x,i)=>
             x.status==="rejected" ?
-             ((i===0?"download:":"click:")+String(x.reason?.message??x.reason).slice(0,180))
+             ((i===0?"download:":"click:")+String(x.reason?.message??x.reason).slice(0,650))
              : null).filter(Boolean).join(" / ");
           done();
         }else{
