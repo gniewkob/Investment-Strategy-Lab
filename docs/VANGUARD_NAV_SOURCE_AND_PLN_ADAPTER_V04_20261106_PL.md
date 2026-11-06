@@ -15,7 +15,7 @@
 - tests/test_vanguard_nav_to_pln_reference_v04.py — 9 nowych testów syntetycznych.
 - Wejście: deklaracja NAV Vanguard (konkretny ISIN, USD, accumulating NAV), **oryginalne bajty pliku**, ich SHA-256, jawna lista dat i wartości oraz źródłowe archiwum NBP USDPLN.
 - Każdy deklarowany miesięczny NAV jest odtwarzany z oryginalnych bajtów; samo dołączenie zgodnego hasha nie certyfikuje wpisanych wartości.
-- Ściśle obsługiwany kandydacki format CSV: date,nav_usd. **XLSX nie jest uznany za obsługiwany** do czasu analizy realnego pliku Vanguard. Testy nie twierdzą, że oficjalny eksport ma ten format.
+- Ściśle obsługiwany kandydacki format CSV: date,nav_usd. **Podstawowy adapter NAV→PLN nadal nie akceptuje XLSX jako zweryfikowanego źródła.** Dostępny jest natomiast osobny, izolowany od bazy **moduł wstępnej inspekcji XLSX**, który wyłącznie klasyfikuje format i przygotowuje kandydackie dane do weryfikacji po rzeczywistym pobraniu. Testy nie twierdzą, że oficjalny eksport ma ten format.
 - Dla każdej daty NAV wymagany jest kurs NBP USDPLN z **identycznej daty** i udowodnionego źródła. Bez interpolacji, forward fill i przeliczania późniejszym kursem.
 - Output: VANGUARD_ACC_NAV_REFERENCE_PLN, NON_EXECUTABLE_NAV_REFERENCE, no historical PIT certification, real_backtest=NOT_RUN. Nie należy mapować wyniku automatycznie na GLOBAL_EQUITY_TR_PLN ani na wykonywalne kwotowanie ETF.
 
@@ -29,3 +29,28 @@
 ## Kolejny krok
 
 Uzyskać pełny plik NAV zwykłą oficjalną ścieżką, przeanalizować jego prawdziwy format i dopiero wtedy zatwierdzić parser XLSX/CSV oraz daty historycznej dostępności. Nie domniemywać, że NAV jest ceną zlecenia; nie oznaczać źródła jako kompletnego tylko dlatego, że strona internetowa pokazuje bieżące 10 notowań.
+
+## Dodatkowy odbiór — legalny dostęp do eksportu i inspekcja XLSX
+
+Polska publiczna strona Vanguard wymaga potwierdzenia kraju zamieszkania i akceptacji oświadczenia prawnego. Widoczne przyciski to „Nie wyrażam zgody” i „Wyrażam zgodę”. Nie jest to błąd algorytmu. Automatyzacja **nie może składać tego oświadczenia w imieniu użytkownika**. Udostępniony regionalnie serwis przeznaczony tylko dla inwestorów instytucjonalnych lub kwalifikowanych został wykluczony z automatycznych testów.
+
+Nowy skrypt: `scripts/vanguard_xlsx_offline_intake_v04.py`; testy: `tests/test_vanguard_xlsx_offline_intake_v04.py`. Odczyt lokalny bez sieci, kont, Neona, papierowych transakcji i możliwości składania zleceń. Wykrywa jednoznaczne kolumny Date i NAV (USD), odrzuca podstawienie Market price, formuły i makra, rozpoznaje standardowe numery seryjne dat Excel, porównuje ciągłość 36–72 miesięcy, odrzuca duplikaty i zapisuje SHA-256 oryginalnych bajtów.
+
+**To nie jest parser sprawdzony na oryginalnym pliku Vanguard.** Testy używają wyłącznie syntetycznych XLSX. Dla rzeczywistego pliku layout lub arkusz mogą być inne; wtedy skrypt musi zakończyć się błędem i wymagać adaptacji do danych źródłowych. Wynik ma status `RAW_NAV_XLSX_CANDIDATE_NEEDS_PROVIDER_IDENTITY_ATTESTATION`, nie certyfikuje ISIN, historycznego PIT ani ceny transakcyjnej, nie jest automatycznie mapowany na GLOBAL_EQUITY_TR_PLN.
+
+Po zwykłym pobraniu historycznego pliku przez osobę uprawnioną do potwierdzenia wymaganych warunków strony lokalny odczyt można wykonać następująco:
+
+```bash
+python -m scripts.vanguard_xlsx_offline_intake_v04 \
+  --file /sciezka/do/oryginalnego-eksportu.xlsx \
+  --first-month 2021-11 --last-month 2026-10 \
+  --out ./vanguard-nav-candidate.json
+```
+
+Nie należy przepisywać danych ręcznie, zmieniać dat, zgadywać brakujących wartości ani umieszczać prawnie ograniczonego oryginalnego pliku w publicznym repozytorium.
+
+**Weryfikacja:** [CI #42261852878](https://github.com/gniewkob/Investment-Strategy-Lab/actions/runs/42261852878) SUCCESS **124/124**, w tym 7 nowych testów parsera XLSX. Oficjalny eksport nadal niepobrany. Backtest M1–M3 pozostaje `NOT_RUN`. Laboratorium Neon main i aktywna automatyzacja v0.3 pozostają bez zmian.
+
+## Stabilizacja CI dla publicznych źródeł
+
+Wieloletnie pobrania BondSpot i publiczne testy okien przeglądarki zostały ustawione na `workflow_dispatch` zamiast automatycznego powtarzania przy każdym commicie PR. Wcześniej pojedynczy test BondSpot zakończył się timeoutem TLS, pomimo prawidłowości utrwalonego i zweryfikowanego archiwum. Automatyczne testy offline silnika i parserów pozostają w `working-engine-v01-ci.yml`. Nie zmieniono harmonogramu działającego v0.3.
