@@ -32,6 +32,10 @@ ROW = re.compile(r"(?<!\d)(\d{4}-\d{2}-\d{2})\s+([0-9]+[.,][0-9]+)\s+([0-9]+[.,]
 MAX_MONTHS = 72
 
 
+class NoPublishedClose(ValueError):
+    """Date linked in calendar but no official closing index row is published."""
+
+
 class ArchiveHTML(HTMLParser):
     def __init__(self):
         super().__init__(convert_charrefs=True)
@@ -101,10 +105,14 @@ def _day_row(page: ArchiveHTML, exact_date: date) -> str:
     if section < 0:
         raise ValueError("missing TBSP archive content")
     text = text[section:]
-    candidates = [(d,a,b) for d,a,b in ROW.findall(text)
+    all_rows = ROW.findall(text)
+    candidates = [(d,a,b) for d,a,b in all_rows
                   if d == exact_date.isoformat()]
-    if len(candidates) != 1:
-        raise ValueError("not exactly one official dated close row")
+    if len(candidates) == 0 and not all_rows:
+        raise NoPublishedClose("no officially published close for "+exact_date.isoformat())
+    if len(candidates) != 1 or len(all_rows) != 1:
+        raise ValueError("ambiguous or incorrectly dated BondSpot close for "
+                         +exact_date.isoformat())
     _, _, close = candidates[0]
     value = close.replace(",", ".")
     if not PRICE.fullmatch(value) or not Decimal(value).is_finite() or Decimal(value)<=0:
@@ -149,11 +157,30 @@ def collect(first: str, last: str, *, fetch=_read,
         all_dates=_calendar_dates(calendar_page,month)
         if not all_dates:
             raise ValueError("no dated TBSP archive links for "+month)
-        selected=all_dates[-1]
-        dated_url=_url(month,selected.strftime("%Y%m%d"))
-        dated_raw=fetch(dated_url)
-        dated_page=_parse(dated_raw)
-        closing=_day_row(dated_page,selected)
+        selected=None
+        dated_url=None
+        dated_raw=None
+        closing=None
+        skipped=[]
+        for candidate in reversed(all_dates):
+            dated_url=_url(month,candidate.strftime("%Y%m%d"))
+            dated_raw=fetch(dated_url)
+            dated_page=_parse(dated_raw)
+            try:
+                closing=_day_row(dated_page,candidate)
+            except NoPublishedClose:
+                skipped.append({
+                    "date":candidate.isoformat(),
+                    "source_url":dated_url,
+                    "raw_sha256":sha256(dated_raw).hexdigest(),
+                })
+                if len(skipped)>=12:
+                    raise ValueError("12 consecutive dates without TBSP close in "+month)
+                continue
+            selected=candidate
+            break
+        if selected is None or dated_raw is None or closing is None:
+            raise ValueError("no officially published close in "+month)
         at=clock()
         if at.tzinfo is None or at.utcoffset() is None:
             raise ValueError("timezone-aware clock required")
@@ -164,6 +191,7 @@ def collect(first: str, last: str, *, fetch=_read,
             "instrument_kind":"NON_TRADABLE_INDEX",
             "calendar_url":url,"calendar_sha256":sha256(raw).hexdigest(),
             "dated_url":dated_url,"dated_sha256":sha256(dated_raw).hexdigest(),
+            "calendar_dates_without_close":skipped,
             "retrieved_at":at.astimezone(timezone.utc).isoformat(),
             "historical_first_usable_at":None,
         })
