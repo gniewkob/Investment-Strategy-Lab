@@ -1,0 +1,70 @@
+name: ISL v0.4 official Vanguard NAV and BondSpot TBSP source probe
+on:
+  pull_request:
+    paths:
+      - 'scripts/tbsp_official_archive_v04.py'
+      - 'tests/test_tbsp_official_archive_v04.py'
+      - '.github/workflows/v04-official-nav-bond-index-probe.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  official-source-probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate BondSpot source boundaries offline
+        run: python -m unittest discover -s tests -p 'test_tbsp_official_archive_v04.py' -v
+      - name: Read two complete months of actual BondSpot index closes
+        run: python -m scripts.tbsp_official_archive_v04 --start-month 2025-02 --end-month 2025-03
+      - name: Probe official Vanguard NAV page for historical export options
+        run: |
+          python - <<'PY'
+          from html.parser import HTMLParser
+          from urllib.request import Request,urlopen
+          from urllib.parse import urlsplit
+          import re
+          class Links(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.urls=[]
+              def handle_starttag(self,tag,attrs):
+                  if tag != 'a': return
+                  for k,v in attrs:
+                      if k=='href' and v: self.urls.append(v)
+          url='https://www.vanguard.co.uk/professional/product/etf/equity/9679/ftse-all-world-ucits'
+          try:
+              with urlopen(Request(url,headers={
+                    'User-Agent':'ISL-source-research/1',
+                    'Accept':'text/html'}),timeout=20) as res:
+                  html=res.read(5000000).decode('utf-8','replace')
+              nav=re.search(r'Historical Prices',html,re.I) is not None
+              download=re.search(r'Download.{0,100}prices',html,re.I|re.S) is not None
+              parser=Links();parser.feed(html)
+              candidates=[x for x in parser.urls
+                          if re.search(r'csv|excel|download|historical|price',x,re.I)]
+              print('VANGUARD_OFFICIAL_PROBE='+str({
+                 'http':'OK','contains_historical_prices':nav,
+                 'contains_price_export_ui':download,
+                 'export_link_candidates':candidates[:12],
+                 'candidate_count':len(candidates),
+                 'full_60_month_NAV_validated':False,
+                 'real_orders':0
+              }))
+          except Exception as exc:
+              # Source remains unverified. No substitute or fake data.
+              print('VANGUARD_OFFICIAL_PROBE='+str({
+                  'http':'UNVERIFIED',
+                  'reason':type(exc).__name__,
+                  'full_60_month_NAV_validated':False,
+                  'real_orders':0
+              }))
+          PY
