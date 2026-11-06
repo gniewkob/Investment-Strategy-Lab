@@ -22,6 +22,9 @@ V02_SQL = (Path(__file__).resolve().parents[2] /
 V03_SQL = (Path(__file__).resolve().parents[2] /
            "db/working_engine_v03_research_cycle.sql").read_text(encoding="utf-8")
 
+V03_HEALTH_SQL = (Path(__file__).resolve().parents[2] /
+                  "db/working_engine_v03_health_READONLY.sql").read_text(encoding="utf-8")
+
 V02_HEALTH_SQL = (Path(__file__).resolve().parents[2] /
                   "db/working_engine_v02_health_READONLY.sql").read_text(encoding="utf-8")
 
@@ -289,6 +292,51 @@ class WorkingEngineAcceptance(unittest.TestCase):
             "SELECT count(*) FROM investment_lab.audit_events"), 6)
         self.assertEqual(self.scalar(
             "SELECT count(*) FROM investment_lab.paper_events"), 3)
+
+    def test_v03_readonly_health_requires_cycle_then_verifies_receipts(self):
+        before = self.conn.execute(V03_HEALTH_SQL).fetchall()
+        self.assertEqual({r[3] for r in before}, {"CYCLE_MISSING"})
+        self.assertEqual(self.scalar(
+            "SELECT count(*) FROM investment_lab.research_runs"), 0)
+        self.conn.execute(V03_SQL)
+        health = self.conn.execute(V03_HEALTH_SQL).fetchall()
+        self.assertEqual(len(health), 3)
+        self.assertEqual({r[3] for r in health}, {"ENGINE_OK"})
+        self.assertEqual({r[4] for r in health}, {"INSUFFICIENT_DATA"})
+        self.assertEqual({r[5] for r in health},
+                         {"REFERENCE_INCOMPLETE_AT_CUTOFF"})
+        self.assertTrue(all(r[9] == r[10] and len(r[9]) == 64
+                            for r in health))
+        self.assertEqual({r[11:13] for r in health}, {(1, 1)})
+        self.assertEqual({r[13:16] for r in health}, {(0, 0, 0)})
+        self.assertEqual(self.scalar(
+            "SELECT count(*) FROM investment_lab.paper_events"), 3)
+
+    def test_v03_health_detects_mutated_old_provenance(self):
+        self.conn.execute(V03_SQL)
+        self.conn.execute("""UPDATE investment_lab.price_observations
+          SET source_url='https://different-source.example/data'
+          WHERE instrument_code='USDPLN_NBP'
+            AND source_code='nbp'""")
+        # In the disposable fixture, the source is explicitly 'nbp', and
+        # the as-of evidence hash includes each source URL.
+        changed = self.conn.execute(V03_HEALTH_SQL).fetchall()
+        self.assertEqual({r[3] for r in changed},
+                         {"SOURCE_OR_LEDGER_INPUT_CHANGED"})
+        self.assertEqual(self.scalar(
+            "SELECT count(*) FROM investment_lab.research_runs"), 3)
+
+    def test_v03_health_detects_changed_paper_event_timestamp(self):
+        self.conn.execute(V03_SQL)
+        self.conn.execute("""UPDATE investment_lab.paper_events
+          SET event_time=event_time+interval '10 seconds'
+          WHERE model_code='M1_GLOBAL_EQ'""")
+        changed = self.conn.execute(V03_HEALTH_SQL).fetchall()
+        status = {r[0]: r[3] for r in changed}
+        self.assertEqual(status["M1_GLOBAL_EQ"],
+                         "SOURCE_OR_LEDGER_INPUT_CHANGED")
+        self.assertEqual(status["M2_DIVERSIFIED"], "ENGINE_OK")
+        self.assertEqual(status["M3_TACTICAL"], "ENGINE_OK")
 
     def test_v03_persists_real_reference_context_and_ledger_in_one_cycle(self):
         receipts = self.conn.execute(V03_SQL).fetchall()
