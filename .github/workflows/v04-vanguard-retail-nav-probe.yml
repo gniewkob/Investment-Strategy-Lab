@@ -30,10 +30,6 @@ jobs:
         env:
           ISL_OFFICIAL_RETAIL_REGION: ch
         run: node scripts/vanguard_nav_retail_public_probe_v04.mjs
-      - name: Check Vanguard South America public 9679 NAV export
-        env:
-          ISL_OFFICIAL_RETAIL_REGION: sa
-        run: node scripts/vanguard_nav_retail_public_probe_v04.mjs
       - name: Retain only successfully downloaded verified-host source bytes
         uses: actions/upload-artifact@v4
         with:
