@@ -19,6 +19,19 @@ eligible AS (
   WHERE p.observed_for<=c.expected_cutoff
     AND p.ingested_at<=c.expected_cutoff
 ),
+asof_reference_dates AS (
+  SELECT
+    max(observed_for) FILTER (
+      WHERE instrument_code='USDPLN_NBP' AND source_code='nbp_rates'
+        AND return_basis='FX_RATE' AND interval_code='1d') AS usdpln_date,
+    max(observed_for) FILTER (
+      WHERE instrument_code='EURPLN_NBP' AND source_code='nbp_rates'
+        AND return_basis='FX_RATE' AND interval_code='1d') AS eurpln_date,
+    max(observed_for) FILTER (
+      WHERE instrument_code='GOLD_NBP_PLN_G' AND source_code='nbp_gold'
+        AND return_basis='PRICE_ONLY' AND interval_code='1d') AS gold_date
+  FROM eligible
+),
 market_digest AS (
   -- Must mirror working_engine_v02_research_cycle.sql EXACTLY.
   SELECT count(*) AS eligible_rows,
@@ -84,11 +97,22 @@ SELECT m.model_code, c.checked_at,c.expected_cutoff,
               OR (c.checked_at::date - sd.eurpln_observed::date)>7
               OR (c.checked_at::date - sd.gold_observed::date)>7 THEN 'SOURCE_STALE'
             ELSE 'SOURCE_RECENT' END AS market_reference_status,
+       CASE WHEN ar.usdpln_date IS NULL OR ar.eurpln_date IS NULL
+                    OR ar.gold_date IS NULL THEN 'SOURCE_MISSING_AT_CUTOFF'
+            WHEN (c.expected_cutoff::date - ar.usdpln_date::date)>7
+                    OR (c.expected_cutoff::date - ar.eurpln_date::date)>7
+                    OR (c.expected_cutoff::date - ar.gold_date::date)>7
+                 THEN 'SOURCE_STALE_AT_CUTOFF'
+            ELSE 'SOURCE_RECENT_AT_CUTOFF'
+       END AS market_reference_at_cutoff_status,
+       ar.usdpln_date AS usdpln_asof,ar.eurpln_date AS eurpln_asof,
+       ar.gold_date AS gold_asof,
        sd.usdpln_observed,sd.eurpln_observed,sd.gold_observed,sd.last_ingested,
        pc.contributions AS total_alternative_contribution_events,
        pc.paper_fills AS total_paper_fills
 FROM required m CROSS JOIN clock c CROSS JOIN source_dates sd
      CROSS JOIN paper_counts pc CROSS JOIN market_digest md
+     CROSS JOIN asof_reference_dates ar
 LEFT JOIN LATERAL (
  SELECT r.* FROM investment_lab.research_runs r
  WHERE r.model_code=m.model_code AND r.input_cutoff=c.expected_cutoff
