@@ -81,3 +81,56 @@ A nontrading and read-only health check remains enforced.
 - This confirms a functional persisted research-evidence engine,
   NOT complete source total-return coverage or proven investment
   performance, profitability, or predictive alpha.
+
+
+## LAB-main activation on 2026-11-06 — confirmed
+
+After 39/39 tests passed in GitHub Actions run 42198032915,
+Working Engine v0.3 was invoked in the private LAB Neon main:
+project red-lake-53043722, branch br-shy-voice-badzlf0x,
+database investment_lab. This is NOT a production release.
+
+Both SQL files were fetched from immutable repository commit
+3072044c25958774930ddd697aadbb0fa282869b:
+- db/working_engine_v03_research_cycle.sql
+  Git blob SHA d59e2cf07773039235dab242c641c8c5f266e10a
+- db/working_engine_v03_health_READONLY.sql
+  Git blob SHA 5bd9cf7781a7b492e16b34e14e59ee889255f88a
+
+Preflight checked that the research script inserts only into
+investment_lab.research_runs, signal_events, and audit_events,
+and cannot write to paper_events or execute financial orders.
+Before the run Neon main contained 3 research runs (all v0.1)
+and 0 v0.3 runs.
+
+Observed live-laboratory SQL receipts for cutoff 2026-11-05
+19:00 UTC (3,777 eligible historical market records):
+- New v0.3 research_runs: 3, new signals: 3, new audit rows: 3;
+  exactly M1_GLOBAL_EQ, M2_DIVERSIFIED, M3_TACTICAL.
+- All three verdicts: INSUFFICIENT_DATA / HOLD_CASH;
+  NBP research context: REFERENCE_INCOMPLETE_AT_CUTOFF, since
+  the later NBP imports were not yet known at this cutoff.
+- Same-statement replay: IDEMPOTENT_REPLAY for each model;
+  zero new research rows, signals, or audit rows.
+- Independent live main health script: ENGINE_OK 3/3, exactly
+  one matching signal and one matching audit per model,
+  recorded input SHA-256 matches independently recomputed
+  input SHA-256 3/3.
+- After activation: 6 total research_runs, including 3 v0.3;
+  3 preexisting contribution-only paper_events; 0 paper fills;
+  price_observations unchanged at 3,820; real operations 0.
+
+The existing active daily automation "Surowce i geopolityka"
+(ID 6ad3d88620708191a2feb6b7a44bf253) was updated
+successfully through Automations to the immutable v0.3 commit
+and the exact two Git blob IDs above. Its original daily schedule
+and its NBP capture/ingest instructions were preserved.
+The task will now execute v0.3 research and independent v0.3
+health verification when it next runs. No new automation was
+created, and no trading or paper-fill operations were enabled.
+
+**Acceptance boundary:** this proves one manually executed
+live-LAB v0.3 cycle and a verified idempotent replay.
+It is NOT evidence of a naturally scheduled v0.3 execution.
+The first scheduled NBP GitHub source capture and two separate
+new daily research cutoffs still need real execution/audit proof.
