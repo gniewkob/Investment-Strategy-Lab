@@ -4,6 +4,10 @@ from datetime import date
 import unittest
 
 from scripts.reference_archive_calendar_v04 import _digest, reconcile
+from scripts.nbp_bondspot_exact_date_v04 import match
+from datetime import datetime, timezone
+from urllib.parse import urlsplit
+import json
 
 
 def sample(months=36, mismatches=2):
@@ -140,6 +144,71 @@ class ReferenceArchiveCalendarTests(unittest.TestCase):
                                          if k != "evidence_sha256"})
         with self.assertRaisesRegex(ValueError, "source identity"):
             reconcile(n,b)
+
+
+def official_day_stub(url):
+    parts = urlsplit(url).path.strip("/").split("/")
+    day = parts[-1]
+    if parts[-2] != day:
+        raise ValueError("test fixture only accepts single-day official source")
+    if "cenyzlota" in url:
+        return json.dumps([{"data": day, "cena": "250.01"}]).encode()
+    return json.dumps([{
+        "table": "A", "no": "001/A/NBP/2021", "effectiveDate": day,
+        "rates": [{"code": "USD", "mid": "4.11"},
+                  {"code": "EUR", "mid": "4.55"}],
+    }]).encode()
+
+
+class ExactDateNBPResearchTests(unittest.TestCase):
+    def test_five_unaligned_months_can_be_repaired_with_exact_day_sources(self):
+        n,b = sample(60, mismatches=5)
+        stamp = datetime(2026, 11, 6, 14, tzinfo=timezone.utc)
+        result = match(n,b,fetch=official_day_stub,clock=lambda:stamp)
+        self.assertEqual(result["months"], 60)
+        self.assertEqual(result["official_exact_day_retrieval_count"], 5)
+        self.assertEqual(result["source_request_count"], 10)
+        self.assertEqual(result["original_mismatches"],
+                         [x["month"] for x in b["monthly"][:5]])
+        self.assertTrue(all(x["same_calendar_date"] for x in result["timeline"]))
+        self.assertEqual(result["timeline"][0]["reference_date"], "2021-11-27")
+        self.assertEqual(result["timeline"][0]["nbp"]["usdpln"]["observed_for"],
+                         "2021-11-27")
+        self.assertEqual(result["timeline"][0]["nbp"]["gold"]["value"], "250.01")
+        self.assertEqual(result["timeline"][-1]["nbp"]["gold"]["alignment"],
+                         "MONTHLY_NBP_SAME_DATE_AS_TBSP")
+        self.assertFalse(result["historical_publication_hour_verified"])
+        self.assertFalse(result["historical_vintage_verified"])
+        self.assertFalse(result["investable_security_price_verified"])
+        self.assertEqual(result["paper_events_created"], 0)
+        self.assertEqual(result["financial_operations"], 0)
+        self.assertTrue(result["backtest"].startswith("NOT_RUN"))
+        self.assertEqual(result,match(n,b,fetch=official_day_stub,clock=lambda:stamp))
+
+    def test_no_source_imputation_if_exact_bondspot_date_missing(self):
+        n,b = sample()
+        def fail_gold(url):
+            if "cenyzlota" in url:
+                return b"[]"
+            return official_day_stub(url)
+        with self.assertRaisesRegex(ValueError, "empty or invalid response"):
+            match(n,b,fetch=fail_gold,
+                  clock=lambda:datetime(2026,11,6,tzinfo=timezone.utc))
+
+    def test_matching_months_do_not_trigger_redundant_network_calls(self):
+        n,b = sample(36,mismatches=0)
+        def no_network(url):
+            raise AssertionError("not needed")
+        result=match(n,b,fetch=no_network)
+        self.assertEqual(result["source_request_count"],0)
+        self.assertEqual(result["official_exact_day_retrieval_count"],0)
+        self.assertTrue(all(row["same_calendar_date"] for row in result["timeline"]))
+
+    def test_existing_source_tampering_is_rejected_before_http(self):
+        n,b = sample()
+        b["monthly"][0]["value"]="9999"
+        with self.assertRaisesRegex(ValueError,"evidence SHA-256 mismatch"):
+            match(n,b,fetch=official_day_stub)
 
 
 if __name__ == "__main__":
