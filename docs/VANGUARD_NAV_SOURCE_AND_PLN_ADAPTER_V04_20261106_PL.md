@@ -54,3 +54,14 @@ Nie należy przepisywać danych ręcznie, zmieniać dat, zgadywać brakujących 
 ## Stabilizacja CI dla publicznych źródeł
 
 Wieloletnie pobrania BondSpot i publiczne testy okien przeglądarki zostały ustawione na `workflow_dispatch` zamiast automatycznego powtarzania przy każdym commicie PR. Wcześniej pojedynczy test BondSpot zakończył się timeoutem TLS, pomimo prawidłowości utrwalonego i zweryfikowanego archiwum. Automatyczne testy offline silnika i parserów pozostają w `working-engine-v01-ci.yml`. Nie zmieniono harmonogramu działającego v0.3.
+## Future-date XLSX acceptance — 2026-11-06
+
+Do istniejącego parsera oryginalnego XLSX kandydackiego dodano osobny **no-look-ahead gate**: wymagany zakres miesięczny musi być zakończony względem bieżącej daty UTC, żaden wiersz NAV nie może pochodzić z przyszłości względem daty inspekcji, a daty wcześniejsze niż rozpoczęcie tej klasy jednostek (23.07.2019) są odrzucane. Testy z jawną datą referencyjną (`as_of`) kontrolują zarówno bieżący nieukończony miesiąc, jak i wiersz z przyszłości poza żądanym zakresem. Ten dodatkowy warunek nie certyfikuje legalności dostępu ani poprawności formatu niepobranego jeszcze oryginalnego eksportu.
+
+Oficjalna strona dla inwestorów indywidualnych Vanguard UK:
+https://www.vanguardinvestor.co.uk/investments/vanguard-ftse-all-world-ucits-etf-usd-accumulating/overview
+opisuje wyniki jako oparte na NAV na koniec miesiąca oraz zaznacza, że NAV nie jest tym samym co cena kupna/sprzedaży ETF. Publicznie widoczne wyjaśnienie metodologii **nie stanowi jednak zweryfikowanego eksportu pełnej 36–60 miesięcznej historii**. Nie tworzono datasetu na podstawie wykresu albo danych z innego funduszu.
+
+Podstawa kodowa: `scripts/vanguard_xlsx_offline_intake_v04.py` i `tests/test_vanguard_xlsx_offline_intake_v04.py`.
+
+**Status NAV z realnego źródła pozostaje BLOCKED.** Główna baza Neon LAB, działający harmonogram v0.3 i portfele bez zmian.
