@@ -27,7 +27,8 @@ MONTH_RE = re.compile(r"^\d{4}-\d{2}$")
 HEX64_RE = re.compile(r"^[0-9a-f]{64}$")
 MAX_MONTHS = 360
 MOMENTUM_MONTHS = 3
-MIN_MONTHS = 10
+MIN_MONTHS = 10  # synthetic/offline algorithm tests
+MIN_HISTORICAL_MONTHS = 36  # minimum research horizon, not evidence quality
 POLICY = {
     "M1_GLOBAL_EQ": {"GLOBAL_EQUITY_TR_PLN": D("1")},
     "M2_DIVERSIFIED": {
@@ -137,7 +138,7 @@ def validate(payload: object) -> tuple[dict, list[dict]] | tuple[dict, None]:
     if vintage not in ("SYNTHETIC_OFFLINE_FIXTURE",
                        "HISTORICAL_RESEARCH_RECONSTRUCTION"):
         raise BacktestValidationError("unsupported source vintage")
-    if payload.get("historical_pit_certified") is True:
+    if payload.get("historical_pit_certified", False) is not False:
         raise BacktestValidationError("manifest cannot self-certify historical PIT")
     contribution = _decimal(payload.get("monthly_contribution_pln"),
                             "monthly contribution")
@@ -194,6 +195,9 @@ def validate(payload: object) -> tuple[dict, list[dict]] | tuple[dict, None]:
         if last_ym is not None and ym != _next_month(last_ym):
             raise BacktestValidationError("duplicate or missing calendar month")
         decision = _utc(period["decision_at"])
+        if (vintage == "HISTORICAL_RESEARCH_RECONSTRUCTION"
+                and decision > datetime.now(timezone.utc)):
+            raise BacktestValidationError("future date cannot be historical observation")
         if last_decision is not None and decision <= last_decision:
             raise BacktestValidationError("decision timestamps out of order")
         # These are observed month-end benchmark values; the decision is
@@ -378,6 +382,22 @@ def run_backtest(payload: object) -> dict:
             "source_vintage": settings["vintage"],
             "historical_pit_certified": False,
             "performance_proven": False,
+            "real_orders": 0, "paper_events_created": 0,
+            "database_connections": 0, "database_writes": 0,
+            "results": [],
+        }
+    if (settings["vintage"] == "HISTORICAL_RESEARCH_RECONSTRUCTION"
+            and len(rows) < MIN_HISTORICAL_MONTHS):
+        return {
+            "status": "NOT_RUN_INSUFFICIENT_HISTORY",
+            "models": list(MODELS),
+            "available_months": len(rows),
+            "minimum_historical_months": MIN_HISTORICAL_MONTHS,
+            "missing_required_series": [],
+            "input_sha256": digest,
+            "source_vintage": settings["vintage"],
+            "historical_pit_certified": False,
+            "investment_performance_proven": False,
             "real_orders": 0, "paper_events_created": 0,
             "database_connections": 0, "database_writes": 0,
             "results": [],
