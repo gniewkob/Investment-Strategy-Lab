@@ -31,17 +31,29 @@ jobs:
           python-version: '3.12'
       - name: Offline integrity and cutoff regression
         run: python -m unittest discover -s tests -p 'test_github_checkpoint_verify_v08.py' -v
-      - name: Collect independent GitHub API records and previous capture artifact
-        if: ${{ github.event_name == 'workflow_dispatch' }}
+      - name: Corroborate earlier successful capture using independent GitHub API
         env:
           GH_TOKEN: ${{ github.token }}
-          RUN_ID: ${{ inputs.capture_run_id }}
-          CUTOFF_UTC: ${{ inputs.cutoff_utc }}
+          EVENT_NAME: ${{ github.event_name }}
+          HEAD_REF: ${{ github.head_ref }}
+          INPUT_RUN_ID: ${{ inputs.capture_run_id }}
+          INPUT_CUTOFF_UTC: ${{ inputs.cutoff_utc }}
         shell: bash
         run: |
           set -euo pipefail
-          [[ "$RUN_ID" =~ ^[1-9][0-9]{0,17}$ ]] || { echo 'invalid run id'; exit 1; }
           mkdir -p checkpoint-evidence/source
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            # Cross-run GitHub server creation time; not a self-declared source timestamp.
+            export CUTOFF_UTC="$(gh api "repos/gniewkob/Investment-Strategy-Lab/actions/runs/$GITHUB_RUN_ID" --jq .created_at)"
+            gh api "repos/gniewkob/Investment-Strategy-Lab/actions/runs?per_page=100&event=pull_request&status=success" \
+              > checkpoint-evidence/prior-runs.json
+            RUN_ID="$(python -c 'import json,os; rs=json.load(open("checkpoint-evidence/prior-runs.json"))["workflow_runs"]; prior=[r for r in rs if r.get("path","").split("@")[0]==".github/workflows/shadow-capture-v07.yml" and r.get("head_branch")==os.environ["HEAD_REF"] and r.get("created_at","")<os.environ["CUTOFF_UTC"]]; print(prior[0]["id"] if prior else "")')"
+            test -n "$RUN_ID" || { echo 'No completed earlier v0.7 capture available for this PR'; exit 1; }
+          else
+            RUN_ID="$INPUT_RUN_ID"
+            CUTOFF_UTC="$INPUT_CUTOFF_UTC"
+          fi
+          [[ "$RUN_ID" =~ ^[1-9][0-9]{0,17}$ ]] || { echo 'invalid run id'; exit 1; }
           gh api "repos/gniewkob/Investment-Strategy-Lab/actions/runs/$RUN_ID" > checkpoint-evidence/run.json
           gh api "repos/gniewkob/Investment-Strategy-Lab/actions/runs/$RUN_ID/artifacts?per_page=100" > checkpoint-evidence/artifacts.json
           RUN_ATTEMPT="$(python -c 'import json; print(json.load(open("checkpoint-evidence/run.json"))["run_attempt"])')"
@@ -56,7 +68,6 @@ jobs:
             --cutoff-utc "$CUTOFF_UTC" \
             --output github-checkpoint-audit-v08.json
       - name: Save only bounded audit receipt (not source archive)
-        if: ${{ github.event_name == 'workflow_dispatch' }}
         uses: actions/upload-artifact@v4
         with:
           name: isl-v08-checkpoint-audit-${{ github.run_id }}
