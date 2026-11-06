@@ -22,6 +22,7 @@ eligible AS (
                AND a.return_basis=p.return_basis
  CROSS JOIN clock c
  WHERE p.interval_code='1d' AND p.close_price>0
+   AND p.source_url LIKE 'https://api.nbp.pl/api/%'
    AND p.observed_for<=c.cutoff AND p.ingested_at<=c.cutoff
 ),
 ranked AS (
