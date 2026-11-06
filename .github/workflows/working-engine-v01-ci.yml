@@ -20,6 +20,8 @@ on:
       - 'tests/test_reference_archive_calendar_v04.py'
       - 'scripts/vanguard_nav_to_pln_reference_v04.py'
       - 'scripts/vanguard_xlsx_offline_intake_v04.py'
+      - 'scripts/vanguard_nav_intake_bundle_v04.py'
+      - 'tests/test_vanguard_nav_intake_bundle_v04.py'
       - 'tests/test_vanguard_xlsx_offline_intake_v04.py'
       - 'tests/test_vanguard_nav_to_pln_reference_v04.py'
       - 'scripts/tbsp_official_archive_v04.py'
@@ -103,6 +105,8 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_bondspot_monthly_archive_v04.py' -v
       - name: Validate official provider source candidate detection offline
         run: python -m unittest discover -s tests -p 'test_official_market_source_probe_v04.py' -v
+      - name: Validate complete local NAV XLSX and exact-date NBP source bundle
+        run: python -m unittest discover -s tests -p 'test_vanguard_nav_intake_bundle_v04.py' -v
       - name: Validate safe original NAV XLSX intake with no fund-identity assumptions
         run: python -m unittest discover -s tests -p 'test_vanguard_xlsx_offline_intake_v04.py' -v
       - name: Validate authenticated offline NAV USD to exact-day NBP PLN conversion
