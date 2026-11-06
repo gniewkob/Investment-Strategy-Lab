@@ -1,0 +1,33 @@
+name: ISL v0.4 Vanguard official retail NAV public export capability
+on:
+  pull_request:
+    paths:
+      - 'scripts/vanguard_nav_retail_public_probe_v04.mjs'
+      - '.github/workflows/v04-vanguard-retail-nav-probe.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  retail-nav-public:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install disposable Playwright browser
+        run: |
+          npm install --no-save --package-lock=false --ignore-scripts playwright@1.57.0
+          npx playwright install --with-deps chromium
+      - name: Check official Polish individual-investor NAV export
+        run: node scripts/vanguard_nav_retail_public_probe_v04.mjs
+      - name: Retain only successfully downloaded verified-host source bytes
+        uses: actions/upload-artifact@v4
+        with:
+          name: vanguard-retail-public-nav-raw-unverified
+          path: vanguard-nav-retail-evidence/*
+          if-no-files-found: ignore
+          retention-days: 7
