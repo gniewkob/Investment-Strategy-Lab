@@ -1,0 +1,33 @@
+name: ISL v0.4 official Vanguard and BondSpot HTML source probe
+on:
+  pull_request:
+    paths:
+      - 'scripts/official_market_source_probe_v04.py'
+      - 'tests/test_official_market_source_probe_v04.py'
+      - '.github/workflows/official-market-source-probe-v04.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+
+jobs:
+  official-page-probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate fail-closed official-source parser
+        run: python -m unittest discover -s tests -p 'test_official_market_source_probe_v04.py' -v
+      - name: Fetch limited official public source pages
+        run: python -m scripts.official_market_source_probe_v04 --json-output official-market-source-probe-v04.json
+      - name: Attach only source proof (not copied full provider pages)
+        uses: actions/upload-artifact@v4
+        with:
+          name: official-market-source-v04-receipt
+          path: official-market-source-probe-v04.json
+          if-no-files-found: error
+          retention-days: 14
