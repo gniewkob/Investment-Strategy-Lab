@@ -1,10 +1,9 @@
 name: WorldPulse.ai NAV candidate availability audit v04
+# The provider returned repeated transport failures; do not probe
+# this external endpoint on every unrelated PR commit. The offline
+# fail-closed parser suite remains in working-engine-v01-ci.yml.
 on:
-  pull_request:
-    paths:
-      - 'scripts/worldpulse_nav_availability_v04.py'
-      - 'tests/test_worldpulse_nav_availability_v04.py'
-      - '.github/workflows/worldpulse-nav-audit-v04.yml'
+  workflow_dispatch:
 permissions:
   contents: read
 jobs:
