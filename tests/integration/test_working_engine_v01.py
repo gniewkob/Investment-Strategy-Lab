@@ -22,6 +22,9 @@ V02_SQL = (Path(__file__).resolve().parents[2] /
 V02_HEALTH_SQL = (Path(__file__).resolve().parents[2] /
                   "db/working_engine_v02_health_READONLY.sql").read_text(encoding="utf-8")
 
+NBP_METRICS_SQL = (Path(__file__).resolve().parents[2] /
+                   "db/nbp_reference_metrics_v01_READONLY.sql").read_text(encoding="utf-8")
+
 FIXTURE = """
 CREATE TABLE investment_lab.models (
  model_code text PRIMARY KEY, base_currency text NOT NULL,
@@ -324,6 +327,77 @@ class WorkingEngineAcceptance(unittest.TestCase):
         self.assertTrue(all(r[7] != r[8] for r in rows))
         self.assertEqual(self.scalar(
             "SELECT count(*) FROM investment_lab.paper_events"), 3)
+
+    def test_nbp_reference_metrics_fail_closed_when_source_missing(self):
+        rows = self.conn.execute(NBP_METRICS_SQL).fetchall()
+        self.assertEqual(len(rows), 3)
+        self.assertEqual({r[0] for r in rows},
+                         {"USDPLN_NBP", "EURPLN_NBP", "GOLD_NBP_PLN_G"})
+        self.assertEqual({r[11] for r in rows}, {"SOURCE_MISSING"})
+        self.assertTrue(all(r[4] == 0 and r[7] is None
+                            and r[8] is None and r[9] is None
+                            and r[10] is None for r in rows))
+        self.assertTrue(all(r[14] == "DESCRIPTIVE_REFERENCE_ONLY_NOT_TOTAL_RETURN"
+                            and r[15] == 0 and r[16] == 0 for r in rows))
+        self.assertEqual(self.scalar(
+            "SELECT count(*) FROM investment_lab.research_runs"), 0)
+
+    def test_nbp_reference_metrics_asof_5_and_20_observations(self):
+        self.conn.execute("""INSERT INTO investment_lab.price_observations
+          (instrument_code,source_code,observed_for,ingested_at,
+           interval_code,return_basis,close_price,source_url)
+          SELECT 'USDPLN_NBP','nbp_rates',
+                 now()-interval '27 days'+s.i*interval '1 day',
+                 now()-interval '26 days'+s.i*interval '1 day',
+                 '1d','FX_RATE',100+s.i,
+                 'https://api.nbp.pl/api/exchangerates/tables/a/'
+          FROM generate_series(0,20) s(i)""")
+        rows = self.conn.execute(NBP_METRICS_SQL).fetchall()
+        usd = next(r for r in rows if r[0] == "USDPLN_NBP")
+        self.assertEqual(usd[4], 21)
+        self.assertEqual(str(usd[7]), "120")
+        self.assertEqual(str(usd[8]), "4.3478")
+        self.assertEqual(str(usd[9]), "20.0000")
+        self.assertEqual(str(usd[10]), "20.0000")
+        self.assertEqual(usd[11], "REFERENCE_RECENT")
+        self.assertEqual(len(usd[13]), 64)
+        # These prices are reference evidence, not tradable total returns.
+        self.assertEqual(usd[2], "FX_RATE")
+        self.assertEqual(usd[15:17], (0, 0))
+        self.assertEqual(self.scalar(
+            "SELECT count(*) FROM investment_lab.paper_events"), 3)
+        self.assertEqual(self.scalar(
+            "SELECT count(*) FROM investment_lab.research_runs"), 0)
+
+    def test_nbp_reference_metrics_no_late_ingest_or_replay_lookahead(self):
+        self.conn.execute("""INSERT INTO investment_lab.price_observations
+          (instrument_code,source_code,observed_for,ingested_at,
+           interval_code,return_basis,close_price,source_url)
+          SELECT 'USDPLN_NBP','nbp_rates',
+                 now()-interval '27 days'+s.i*interval '1 day',
+                 now()-interval '26 days'+s.i*interval '1 day',
+                 '1d','FX_RATE',100+s.i,
+                 'https://api.nbp.pl/api/exchangerates/tables/a/'
+          FROM generate_series(0,20) s(i)""")
+        before = next(r for r in self.conn.execute(NBP_METRICS_SQL).fetchall()
+                      if r[0] == "USDPLN_NBP")
+        self.conn.execute("""INSERT INTO investment_lab.price_observations
+          (instrument_code,source_code,observed_for,ingested_at,
+           interval_code,return_basis,close_price,source_url)
+          VALUES ('USDPLN_NBP','nbp_rates',now()-interval '2 days',
+                  now()+interval '1 day','1d','FX_RATE',999,
+                  'https://api.nbp.pl/api/exchangerates/tables/a/')""")
+        after = next(r for r in self.conn.execute(NBP_METRICS_SQL).fetchall()
+                     if r[0] == "USDPLN_NBP")
+        self.assertEqual(before, after)
+        self.conn.execute("""UPDATE investment_lab.price_observations
+          SET close_price=101.5 WHERE source_code='nbp_rates'
+            AND close_price=101""")
+        modified = next(r for r in self.conn.execute(NBP_METRICS_SQL).fetchall()
+                        if r[0] == "USDPLN_NBP")
+        self.assertNotEqual(before[13], modified[13])
+        self.assertEqual(before[7:11], modified[7:11])
+        self.assertEqual(modified[11], "REFERENCE_RECENT")
 
     def test_v02_excludes_future_ingestion_even_if_revised(self):
         before = self.conn.execute(V02_SQL).fetchall()
