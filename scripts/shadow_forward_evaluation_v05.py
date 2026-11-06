@@ -79,6 +79,12 @@ def evaluate_forward(decision, observation):
         first=_utc(item["first_usable_at"])
         if (observed.year,observed.month)!=(month.year,month.month) or observed.day<20:
             raise ShadowInputError("forward month/observation mismatch")
+        # A later publication timestamp is not sufficient for a forward test:
+        # the market observation itself must postdate the frozen decision.
+        # Otherwise a decision retrospectively created after market close
+        # could appear prospective merely because publication was delayed.
+        if observed <= decided_at.date():
+            raise ShadowInputError("forward market observation must postdate frozen decision")
         if first.date()<=observed or first<=decided_at or first>as_of:
             raise ShadowInputError("unavailable forward observation or look-ahead")
         prior=_positive(item["prior_level_pln"])
