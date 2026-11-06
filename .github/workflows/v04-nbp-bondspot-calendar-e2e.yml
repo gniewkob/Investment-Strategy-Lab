@@ -3,6 +3,7 @@ on:
   pull_request:
     paths:
       - 'scripts/reference_archive_calendar_v04.py'
+      - 'scripts/nbp_bondspot_exact_date_v04.py'
       - 'tests/test_reference_archive_calendar_v04.py'
       - '.github/workflows/v04-nbp-bondspot-calendar-e2e.yml'
   workflow_dispatch:
@@ -57,10 +58,34 @@ jobs:
           assert d["paper_events_created"] == d["financial_operations"] == 0
           print("REAL_REFERENCE_CALENDAR_AUDIT_PASS: 60 months, 55 identical dates, 5 mismatches; no forward-looking join or performance calculations")
           PY
+      - name: Acquire official NBP exact-day quotes for TBSP calendar mismatches
+        run: |
+          python -m scripts.nbp_bondspot_exact_date_v04 \
+            --nbp source-evidence/nbp/nbp-research-evidence-202111-202610.json \
+            --bondspot source-evidence/bondspot/bondspot-month-end-source-proof-v04.json \
+            --out source-evidence/nbp-tbsp-exact-day-reference-v04.json
+      - name: Prove exact calendar dates without certifying PIT or trading fills
+        run: |
+          python - <<'PY'
+          import json
+          p="source-evidence/nbp-tbsp-exact-day-reference-v04.json"
+          x=json.load(open(p))
+          assert x["months"] == 60
+          assert x["official_exact_day_retrieval_count"] == 5
+          assert x["source_request_count"] == 10
+          assert len(x["replacement_source_receipts"]) == 5
+          assert all(row["same_calendar_date"] for row in x["timeline"])
+          assert x["financial_operations"] == x["paper_events_created"] == 0
+          assert x["backtest"].startswith("NOT_RUN")
+          assert not x["historical_publication_hour_verified"]
+          print("REAL_NBP_TBSP_EXACT_DAY_PASS: 60/60 calendar dates, 5 official NBP day retrievals, 0 fabricated values; research-only")
+          PY
       - name: Keep research audit only, no portfolio/account writes
         uses: actions/upload-artifact@v4
         with:
           name: audited-nbp-bondspot-60-month-reference-calendar
-          path: source-evidence/reference-calendar-v04-audit.json
+          path: |
+            source-evidence/reference-calendar-v04-audit.json
+            source-evidence/nbp-tbsp-exact-day-reference-v04.json
           if-no-files-found: error
           retention-days: 14
