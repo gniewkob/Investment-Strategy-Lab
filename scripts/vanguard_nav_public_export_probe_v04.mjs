@@ -32,6 +32,26 @@ try {
   const resp=await page.goto(PAGE,{waitUntil:"domcontentloaded",timeout:65000});
   result.page_status=resp?.status()??null;
   await page.waitForTimeout(12000);
+  // Resolve the official OneTrust consent UI as an ordinary user would:
+  // reject optional cookies. Do NOT force-click through a blocking overlay,
+  // change DOM styles, or use another user's session or credentials.
+  const reject=page.locator("#onetrust-reject-all-handler");
+  const close=page.locator("#onetrust-close-btn-container button");
+  try{
+    if(await reject.isVisible({timeout:4000})){
+      await reject.click({timeout:8000});
+      result.cookie_consent_action="REJECT_OPTIONAL_COOKIES";
+    }else if(await close.isVisible({timeout:3000})){
+      await close.click({timeout:8000});
+      result.cookie_consent_action="CLOSED_CONSENT_DIALOG";
+    }else{
+      result.cookie_consent_action="NO_VISIBLE_REJECT_OR_CLOSE_CONTROL";
+    }
+  }catch(ex){
+    result.cookie_consent_action="USER_VISIBLE_CONTROL_NOT_INTERACTABLE";
+    result.cookie_consent_error=String(ex?.message??ex).slice(0,300);
+  }
+
   const body=await page.locator("body").innerText({timeout:20000});
   result.public_page_has_ISIN=body.includes("IE00BK5BQT80");
   result.public_page_has_NAV=body.includes("NAV");
