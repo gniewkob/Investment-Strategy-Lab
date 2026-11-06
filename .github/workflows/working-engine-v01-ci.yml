@@ -7,8 +7,10 @@ on:
       - 'scripts/nbp_reference_capture.py'
       - 'scripts/nbp_lab_prepare.py'
       - 'scripts/nbp_lab_ingest_sql.py'
+      - 'scripts/nbp_lab_daily_source.py'
       - 'tests/test_nbp_lab_prepare.py'
       - 'tests/test_nbp_lab_ingest_sql.py'
+      - 'tests/test_nbp_lab_daily_source.py'
       - 'tests/integration/test_working_engine_v01.py'
       - '.github/workflows/working-engine-v01-ci.yml'
   push:
@@ -19,8 +21,10 @@ on:
       - 'scripts/nbp_reference_capture.py'
       - 'scripts/nbp_lab_prepare.py'
       - 'scripts/nbp_lab_ingest_sql.py'
+      - 'scripts/nbp_lab_daily_source.py'
       - 'tests/test_nbp_lab_prepare.py'
       - 'tests/test_nbp_lab_ingest_sql.py'
+      - 'tests/test_nbp_lab_daily_source.py'
       - 'tests/integration/test_working_engine_v01.py'
       - '.github/workflows/working-engine-v01-ci.yml'
 permissions:
@@ -53,6 +57,7 @@ jobs:
         run: |
           python -m unittest discover -s tests -p 'test_nbp_lab_prepare.py' -v
           python -m unittest discover -s tests -p 'test_nbp_lab_ingest_sql.py' -v
+          python -m unittest discover -s tests -p 'test_nbp_lab_daily_source.py' -v
       - name: Verify live SQL script against disposable Postgres
         env:
           ISL_TEST_POSTGRES_DSN: postgresql://postgres:postgres@localhost:5432/investment_lab
