@@ -93,6 +93,25 @@ class WorldPulseNAVAuditTests(unittest.TestCase):
             with self.subTest(url=url), self.assertRaises(ValueError):
                 _expected_origin(url)
 
+    def test_36_sparse_months_do_not_pass_as_consecutive_history(self):
+        full = fixture_rows()
+        sparse = full[::2] + full[1::2][:6]
+        body = json.dumps({"data": sparse}).encode()
+        result = assess_response("json", 200, "application/json", body,
+                                 clock=lambda:NOW)
+        self.assertEqual(result["in_window_months"], 36)
+        self.assertLess(result["max_consecutive_in_window_months"], 36)
+        self.assertEqual(result["availability"], "BLOCKED")
+
+    def test_date_with_trailing_non_iso_text_is_not_accepted(self):
+        rows = fixture_rows()
+        rows[0]["date"] = "2021-11-28garbage"
+        body = json.dumps({"data": rows}).encode()
+        result = assess_response("json", 200, "application/json", body,
+                                 clock=lambda:NOW)
+        self.assertEqual(result["schema_status"], "UNVERIFIED_SCHEMA")
+        self.assertEqual(result["availability"], "BLOCKED")
+
     def test_one_failed_transport_does_not_pretend_all_ok(self):
         def fake(url):
             if url.endswith("/csv"):
