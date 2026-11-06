@@ -10,9 +10,11 @@ import {readFileSync,mkdirSync} from "node:fs";
 import path from "node:path";
 const CH_PAGE="https://www.ch.vanguard/en/private-investor/product/fund/equity/9679/ftse-all-world-ucits-etf-usd-accumulating";
 const PL_PAGE="https://www.pl.vanguard/inwestorzy-indywidualni/produkt/etf/akcje/9679/ftse-all-world-ucits-etf-usd-accumulating";
+// An additional openly published issuer page for the SAME 9679 share class.
+const SA_PAGE="https://www.vanguardsouthamerica.com/en/product/etf/equity/9679/vanguard-ftse-all-world-ucits-etf-usd-accumulating";
 const region=process.env.ISL_OFFICIAL_RETAIL_REGION??"pl";
-if(!["pl","ch"].includes(region))throw Error("Unrecognized official Vanguard retail region");
-const PAGE=region==="ch"?CH_PAGE:PL_PAGE;
+if(!["pl","ch","sa"].includes(region))throw Error("Unrecognized official Vanguard region");
+const PAGE=({ch:CH_PAGE,pl:PL_PAGE,sa:SA_PAGE})[region];
 const ROOT="vanguard-nav-retail-evidence-"+region;
 const result={source:"VANGUARD_OFFICIAL_RETAIL_PUBLIC",region,isin:"IE00BK5BQT80",
   origin:PAGE,download_status:"NOT_VERIFIED",historical_nav_36_months_validated:false,
@@ -21,7 +23,7 @@ const result={source:"VANGUARD_OFFICIAL_RETAIL_PUBLIC",region,isin:"IE00BK5BQT80
 let browser;
 function receipt(){console.log("VANGUARD_RETAIL_NAV_PROBE="+JSON.stringify(result));}
 const official=(url)=>{try{const v=new URL(url);return v.protocol==="https:" &&
-  (region==="ch"?["www.ch.vanguard","ch.vanguard"]:["www.pl.vanguard","pl.vanguard"]).includes(v.hostname) &&
+  ({ch:["www.ch.vanguard","ch.vanguard"],pl:["www.pl.vanguard","pl.vanguard"],sa:["www.vanguardsouthamerica.com","vanguardsouthamerica.com"]})[region].includes(v.hostname) &&
   !v.username && !v.password;}catch{return false;}};
 try{
   browser=await chromium.launch({headless:true});
@@ -74,6 +76,7 @@ try{
       result.visible_modals=blockers;
       // Read-only classification of an nds-modal overlay. Do not dismiss
       // legal eligibility, investor-type or age declarations automatically.
+      result.modal_host_count=await page.locator("nds-modal").count();
       result.nds_modal_details=await page.locator("nds-modal").evaluateAll(els=>
         els.map(el=>{const r=el.getBoundingClientRect();return {
           visible:r.width>0&&r.height>0,
@@ -84,7 +87,7 @@ try{
                aria:b.getAttribute("aria-label"),
                title:b.getAttribute("title")
             }))
-        };}).filter(x=>x.visible).slice(0,3));
+        };}).slice(0,3));
 
       const network=[];
       page.on("response",response=>{try{const url=new URL(response.url());
