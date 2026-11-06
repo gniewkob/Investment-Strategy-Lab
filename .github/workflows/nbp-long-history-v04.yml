@@ -1,11 +1,7 @@
 name: ISL v0.4 NBP five-year official reference archive
+# One-time historical source capture: not repeated on every PR commit.
+# Re-run verified Actions jobs; dispatch becomes available after integration.
 on:
-  pull_request:
-    paths:
-      - 'scripts/nbp_long_history_monthly.py'
-      - 'scripts/nbp_reference_capture.py'
-      - 'tests/test_nbp_long_history_monthly.py'
-      - '.github/workflows/nbp-long-history-v04.yml'
   workflow_dispatch:
 permissions:
   contents: read

@@ -1,11 +1,7 @@
 name: ISL v0.4 official 60-month BondSpot TBSP research archive
+# One-time historical source capture: not repeated on every PR commit.
+# Re-run verified Actions jobs; dispatch becomes available after integration.
 on:
-  pull_request:
-    paths:
-      - 'scripts/tbsp_official_archive_v04.py'
-      - 'scripts/tbsp_archive_merge_v04.py'
-      - 'tests/test_tbsp_official_archive_v04.py'
-      - '.github/workflows/tbsp-official-60months-v04.yml'
   workflow_dispatch:
 
 permissions:
