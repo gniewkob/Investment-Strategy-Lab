@@ -137,6 +137,18 @@ class ShadowForwardV05Tests(unittest.TestCase):
         with self.assertRaisesRegex(ShadowInputError,"look-ahead"):
             evaluate_forward(d,f)
 
+    def test_reject_retrospectively_frozen_decision_before_delayed_publication(self):
+        # Forged decision: created after the forward market close, but before
+        # its delayed publication. A publication-only check previously passed.
+        d=input_decision()
+        d["as_of_utc"]="2025-11-28T18:00:00+00:00"
+        d["decision_fingerprint_sha256"]=_digest({
+            k:v for k,v in d.items() if k!="decision_fingerprint_sha256"
+        })
+        f=future_reference(d)
+        with self.assertRaisesRegex(ShadowInputError,"observation must postdate"):
+            evaluate_forward(d,f)
+
     def test_wrong_asset_semantics_and_invalid_costs_rejected(self):
         d=input_decision()
         f=future_reference(d)
