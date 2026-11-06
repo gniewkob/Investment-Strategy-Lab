@@ -107,6 +107,16 @@ class MonthlyBacktestReadinessTest(unittest.TestCase):
         self.assertEqual(rows["PL_BONDS_TR_PLN"][4], 36)
         self.assertEqual(rows["GOLD_TR_PLN"][4], 36)
 
+    def test_36_observations_with_one_missing_month_are_not_complete(self):
+        self._insert(months=37)
+        self.conn.execute("""DELETE FROM investment_lab.price_observations
+          WHERE EXTRACT(YEAR FROM observed_for AT TIME ZONE 'UTC')=2024
+            AND EXTRACT(MONTH FROM observed_for AT TIME ZONE 'UTC')=6""")
+        rows = self._query()
+        self.assertEqual({r[4] for r in rows.values()}, {36})
+        self.assertEqual({r[7] for r in rows.values()},
+                         {"NOT_RUN_GAPPED_MONTHS"})
+
     def test_even_complete_index_not_marked_tradable(self):
         self._insert(months=36)
         first = self._query()
