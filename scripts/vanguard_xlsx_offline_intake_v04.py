@@ -10,7 +10,7 @@ Unsupported layout => fail closed; do not fabricate historical NAV.
 from __future__ import annotations
 
 import argparse
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from hashlib import sha256
 from io import BytesIO
@@ -24,6 +24,7 @@ MAIN="http://schemas.openxmlformats.org/spreadsheetml/2006/main"
 MAX_RAW=15_000_000
 MAX_UNCOMPRESSED=65_000_000
 MAX_ROWS=7000
+SHARE_CLASS_INCEPTION=date(2019,7,23)
 DATE_COLS={"date","valuation date","nav date","data"}
 NAV_USD_COLS={"nav (usd)","nav price (usd)","net asset value (usd)",
               "nav usd","usd nav","net asset value usd"}
@@ -124,9 +125,17 @@ def _positive(v):
     return format(d,"f")
 
 
-def inspect_export(raw,first_month,last_month):
+def inspect_export(raw,first_month,last_month,*,as_of=None):
+    # Allow time injection in offline tests, but never a future vintage.
+    as_of = datetime.now(timezone.utc).date() if as_of is None else as_of
+    if not isinstance(as_of,date) or isinstance(as_of,datetime):
+        raise InvalidVanguardXLSX("as_of must be a calendar date")
     try: first=date.fromisoformat(first_month+"-01");last=date.fromisoformat(last_month+"-01")
     except ValueError as e:raise InvalidVanguardXLSX("invalid YYYY-MM range") from e
+    if first<SHARE_CLASS_INCEPTION.replace(day=1):
+        raise InvalidVanguardXLSX("requested data predates Vanguard share-class inception")
+    if last>=as_of.replace(day=1):
+        raise InvalidVanguardXLSX("only completed historical months are accepted")
     months=[]
     cursor=first
     while cursor<=last:
@@ -152,6 +161,10 @@ def inspect_export(raw,first_month,last_month):
     for row in rows[first_row+1:]:
         if not row.get(date_col):continue
         day=_date_from_xlsx(row[date_col])
+        if day>as_of:
+            raise InvalidVanguardXLSX("future NAV observation cannot be historical")
+        if day<SHARE_CLASS_INCEPTION:
+            raise InvalidVanguardXLSX("NAV observation predates share-class inception")
         if day in seen:raise InvalidVanguardXLSX("duplicate original NAV day")
         seen.add(day)
         val=_positive(row.get(nav_col,""))
