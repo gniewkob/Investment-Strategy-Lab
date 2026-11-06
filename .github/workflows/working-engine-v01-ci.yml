@@ -11,6 +11,9 @@ on:
       - 'tests/test_monthly_proxy_backtest_v04.py'
       - 'scripts/nbp_long_history_monthly.py'
       - 'tests/test_nbp_long_history_monthly.py'
+      - 'scripts/tbsp_official_archive_v04.py'
+      - 'scripts/tbsp_archive_merge_v04.py'
+      - 'tests/test_tbsp_official_archive_v04.py'
       - 'tests/integration/test_monthly_backtest_v04_readiness.py'
       - 'db/working_engine_v02_health_READONLY.sql'
       - 'db/nbp_reference_metrics_v01_READONLY.sql'
@@ -36,6 +39,9 @@ on:
       - 'tests/test_monthly_proxy_backtest_v04.py'
       - 'scripts/nbp_long_history_monthly.py'
       - 'tests/test_nbp_long_history_monthly.py'
+      - 'scripts/tbsp_official_archive_v04.py'
+      - 'scripts/tbsp_archive_merge_v04.py'
+      - 'tests/test_tbsp_official_archive_v04.py'
       - 'tests/integration/test_monthly_backtest_v04_readiness.py'
       - 'db/working_engine_v02_health_READONLY.sql'
       - 'db/nbp_reference_metrics_v01_READONLY.sql'
@@ -80,6 +86,8 @@ jobs:
           python -m unittest discover -s tests -p 'test_nbp_lab_prepare.py' -v
           python -m unittest discover -s tests -p 'test_nbp_lab_ingest_sql.py' -v
           python -m unittest discover -s tests -p 'test_nbp_lab_daily_source.py' -v
+      - name: Validate TBSP dated-source and digest controls offline
+        run: python -m unittest discover -s tests -p 'test_tbsp_official_archive_v04.py' -v
       - name: Validate 60-month NBP archive window controls offline
         run: python -m unittest discover -s tests -p 'test_nbp_long_history_monthly.py' -v
       - name: Validate v0.4 monthly backtester, no database/network
