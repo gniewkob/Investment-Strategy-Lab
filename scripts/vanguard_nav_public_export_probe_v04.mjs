@@ -48,10 +48,45 @@ try {
     }else{
       const button=terms.first();
       await button.scrollIntoViewIfNeeded({timeout:15000});
+      const observedNetwork=[];
+      page.on("response",(res)=>{
+        const uri=res.url();
+        if(/price|csv|export|historical|nav/i.test(uri)){
+          try {
+            const host=new URL(uri).hostname;
+            if((host==="www.vanguard.co.uk"||host.endsWith(".vanguard.com"))
+                  && observedNetwork.length<14){
+              observedNetwork.push({host,path:new URL(uri).pathname.slice(0,140),
+                                    http:res.status()});
+            }
+          }catch{}
+        }
+      });
+      result.control_element=await button.evaluate(el=>({
+        tag:el.tagName,
+        role:el.getAttribute("role"),
+        disabled:el.getAttribute("disabled"),
+        class_excerpt:(el.className||"").toString().slice(0,120),
+        parent_tag:el.parentElement?.tagName??null
+      }));
       try {
-        const promise=page.waitForEvent("download",{timeout:30000});
-        await button.click({timeout:20000});
-        const download=await promise;
+        // Await BOTH outcomes. A failed click must not leave an unhandled
+        // waitForEvent rejection when the browser is closed.
+        const attempts=await Promise.allSettled([
+          page.waitForEvent("download",{timeout:22000}),
+          button.click({timeout:15000}),
+        ]);
+        result.click_status=attempts[1].status;
+        result.source_network_observations=observedNetwork;
+        if(attempts[0].status!=="fulfilled"||attempts[1].status!=="fulfilled"){
+          result.download_status="DOWNLOAD_CONTROL_DID_NOT_PRODUCE_FILE";
+          result.reason=attempts.map((x,i)=>
+            x.status==="rejected" ?
+             ((i===0?"download:":"click:")+String(x.reason?.message??x.reason).slice(0,180))
+             : null).filter(Boolean).join(" / ");
+          done();
+        }else{
+        const download=attempts[0].value;
         const suggested=download.suggestedFilename();
         const sanitized=suggested.replace(/[^A-Za-z0-9._-]/g,"_").slice(0,96);
         mkdirSync(ROOT,{recursive:true});
@@ -66,6 +101,7 @@ try {
         result.first_64_byte_hex=bytes.subarray(0,64).toString("hex");
         result.full_60_month_NAV_validated=false;
         done();
+        }
       }catch(ex){
         result.download_status="DOWNLOAD_CONTROL_DID_NOT_PRODUCE_FILE";
         result.reason=ex?.name??"UnknownError";
