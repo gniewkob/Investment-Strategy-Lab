@@ -411,6 +411,20 @@ class WorkingEngineAcceptance(unittest.TestCase):
         self.assertEqual(self.scalar(
             "SELECT count(*) FROM investment_lab.research_runs"), 0)
 
+    def test_nbp_reference_metrics_rejects_unofficial_provenance(self):
+        # A numeric row with a forged source_code is not NBP evidence.
+        self.conn.execute("""INSERT INTO investment_lab.price_observations
+          (instrument_code,source_code,observed_for,ingested_at,
+           interval_code,return_basis,close_price,source_url)
+          VALUES ('USDPLN_NBP','nbp_rates',now()-interval '3 days',
+                  now()-interval '2 days','1d','FX_RATE',999,
+                  'https://untrusted.example/api/exchangerates/a')""")
+        rows = self.conn.execute(NBP_METRICS_SQL).fetchall()
+        usd = next(r for r in rows if r[0] == "USDPLN_NBP")
+        self.assertEqual(usd[11], "SOURCE_MISSING")
+        self.assertIsNone(usd[7])
+        self.assertEqual(usd[4], 0)
+
     def test_nbp_reference_metrics_no_late_ingest_or_replay_lookahead(self):
         self.conn.execute("""INSERT INTO investment_lab.price_observations
           (instrument_code,source_code,observed_for,ingested_at,
