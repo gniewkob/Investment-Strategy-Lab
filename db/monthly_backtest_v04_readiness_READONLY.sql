@@ -32,6 +32,12 @@ SELECT instrument_code,model_scope,instrument_registered,
        first_month,last_month,
        CASE WHEN monthly_qualified_rows=0 THEN 'NOT_RUN_SERIES_MISSING'
             WHEN distinct_qualified_months<36 THEN 'NOT_RUN_INSUFFICIENT_MONTHS'
+            WHEN (
+                (EXTRACT(YEAR FROM last_month AT TIME ZONE 'UTC') -
+                 EXTRACT(YEAR FROM first_month AT TIME ZONE 'UTC'))*12
+                + EXTRACT(MONTH FROM last_month AT TIME ZONE 'UTC')
+                - EXTRACT(MONTH FROM first_month AT TIME ZONE 'UTC') + 1
+                 )<>distinct_qualified_months THEN 'NOT_RUN_GAPPED_MONTHS'
             ELSE 'NEEDS_VINTAGE_AND_EXECUTION_EVIDENCE'
        END AS model_research_readiness,
        'NEVER_INTERPRET_REFERENCE_INDEX_AS_EXECUTABLE_PRICE' AS execution_guard,
