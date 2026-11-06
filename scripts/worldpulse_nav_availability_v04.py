@@ -90,6 +90,19 @@ def _month_sequence(first="2021-11", last="2026-10"):
     return result
 
 
+def _longest_consecutive_months(months):
+    if not months:
+        return 0
+    ordered = sorted(months)
+    longest = current = 1
+    for prev, nxt in zip(ordered, ordered[1:]):
+        p = date.fromisoformat(prev + "-01")
+        expected = f"{p.year + (p.month == 12):04d}-{(p.month % 12) + 1:02d}"
+        current = current + 1 if nxt == expected else 1
+        longest = max(longest, current)
+    return longest
+
+
 def _date_value(row):
     if not isinstance(row, dict):
         raise ValueError("observation must be an object")
@@ -100,7 +113,17 @@ def _date_value(row):
     if not isinstance(d, str):
         raise ValueError("date string expected")
     # Only ISO date and ISO timestamp are accepted.
-    day = date.fromisoformat(d[:10])
+    if len(d) == 10:
+        day = date.fromisoformat(d)
+    elif len(d) >= 20 and d[10] in "Tt" and (
+            d.endswith("Z") or "+" in d[19:] or "-" in d[19:]):
+        # Check an actual ISO UTC-offset timestamp, not merely its first 10 chars.
+        dt = datetime.fromisoformat(d.replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            raise ValueError("timestamp must include a UTC offset")
+        day = dt.date()
+    else:
+        raise ValueError("observation date must be ISO date or offset timestamp")
     if not isinstance(v, (str, int, float)) or isinstance(v, bool):
         raise ValueError("invalid NAV type")
     try:
@@ -141,6 +164,7 @@ def assess_response(kind, status, ctype, body, *, clock=lambda: datetime.now(tim
         "schema_status": "NOT_CHECKED",
         "observations": 0,
         "unique_months": 0,
+        "max_consecutive_in_window_months": 0,
         "required_window_months": len(_month_sequence()),
         "in_window_months": 0,
         "missing_month_count": len(_month_sequence()),
@@ -187,8 +211,10 @@ def assess_response(kind, status, ctype, body, *, clock=lambda: datetime.now(tim
             months.add(d.strftime("%Y-%m"))
         required = set(_month_sequence())
         inside = required.intersection(months)
+        longest = _longest_consecutive_months(inside)
         report.update({
             "schema_status": "RECOGNIZED_CANDIDATE_FORMAT",
+            "max_consecutive_in_window_months": longest,
             "observations": len(rows),
             "unique_months": len(months),
             "in_window_months": len(inside),
@@ -197,7 +223,7 @@ def assess_response(kind, status, ctype, body, *, clock=lambda: datetime.now(tim
             "latest_observation_date": max(seen).isoformat() if seen else None,
             "latest_target_month_present": _month_sequence()[-1] in months,
             "availability": ("DATA_COVERAGE_CANDIDATE_RIGHTS_UNVERIFIED"
-                             if len(inside) >= MIN_MONTHS else "BLOCKED"),
+                             if longest >= MIN_MONTHS else "BLOCKED"),
         })
     except (ValueError, KeyError, TypeError, UnicodeError) as exc:
         report["schema_status"] = "UNVERIFIED_SCHEMA"
