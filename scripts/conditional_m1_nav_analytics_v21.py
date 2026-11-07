@@ -88,6 +88,11 @@ def evaluate(artifact):
             cash = positive(out["cash_reference_final_pln"], "cash baseline")
             rate = _xirr(dates, deposit=D("100"), terminal=terminal)
             cash_rate = _xirr(dates, deposit=D("100"), terminal=cash)
+            # Normalize floating bisection noise near zero; avoid -0.0000%.
+            if abs(cash_rate) < D("0.0000000001"):
+                cash_rate = D("0")
+            if abs(rate) < D("0.0000000001"):
+                rate = D("0")
             drawdown = _reference_max_drawdown(prices)
             outcomes.append({
                 "scenario": name,
