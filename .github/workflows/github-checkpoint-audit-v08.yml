@@ -8,6 +8,8 @@ on:
       - 'tests/test_shadow_evidence_ledger_v09.py'
       - 'scripts/shadow_external_anchor_v10.py'
       - 'tests/test_shadow_external_anchor_v10.py'
+      - 'scripts/shadow_backup_restore_v11.py'
+      - 'tests/test_shadow_backup_restore_v11.py'
       - '.github/workflows/github-checkpoint-audit-v08.yml'
   workflow_dispatch:
     inputs:
@@ -123,6 +125,30 @@ jobs:
             --verify "$ANCHOR_PATH" --expected-sha256 "$ANCHOR_SHA" \
             | tee checkpoint-evidence/anchor-local-check.txt
           # CI's SHA comes from this same runner. It is NOT independently pinned.
+      - name: Verify v0.11 backup and non-destructive restore against live checkpoint
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest discover -s tests -p 'test_shadow_backup_restore_v11.py' -v
+          mkdir -p checkpoint-evidence/v11-backups checkpoint-evidence/v11-restores
+          chmod 700 checkpoint-evidence/v11-backups checkpoint-evidence/v11-restores
+          ANCHOR_PATH="$(python -c 'import json;print(json.loads(open("checkpoint-evidence/anchor-generation-receipt.txt").read().split("=",1)[1])["path"])')"
+          ANCHOR_SHA="$(python -c 'import json;print(json.loads(open("checkpoint-evidence/anchor-generation-receipt.txt").read().split("=",1)[1])["anchor_sha256"])')"
+          python -m scripts.shadow_backup_restore_v11 create \
+            --ledger checkpoint-evidence/evidence-shadow-ledger.sqlite3 \
+            --anchor "$ANCHOR_PATH" --anchor-sha256 "$ANCHOR_SHA" \
+            --destination-root checkpoint-evidence/v11-backups \
+            | tee checkpoint-evidence/v11-backup-receipt.txt
+          BACKUP_PATH="$(python -c 'import json;print(json.loads(open("checkpoint-evidence/v11-backup-receipt.txt").read().split("=",1)[1])["path"])')"
+          MANIFEST_SHA="$(python -c 'import json;print(json.loads(open("checkpoint-evidence/v11-backup-receipt.txt").read().split("=",1)[1])["manifest_sha256"])')"
+          python -m scripts.shadow_backup_restore_v11 verify \
+            --snapshot "$BACKUP_PATH" --manifest-sha256 "$MANIFEST_SHA" \
+            | tee checkpoint-evidence/v11-verify-receipt.txt
+          python -m scripts.shadow_backup_restore_v11 restore-drill \
+            --snapshot "$BACKUP_PATH" --manifest-sha256 "$MANIFEST_SHA" \
+            --restore-root checkpoint-evidence/v11-restores \
+            | tee checkpoint-evidence/v11-restore-receipt.txt
+          # All files are on the same disposable runner, NOT independent offsite backup.
       - name: Save only bounded audit receipt (not source archive)
         uses: actions/upload-artifact@v4
         with:
@@ -134,5 +160,9 @@ jobs:
             checkpoint-evidence/anchors/*.json
             checkpoint-evidence/anchor-generation-receipt.txt
             checkpoint-evidence/anchor-local-check.txt
+            checkpoint-evidence/v11-backup-receipt.txt
+            checkpoint-evidence/v11-verify-receipt.txt
+            checkpoint-evidence/v11-restore-receipt.txt
+            checkpoint-evidence/v11-backups/*/manifest.json
           if-no-files-found: error
           retention-days: 90
