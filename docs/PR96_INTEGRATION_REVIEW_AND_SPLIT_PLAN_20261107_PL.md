@@ -64,3 +64,45 @@ Nie tworzyć pięciu nowych PR przez ręczne kopiowanie niezweryfikowanej głowi
 `scripts/nav_fx_evidence_capture_v25.py` tworzy nowy plik przez `os.open(..., os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)`, co uniemożliwia fazę zapisu z uprawnieniami szerszymi niż `0600`, nie nadpisuje istniejących plików/symlinków, a po zapisaniu wykonuje `flush` i `fsync`. W `tests/test_nav_fx_evidence_capture_v25.py` dodano trzy przypadki: umask 000 daje nadal 0600, identyczne oryginalne bajty, katalog prywatny 0700; istniejący plik nie jest nadpisywany; wcześniejszy symlink nie zmienia pliku docelowego.
 
 **CI na dokładnym SHA:** 5/5 workflowów GitHub PASS, Working Engine E2E [#42422706989](https://github.com/gniewkob/Investment-Strategy-Lab/actions/runs/42422706989), dedykowane testy v0.25 PASS. **MF-04 = TECHNICALLY REMEDIATED**, odbiór lokalny tej konkretnej poprawki nie był dotąd osobno wykonywany na Mac. Pozostałe bramki MF-01, MF-02, MF-03, MF-05 i MF-06 pozostają otwarte. Nie wprowadzono zmian w źródłach NAV, zamrożonej polityce, hashach, danych historycznych ani regułach kwalifikacji M1.
+
+
+## 7. Aktualny punkt wspólny i automatyczny dry-run — 2026-11-07
+
+Dane z dwóch rzeczywistych odpowiedzi GitHub Compare:
+- `main` SHA `d93e2ac3c5559f0d06f99f8026655905e4a8537d`.
+- Merge-base SHA `f06459a9a2513632497bc2039e4caea90eb8bc05`.
+- Research branch SHA w chwili tego porównania `16bc35a5fcbeef631248bfd7556578bd5dba4972`.
+- Branch względem `main`: 310 commitów ahead, 2 behind; 155 plików w forward compare. PR API wtedy pokazywał 133 changed files. Liczby mogą się zmienić po dopisaniu audytu.
+- Reverse compare research...main: 2 commity zmieniające wyłącznie `.github/workflows/isl-nbp-public-daily.yml`, dodaną po stronie main. To **nie jest plik modyfikowany przez PR #96** — zachodzi zero kolizji ścieżek w porównaniu przy tych SHA. Nie stanowi to jeszcze fizycznego testu algorytmu merge Git.
+- Daily workflow NBP z `main` ma harmonogram `17 4 * * *`, używa checkout przypiętego SHA `9bebd1aabb66019d3de0556c0ff1733d155bdbc1`, i nie zapisuje do Neon. Automatyczny merge nie może niejawnie przestawić tego SHA ani harmonogramu.
+
+Nowe narzędzie `scripts/pr96_git_merge_preflight.py` wykonuje lokalnie **Git `merge-tree --write-tree`**, bez checkout, merge, rebase, push i bez zmiany refów. Git może utworzyć *nieosiągalne obiekty tree* w lokalnym object store, ale nie modyfikuje plików roboczych. Raport zawiera rzeczywiste rozstrzygnięcie clean/conflict, wyliczony merge-base, SHA obu gałęzi, liczbę zmian i nakładające się ścieżki. Odpowiedź `CLEAN_TREE_MERGE_ONLY_NOT_TESTED` oznacza wyłącznie zgodność merge-tree; **nie dowodzi pomyślnego CI dla połączonego drzewa**, dopuszczenia market sources ani uprawnień do merge.
+
+### Lokalne wykonanie w Mac mini na świeżych refach
+
+```bash
+(
+  set -euo pipefail
+  cd "$HOME/Repos/Investment-Strategy-Lab-shadow-v12"
+  git fetch origin main codex/v04-monthly-backtest-engine-20261106
+
+  SHA="9ed9602487fa5d93a1e9cbb832d5e968f6f6c62b"
+  DIR="$(mktemp -d)/lab"
+  git worktree add --detach "$DIR" "$SHA"
+  cd "$DIR"
+
+  python3 -m scripts.pr96_git_merge_preflight \
+    --repo "$HOME/Repos/Investment-Strategy-Lab-shadow-v12" \
+    --main-ref origin/main \
+    --research-ref origin/codex/v04-monthly-backtest-engine-20261106
+)
+```
+
+Exit 0 oznacza wyłącznie czyste `merge-tree`; exit 2 konflikt. `git fetch` celowo aktualizuje **wyłącznie lokalne tracking refs**; nie wysyła zmian na GitHub. Narzędzie nie pobiera danych rynku, nie dotyka Neon ani portfeli. Należy zachować pełny wynik JSON i przypięte SHA z przebiegu operatora, zamiast deklarować sukces wyłącznie na podstawie braku kolizji plików.
+
+### Plan po czystym merge-tree
+
+1. Zweryfikować bazę konkretnego PR i ograniczenia branch protection, aby nie pomylić `main` z bazą innego PR.
+2. Utworzyć **izolowany testowy merge commit** (zachowując obie historie) tylko w tymczasowej gałęzi i uruchomić testy na jego *rzeczywistym drzewie*, nigdy na starym SHA research.
+3. Przygotować mniejsze PR A–E zależne w uporządkowanej kolejności, z osobnymi checks i punktami odbioru.
+4. Nie przepisywać zamrożonych `v0.22` receipt SHA, historycznego NAV/NBP ani anchorów Issue #97.
