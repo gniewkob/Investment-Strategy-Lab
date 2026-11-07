@@ -164,5 +164,7 @@ jobs:
             checkpoint-evidence/v11-verify-receipt.txt
             checkpoint-evidence/v11-restore-receipt.txt
             checkpoint-evidence/v11-backups/*/manifest.json
+            checkpoint-evidence/v11-backups/*/anchor.json
+            checkpoint-evidence/v11-backups/*/ledger.sqlite3
           if-no-files-found: error
           retention-days: 90
