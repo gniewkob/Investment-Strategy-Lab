@@ -11,6 +11,7 @@ on:
       - 'scripts/monthly_cost_sensitivity_v14.py'
       - 'scripts/shadow_decision_engine_v05.py'
       - 'scripts/research_decision_controller_v15.py'
+      - 'scripts/research_decision_pipeline_v16.py'
       - 'scripts/shadow_forward_evaluation_v05.py'
       - 'scripts/shadow_journal_v06.py'
       - 'scripts/shadow_capture_v07.py'
@@ -31,6 +32,7 @@ on:
       - 'tests/test_shadow_offsite_export_v13.py'
       - 'tests/test_shadow_decision_engine_v05.py'
       - 'tests/test_research_decision_controller_v15.py'
+      - 'tests/test_research_decision_pipeline_v16.py'
       - 'tests/test_monthly_proxy_backtest_v04.py'
       - 'tests/test_monthly_cost_sensitivity_v14.py'
       - 'scripts/nbp_long_history_monthly.py'
@@ -82,6 +84,7 @@ on:
       - 'scripts/monthly_cost_sensitivity_v14.py'
       - 'scripts/shadow_decision_engine_v05.py'
       - 'scripts/research_decision_controller_v15.py'
+      - 'scripts/research_decision_pipeline_v16.py'
       - 'scripts/shadow_forward_evaluation_v05.py'
       - 'scripts/shadow_journal_v06.py'
       - 'scripts/shadow_capture_v07.py'
@@ -102,6 +105,7 @@ on:
       - 'tests/test_shadow_offsite_export_v13.py'
       - 'tests/test_shadow_decision_engine_v05.py'
       - 'tests/test_research_decision_controller_v15.py'
+      - 'tests/test_research_decision_pipeline_v16.py'
       - 'tests/test_monthly_proxy_backtest_v04.py'
       - 'tests/test_monthly_cost_sensitivity_v14.py'
       - 'scripts/nbp_long_history_monthly.py'
@@ -202,6 +206,11 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_shadow_decision_engine_v05.py' -v
       - name: Validate v0.15 source-gated M1-M3 decision orchestration and M3 confirmation
         run: python -m unittest discover -s tests -p 'test_research_decision_controller_v15.py' -v
+      - name: Run v0.16 decision cycle against real archived source plus tamper tests
+        run: |
+          python -m unittest discover -s tests -p 'test_research_decision_pipeline_v16.py' -v
+          python -m scripts.research_decision_pipeline_v16 --archived-v09 evidence/shadow/v09/checkpoint-bundle-run-42305280062.json
+
       - name: Validate v0.4 monthly backtester, no database/network
         run: python -m unittest discover -s tests -p 'test_monthly_proxy_backtest_v04.py' -v
       - name: Validate v0.14 non-executable cost sensitivity and missing-data gates
