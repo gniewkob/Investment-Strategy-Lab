@@ -53,7 +53,7 @@ jobs:
             export CUTOFF_UTC="$(gh api "repos/gniewkob/Investment-Strategy-Lab/actions/runs/$GITHUB_RUN_ID" --jq .created_at)"
             gh api "repos/gniewkob/Investment-Strategy-Lab/actions/runs?per_page=100&event=pull_request&status=success" \
               > checkpoint-evidence/prior-runs.json
-            RUN_ID="$(python -c 'import json,os; rs=json.load(open("checkpoint-evidence/prior-runs.json"))["workflow_runs"]; prior=[r for r in rs if r.get("path","").split("@")[0]==".github/workflows/shadow-capture-v07.yml" and r.get("head_branch")==os.environ["HEAD_REF"] and r.get("created_at","")<os.environ["CUTOFF_UTC"]]; print(prior[0]["id"] if prior else "")')"
+            RUN_ID="$(python -c 'import json,os; rs=json.load(open("checkpoint-evidence/prior-runs.json"))["workflow_runs"]; prior=[r for r in rs if r.get("path","").split("@")[0]==".github/workflows/shadow-capture-v07.yml" and r.get("head_branch")==os.environ["HEAD_REF"] and r.get("created_at","")<os.environ["CUTOFF_UTC"] and r.get("updated_at","")<os.environ["CUTOFF_UTC"]]; print(prior[0]["id"] if prior else "")')"
             test -n "$RUN_ID" || { echo 'No completed earlier v0.7 capture available for this PR'; exit 1; }
           else
             RUN_ID="$INPUT_RUN_ID"
