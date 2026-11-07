@@ -283,7 +283,7 @@ jobs:
       - name: Validate v0.28 chronological M1-M3 decision stability journal
         run: python -m unittest discover -s tests -p 'test_research_chronological_decision_audit_v28.py' -v
       - name: Validate v0.29 archived decision evidence bridge and ledger integrity
-        run: python -m unittest discover -s tests -p 'test_research_archived_decision_link_v29.py' -v
+        run: python -W error::ResourceWarning -m unittest discover -s tests -p 'test_research_archived_decision_link_v29.py' -v
       - name: Run v0.16 decision cycle against real archived source plus tamper tests
         run: |
           python -m unittest discover -s tests -p 'test_research_decision_pipeline_v16.py' -v
