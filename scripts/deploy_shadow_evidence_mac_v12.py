@@ -15,6 +15,7 @@ from pathlib import Path
 import platform
 import re
 import shutil
+import sqlite3
 import stat
 import subprocess
 import sys
@@ -121,6 +122,7 @@ def deploy_isolated(base, bundle, *, source_sha):
     parent = base.parent
     if not parent.is_dir() or parent.is_symlink():
         raise ShadowInputError("deployment parent unavailable")
+    old_umask = os.umask(0o077)
     stage = Path(tempfile.mkdtemp(prefix=".isl-shadow-v12-stage-", dir=parent))
     os.chmod(stage, 0o700)
     promoted = False
@@ -130,6 +132,7 @@ def deploy_isolated(base, bundle, *, source_sha):
             _private_dir(stage / dirname)
         ledger = stage / "ledger" / "research-evidence.sqlite3"
         appended = append(ledger, bundle)
+        os.chmod(ledger, 0o600)
         if appended.get("entries") != 1 or appended.get("append_status") != "NEW_EVIDENCE":
             raise ShadowInputError("bootstrap must create exactly one new research receipt")
         anchor_doc = prepare_anchor(ledger, created_at_utc=datetime.now(timezone.utc).isoformat())
@@ -176,6 +179,7 @@ def deploy_isolated(base, bundle, *, source_sha):
     finally:
         if not promoted and stage.exists():
             shutil.rmtree(stage)
+        os.umask(old_umask)
 
 
 def main():
@@ -204,5 +208,4 @@ def main():
 
 
 if __name__ == "__main__":
-    import sqlite3
     main()
