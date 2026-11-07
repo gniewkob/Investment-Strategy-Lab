@@ -99,6 +99,27 @@ class GithubCheckpointV08Tests(unittest.TestCase):
         with self.assertRaisesRegex(ShadowInputError, "preserved before cutoff"):
             verify(cap, run, arts, cutoff_utc="2026-11-06T18:01:30Z")
 
+    def test_github_second_precision_artifact_time_does_not_false_reject(self):
+        from scripts.shadow_decision_engine_v05 import _digest
+        cap, run, arts = scenario()
+        instant = "2026-11-06T18:00:00.500000+00:00"
+        cap["captured_at_utc"] = instant
+        cap["decision"]["as_of_utc"] = instant
+        cap["decision"]["decision_fingerprint_sha256"] = _digest({
+            k: v for k, v in cap["decision"].items() if k != "decision_fingerprint_sha256"
+        })
+        cap["capture_sha256"] = _digest({
+            k: v for k, v in cap.items() if k != "capture_sha256"
+        })
+        # GitHub rounds/truncates artifact timestamp to the whole second.
+        arts["artifacts"][0]["created_at"] = "2026-11-06T18:00:00Z"
+        checked = verify(cap, run, arts, cutoff_utc=CUTOFF)
+        self.assertTrue(checked["github_api_metadata_matches"])
+        self.assertFalse(checked["trusted_timestamp_certified"])
+        arts["artifacts"][0]["created_at"] = "2026-11-06T17:59:59Z"
+        with self.assertRaisesRegex(ShadowInputError, "not preserved before cutoff"):
+            verify(cap, run, arts, cutoff_utc=CUTOFF)
+
     def test_mismatched_frozen_decision_rejected(self):
         cap, run, arts = scenario()
         cap["decision"]["as_of_utc"] = "2026-11-06T18:01:00Z"
