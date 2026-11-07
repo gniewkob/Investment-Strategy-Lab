@@ -8,6 +8,7 @@ storage if external nonrepudiation is needed. No brokerage or Neon I/O.
 from __future__ import annotations
 
 import argparse
+from contextlib import closing
 import json
 import sqlite3
 from pathlib import Path
@@ -98,7 +99,7 @@ def audit(path):
     if not Path(path).is_file():
         raise ShadowInputError("ledger does not exist")
     uri = Path(path).resolve().as_uri().replace("file://", "file:") + "?mode=ro"
-    with sqlite3.connect(uri, uri=True) as conn:
+    with closing(sqlite3.connect(uri, uri=True)) as conn:
         return _check_rows(conn)
 
 
