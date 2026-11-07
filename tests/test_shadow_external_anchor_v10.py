@@ -34,13 +34,14 @@ class ExternalAnchorV10Tests(unittest.TestCase):
     def test_anchor_matches_verified_one_entry_ledger(self):
         entry, path, digest = self._anchor()
         result = verify_anchor(self.ledger, path, expected_sha256=digest)
-        self.assertEqual(result["status"], "EXTERNALLY_PINNED_HASH_AND_SQLITE_PREFIX_MATCH")
+        self.assertEqual(result["status"], "SUPPLIED_HASH_AND_SQLITE_PREFIX_MATCH_NOT_EXTERNAL_PROOF")
         self.assertEqual(result["anchored_entries"], 1)
         self.assertEqual(result["current_entries"], 1)
         self.assertEqual(result["anchored_head_sha256"], audit(self.ledger)["head_sha256"])
         self.assertEqual(sha256(path.read_bytes()).hexdigest(), digest)
         self.assertEqual(path.read_bytes(), _canonical_bytes(entry))
         self.assertFalse(result["trusted_time_verified"])
+        self.assertFalse(result["external_hash_independently_witnessed"])
         self.assertFalse(result["external_WORM_storage_verified"])
         self.assertEqual(result["financial_operations"], 0)
 
