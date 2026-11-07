@@ -53,7 +53,7 @@ def freeze(artifact, *, clock=lambda: datetime.now(timezone.utc)):
         "source_evidence_sha256": artifact["evidence_sha256"],
         "original_nav_file_sha256": artifact["nav_candidate_file_sha256"],
         "baseline_analytics_v21_sha256": analytics["analytics_receipt_sha256"],
-        "declared_policy": POLICY,
+        "declared_policy": dict(POLICY),
         "forward_qualified_months": 0,
         "forward_observations": [],
         "independent_time_anchor_verified": False,
