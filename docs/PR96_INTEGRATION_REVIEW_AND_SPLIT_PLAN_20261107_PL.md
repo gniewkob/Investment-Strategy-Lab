@@ -55,3 +55,12 @@ Nie tworzyć pięciu nowych PR przez ręczne kopiowanie niezweryfikowanej głowi
 **Niewykonane:** pełne review kodu wszystkich 132 plików; test potencjalnych konfliktów `main`; rozcięcie PR i indywidualne przetestowanie; niezależne potwierdzenie source rights/PIT/licencji; rzeczywiste forward miesiące listopad 2026+; jakiekolwiek kwalifikowanie aktywnej strategii.
 
 **Decyzja:** `PR_96_INTEGRATION_REVIEW_INCOMPLETE_DO_NOT_MERGE`. Priorytet to MF-04 i separacja workflowów źródłowych, po czym porządkowanie A–E na aktualnej bazie. Z technicznego PASS nie wyciągać wniosku o jakości inwestycyjnej ani dopuszczeniu transakcji.
+
+
+## 6. Uzupełnienie odbioru — MF-04 naprawione (2026-11-07)
+
+**Zmiana kodu i testów:** `e7c0e188b893c2b965c2492e3400f4df7e86bad5`.
+
+`scripts/nav_fx_evidence_capture_v25.py` tworzy nowy plik przez `os.open(..., os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)`, co uniemożliwia fazę zapisu z uprawnieniami szerszymi niż `0600`, nie nadpisuje istniejących plików/symlinków, a po zapisaniu wykonuje `flush` i `fsync`. W `tests/test_nav_fx_evidence_capture_v25.py` dodano trzy przypadki: umask 000 daje nadal 0600, identyczne oryginalne bajty, katalog prywatny 0700; istniejący plik nie jest nadpisywany; wcześniejszy symlink nie zmienia pliku docelowego.
+
+**CI na dokładnym SHA:** 5/5 workflowów GitHub PASS, Working Engine E2E [#42422706989](https://github.com/gniewkob/Investment-Strategy-Lab/actions/runs/42422706989), dedykowane testy v0.25 PASS. **MF-04 = TECHNICALLY REMEDIATED**, odbiór lokalny tej konkretnej poprawki nie był dotąd osobno wykonywany na Mac. Pozostałe bramki MF-01, MF-02, MF-03, MF-05 i MF-06 pozostają otwarte. Nie wprowadzono zmian w źródłach NAV, zamrożonej polityce, hashach, danych historycznych ani regułach kwalifikacji M1.
