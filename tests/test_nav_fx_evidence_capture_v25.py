@@ -1,12 +1,16 @@
 """v0.25 synthetic-only original XLSX + official NBP raw evidence tests."""
 from datetime import datetime, timezone
+from pathlib import Path
+from tempfile import TemporaryDirectory
+import os
+import stat
 from unittest.mock import patch
 import json
 import unittest
 
 from scripts.nav_forward_freeze_v22 import freeze
 from scripts import nav_forward_admission_v23 as v23
-from scripts.nav_fx_evidence_capture_v25 import collect
+from scripts.nav_fx_evidence_capture_v25 import collect, _write_private_raw
 from tests.test_conditional_m1_nav_diagnostic_v20 import sample_receipt
 from tests.test_vanguard_xlsx_offline_intake_v04 import fake_xlsx
 
@@ -28,6 +32,37 @@ def run(frozen, baseline, **kw):
 
 
 class NAVFXCaptureV25Tests(unittest.TestCase):
+    def test_original_nbp_raw_file_private_from_creation_and_exact_bytes(self):
+        with TemporaryDirectory() as d:
+            path=Path(d)/"archive"/"nbp.json"
+            # The output must stay 0600 even if parent process permits 0666.
+            previous_umask=os.umask(0)
+            try:
+                _write_private_raw(path, NBP)
+            finally:
+                os.umask(previous_umask)
+            self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
+            self.assertEqual(path.read_bytes(), NBP)
+            self.assertEqual(stat.S_IMODE(path.parent.stat().st_mode), 0o700)
+
+    def test_original_nbp_raw_file_never_overwritten(self):
+        with TemporaryDirectory() as d:
+            path=Path(d)/"nbp.json"
+            _write_private_raw(path, NBP)
+            with self.assertRaises(FileExistsError):
+                _write_private_raw(path, b"forged")
+            self.assertEqual(path.read_bytes(), NBP)
+
+    def test_original_nbp_raw_file_preexisting_symlink_rejected(self):
+        with TemporaryDirectory() as d:
+            target=Path(d)/"protected.json"
+            target.write_bytes(b"keep")
+            link=Path(d)/"nbp.json"
+            link.symlink_to(target)
+            with self.assertRaises(FileExistsError):
+                _write_private_raw(link, NBP)
+            self.assertEqual(target.read_bytes(), b"keep")
+
     def test_current_month_offline_pending_no_fetch(self):
         frozen,baseline=sources()
         def blocked(_):
