@@ -22,7 +22,7 @@ def _cell(ref, value, *, inline=False, formula=False):
 
 
 def fake_xlsx(months=60, *, skip=None, duplicate=False, numeric_dates=False,
-              wrong_header=False, formula=False, macro=False):
+              wrong_header=False, formula=False, macro=False, localized=False):
     contents=[
         '<row r="1">'+_cell("A1","Date",inline=True)
         +_cell("B1","Market price (USD)",inline=True)
@@ -34,10 +34,16 @@ def fake_xlsx(months=60, *, skip=None, duplicate=False, numeric_dates=False,
         month=f"{y:04d}-{m:02d}"
         if skip==month:continue
         day=date(y,m,calendar.monthrange(y,m)[1])
-        value=str((day-date(1899,12,30)).days) if numeric_dates else day.isoformat()
+        if localized:
+            months_pl=("sty","lut","mar","kwi","maj","cze",
+                       "lip","sie","wrz","paź","lis","gru")
+            value=f"{day.day:02d} {months_pl[day.month-1]} {day.year}"
+        else:
+            value=str((day-date(1899,12,30)).days) if numeric_dates else day.isoformat()
         cells=_cell(f"A{i+2}",value,inline=not numeric_dates)
         cells+=_cell(f"B{i+2}",888+i)
-        cells+=_cell(f"C{i+2}",100+i,formula=formula and i==0)
+        nav=f"{100+i},4672\\u00a0USD" if localized else 100+i
+        cells+=_cell(f"C{i+2}",nav,inline=localized,formula=formula and i==0)
         contents.append(f'<row r="{i+2}">{cells}</row>')
         if duplicate and i==0:
             contents.append(f'<row r="{i+300}">'
@@ -75,6 +81,26 @@ class VanguardOfflineXLSXIntakeTests(unittest.TestCase):
         self.assertEqual(doc["financial_operations"],0)
         self.assertEqual(doc["paper_events_created"],0)
         self.assertEqual(doc,inspect_export(raw,"2021-11","2026-10"))
+
+    def test_polish_original_export_date_and_localized_nav_usd(self):
+        # Schema observed in real retail XLSX, but data remain synthetic.
+        document=inspect_export(fake_xlsx(60,localized=True),
+                                "2021-11","2026-10",as_of=date(2026,11,7))
+        self.assertEqual(document["months"],60)
+        self.assertEqual(document["monthly"][0]["observed_for"],"2021-11-30")
+        self.assertEqual(document["monthly"][0]["nav_usd"],"100.4672")
+        self.assertEqual(document["monthly"][-1]["nav_usd"],"159.4672")
+        self.assertFalse(document["usable_as_GLOBAL_EQUITY_TR_PLN"])
+        self.assertFalse(document["historical_pit_certified"])
+
+    def test_polish_export_rejects_wrong_month_or_currency(self):
+        raw=fake_xlsx(60,localized=True)
+        with self.assertRaisesRegex(InvalidVanguardXLSX,"unrecognized Polish month"):
+            inspect_export(raw.replace(b"lis 2021",b"abc 2021"),
+                           "2021-11","2026-10",as_of=date(2026,11,7))
+        with self.assertRaisesRegex(InvalidVanguardXLSX,"localized NAV USD decimal"):
+            inspect_export(raw.replace(b"100,4672",b"100.4672"),
+                           "2021-11","2026-10",as_of=date(2026,11,7))
 
     def test_excel_numeric_date_serial_and_nav_vs_market_price(self):
         doc=inspect_export(fake_xlsx(36,numeric_dates=True),"2021-11","2024-10")
