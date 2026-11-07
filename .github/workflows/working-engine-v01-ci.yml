@@ -15,6 +15,7 @@ on:
       - 'scripts/research_forward_journal_v17.py'
       - 'scripts/real_reference_gateway_v18.py'
       - 'scripts/acwi_netr_offline_intake_v19.py'
+      - 'scripts/conditional_m1_nav_diagnostic_v20.py'
       - 'scripts/shadow_forward_evaluation_v05.py'
       - 'scripts/shadow_journal_v06.py'
       - 'scripts/shadow_capture_v07.py'
@@ -39,6 +40,7 @@ on:
       - 'tests/test_research_forward_journal_v17.py'
       - 'tests/test_real_reference_gateway_v18.py'
       - 'tests/test_acwi_netr_offline_intake_v19.py'
+      - 'tests/test_conditional_m1_nav_diagnostic_v20.py'
       - 'tests/test_monthly_proxy_backtest_v04.py'
       - 'tests/test_monthly_cost_sensitivity_v14.py'
       - 'scripts/nbp_long_history_monthly.py'
@@ -94,6 +96,7 @@ on:
       - 'scripts/research_forward_journal_v17.py'
       - 'scripts/real_reference_gateway_v18.py'
       - 'scripts/acwi_netr_offline_intake_v19.py'
+      - 'scripts/conditional_m1_nav_diagnostic_v20.py'
       - 'scripts/shadow_forward_evaluation_v05.py'
       - 'scripts/shadow_journal_v06.py'
       - 'scripts/shadow_capture_v07.py'
@@ -118,6 +121,7 @@ on:
       - 'tests/test_research_forward_journal_v17.py'
       - 'tests/test_real_reference_gateway_v18.py'
       - 'tests/test_acwi_netr_offline_intake_v19.py'
+      - 'tests/test_conditional_m1_nav_diagnostic_v20.py'
       - 'tests/test_monthly_proxy_backtest_v04.py'
       - 'tests/test_monthly_cost_sensitivity_v14.py'
       - 'scripts/nbp_long_history_monthly.py'
@@ -224,6 +228,8 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_real_reference_gateway_v18.py' -v
       - name: Validate v0.19 licensed ACWI NETR offline intake and exact-day NBP FX coverage
         run: python -m unittest discover -s tests -p 'test_acwi_netr_offline_intake_v19.py' -v
+      - name: Validate v0.20 conditional NAV M1 vs cash arithmetic and source-status gates
+        run: python -m unittest discover -s tests -p 'test_conditional_m1_nav_diagnostic_v20.py' -v
       - name: Run v0.16 decision cycle against real archived source plus tamper tests
         run: |
           python -m unittest discover -s tests -p 'test_research_decision_pipeline_v16.py' -v
