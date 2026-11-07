@@ -60,6 +60,26 @@ jobs:
           assert not receipt["active_scheduler_changed"] and not receipt["neon_modified"]
           print("MACOS_HOST_CANARY_PASS: isolated durable-on-runner files, no live systems changed")
           PY
+      - name: Export v0.13 from real archived v0.12 Mac canary and verify restore
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE="$RUNNER_TEMP/isl-v12-research-ledger"
+          COPY_ROOT="$RUNNER_TEMP/isl-v13-disposable-target"
+          RESTORE_ROOT="$RUNNER_TEMP/isl-v13-disposable-restore"
+          mkdir -m 700 "$COPY_ROOT" "$RESTORE_ROOT"
+          PIN="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["backup_manifest_sha256"])' "$BASE/state/deployment-receipt-v12.json")"
+          REL="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["backup_relpath"])' "$BASE/state/deployment-receipt-v12.json")"
+          python3 -m scripts.shadow_offsite_export_v13 export \
+            --snapshot "$BASE/$REL" --manifest-sha256 "$PIN" \
+            --destination-root "$COPY_ROOT" --name trial-copy-01
+          python3 -m scripts.shadow_offsite_export_v13 verify \
+            --manifest-sha256 "$PIN" \
+            --destination-root "$COPY_ROOT" --name trial-copy-01
+          python3 -m scripts.shadow_backup_restore_v11 restore-drill \
+            --snapshot "$COPY_ROOT/trial-copy-01" --manifest-sha256 "$PIN" \
+            --restore-root "$RESTORE_ROOT"
+          echo "V13_DISPOSABLE_MACOS_TRANSFER_AND_RESTORE_PASS_NOT_INDEPENDENT_DOMAIN"
       - name: Archive only bounded canary receipt, never investor credentials
         uses: actions/upload-artifact@v4
         with:
