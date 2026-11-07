@@ -135,13 +135,14 @@ def verify_anchor(ledger_path, anchor_path, *, expected_sha256):
     if row is None or row[0] != anchor["head_sha256"]:
         raise ShadowInputError("ledger anchored prefix hash changed")
     return {
-        "status": "EXTERNALLY_PINNED_HASH_AND_SQLITE_PREFIX_MATCH",
+        "status": "SUPPLIED_HASH_AND_SQLITE_PREFIX_MATCH_NOT_EXTERNAL_PROOF",
         "anchored_entries": anchor["entries"],
         "current_entries": state["entries"],
         "anchored_head_sha256": anchor["head_sha256"],
         "current_head_sha256": state["head_sha256"],
         "anchor_sha256": expected_sha256,
         "trusted_time_verified": False,
+        "external_hash_independently_witnessed": False,
         "external_WORM_storage_verified": False,
         "investment_performance_verified": False,
         "financial_operations": 0,
