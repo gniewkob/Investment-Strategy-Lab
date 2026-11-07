@@ -44,8 +44,8 @@ def fake_xlsx(months=60, *, skip=None, duplicate=False, numeric_dates=False,
             value=str((day-date(1899,12,30)).days) if numeric_dates else day.isoformat()
         cells=_cell(f"A{i+2}",value,inline=not numeric_dates)
         cells+=_cell(f"B{i+2}",888+i)
-        nav=(f"{100+i}.4672\\u00a0USD" if bad_decimal and i == 0
-             else f"{100+i},4672\\u00a0USD") if localized else 100+i
+        nav=(f"{100+i}.4672\u00a0USD" if bad_decimal and i == 0
+             else f"{100+i},4672\u00a0USD") if localized else 100+i
         cells+=_cell(f"C{i+2}",nav,inline=localized,formula=formula and i==0)
         contents.append(f'<row r="{i+2}">{cells}</row>')
         if duplicate and i==0:
