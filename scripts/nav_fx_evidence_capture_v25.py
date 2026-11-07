@@ -12,6 +12,7 @@ import argparse
 from datetime import datetime, timezone, date
 from hashlib import sha256
 import json
+import os
 from pathlib import Path
 
 from scripts.nav_forward_preflight_v24 import preflight
@@ -150,9 +151,14 @@ def main():
         # File must be private; never write to repo, shared runner or Neon.
         dest = args.private_nbp_out
         dest.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-        with dest.open("xb") as f:
+        # Atomically create private output: never expose source bytes under
+        # the process umask before a later chmod, and never replace an old
+        # file (including a pre-existing symlink).
+        fd = os.open(dest, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, "wb") as f:
             f.write(nbp)
-        dest.chmod(0o600)
+            f.flush()
+            os.fsync(f.fileno())
     print("ISL_NAV_FX_CAPTURE_V25="+
           json.dumps(out, sort_keys=True, separators=(",", ":")))
 
