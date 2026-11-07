@@ -73,3 +73,15 @@ python3 -m scripts.shadow_backup_restore_v11 restore-drill \
 | Czas przechowywania artefaktów CI | [GitHub `upload-artifact` — Retention Period](https://github.com/actions/upload-artifact#retention-period) | Artefakt ma czasową retencję; repo/runner CI nie stanowi automatycznie trwałego archiwum. |
 
 **Status wdrożenia na Mac mini: NIE URUCHOMIONO. Operacje finansowe: 0.**
+
+
+## 6. Odbiór na rzeczywistym pakiecie GitHub — 7 listopada 2026
+
+- **Wynik CI na commicie `a1bacc7a4d0223ed6abbfc0290d9e81fcda915ad`:** [Working Engine E2E #42352314723](https://github.com/gniewkob/Investment-Strategy-Lab/actions/runs/42352314723) — SUCCESS; [GitHub Checkpoint Audit #42352314698](https://github.com/gniewkob/Investment-Strategy-Lab/actions/runs/42352314698) — SUCCESS; v0.7 capture i v0.5 source workflows — SUCCESS.
+- 8/8 testów v0.11 przeszło w pełnej regresji oraz w workflow audytowym, który na wcześniejszym rzeczywistym checkpointcie wykonał **create → verify → restore-drill**.
+- GitHub Actions artifact id `13565393774`: archiwum ZIP SHA-256 `decadd3bcc702b399e6e3bd867fab797fbd3b27104541506e88577df9af5d924`. Pobranie i niezależny odczyt ZIP potwierdziły zgodność z polem `digest` GitHub API.
+- Rzeczywisty snapshot v0.11: manifest SHA-256 `61d2420f6b3ddbb40b4dff5aa4073ccaa2592abee63f1497a0c66fb9bc279434`, 1 rekord w SQLite, zakotwiczony head `43b065b81fb9011da7b857d4d7875d7ad2f7c3543d5b438e05ee9f1069010eb3`.
+- Sprawdzono także poza pipeline: obecność wszystkich trzech plików w ZIP, zgodność SHA-256 manifestu oraz plików `ledger.sqlite3` i `anchor.json`, zgodność head z kotwicą, `PRAGMA integrity_check = ok` oraz `SELECT COUNT(*) FROM evidence = 1`.
+- Odtwarzanie z pipeline zakończyło się `RESTORE_VERIFIED_NOT_ACTIVATED`, czyli **bez podmiany aktywnej bazy**.
+
+**Granica odbioru:** jest to odzyskiwalna i sprawdzona kopia na tymczasowym runnerze z ograniczoną retencją. Nie wykonano jeszcze trwałego umieszczenia plików i oddzielnego hasha manifestu na Mac mini/niezależnym backupie. `offsite_verified=false` pozostaje poprawne.
