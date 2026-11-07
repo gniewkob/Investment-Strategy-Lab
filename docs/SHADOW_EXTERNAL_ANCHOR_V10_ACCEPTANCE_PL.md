@@ -64,7 +64,16 @@ Next gates:
 3. Independently retain and read back a digest/head anchor outside the CI/repository failure domain. Prove that deleting final rows is detected using that external copy.
 4. Continue separate source-rights and total-return-series qualification for M1–M3. Historical performance remains `NOT_RUN`.
 
-## 5. Source evidence — exact claims, not decorative alignment
+## 5. Acceptance evidence — actual GitHub run, 2026-11-07
+
+- [GitHub Actions v0.8+v0.9+v0.10 #42351227610](https://github.com/gniewkob/Investment-Strategy-Lab/actions/runs/42351227610): **SUCCESS**, 10/10 v0.10 tests. The entire Working Engine, v0.7 capture and v0.5 reference workflows also passed on the corresponding code SHA.
+- The real audit generated a **one-record** disposable SQLite ledger and the anchor `isl-shadow-anchor-v10-000000001-26cfff7e67648e53.json`.
+- Head SHA-256 `26cfff7e67648e53b369a07de2598ff616060f074a84dfd8f5d310d75b210b38`; anchor-file SHA-256 `56ef37ff73f571cff144cad1e0b5a6d955a477bd76a677c577e074cae80c67da`.
+- Independently fetched archive artifact `13565902146`: ZIP SHA-256 `4b0d1826b27517cbc4697df4fe79ab0b986f31bc0406be5d6d3d85c06db33a83`, matching GitHub API `digest`. Independently opened ZIP and recomputed SQLite final-row hash; it agreed with the saved anchor and the generation receipt.
+- The exact anchor hash and reference SHA values were additionally copied to **OpenBrain_remote build domain** as record `892c4115-181c-4356-8eb2-e0b064d168e1`, separate from this repo/runner. That store declares `mutable=true`; this is **off-run corroboration, not immutable third-party timestamping, WORM or a signed attestation**.
+- Latest CI demonstrates correct fail-closed mechanics and one real captured reference receipt. It does NOT demonstrate an owner-controlled Mac deployment, multi-week monitoring or investable source-return series.
+
+## 6. Source evidence — exact claims, not decorative alignment
 
 | Claim | Primary source | What it supports |
 |---|---|---|
