@@ -29,7 +29,7 @@ DATE_COLS={"date","valuation date","nav date","data"}
 NAV_USD_COLS={"nav (usd)","nav price (usd)","net asset value (usd)",
               "nav usd","usd nav","net asset value usd"}
 # Verified against an original 2026-11-07 Polish Vanguard export:
-# dates like '06 lis 2026', NAV like '183,4672\\u00a0USD'.
+# dates like '06 lis 2026', NAV like '183,4672\u00a0USD'.
 PL_MONTHS={"sty":1,"lut":2,"mar":3,"kwi":4,"maj":5,"cze":6,
            "lip":7,"sie":8,"wrz":9,"paź":10,"lis":11,"gru":12}
 
@@ -111,7 +111,7 @@ def _date_from_xlsx(v):
         if serial<61 or serial>75000:
             raise InvalidVanguardXLSX("out-of-range Excel date serial")
         return date(1899,12,30)+timedelta(days=serial)
-    localized=re.fullmatch(r"([0-9]{1,2})\\s+([a-ząćęłńóśźż]{3})\\s+([0-9]{4})",v.lower())
+    localized=re.fullmatch(r"([0-9]{1,2})\s+([a-ząćęłńóśźż]{3})\s+([0-9]{4})",v.lower())
     if localized:
         day,short,year=localized.groups()
         if short not in PL_MONTHS:
@@ -130,7 +130,7 @@ def _date_from_xlsx(v):
 
 def _positive(v):
     if not v: return None
-    cleaned=v.replace("\\u00a0"," ").strip()
+    cleaned=v.replace("\u00a0"," ").strip()
     if cleaned.endswith(" USD"):
         # Actual official Polish export: decimal comma, USD suffix, and
         # possibly grouped thousands. Never interpret commas as thousands.
