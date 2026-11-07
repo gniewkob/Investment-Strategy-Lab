@@ -17,6 +17,7 @@ on:
       - 'scripts/shadow_external_anchor_v10.py'
       - 'scripts/shadow_backup_restore_v11.py'
       - 'scripts/deploy_shadow_evidence_mac_v12.py'
+      - 'scripts/shadow_offsite_export_v13.py'
       - 'tests/test_shadow_forward_evaluation_v05.py'
       - 'tests/test_shadow_journal_v06.py'
       - 'tests/test_shadow_capture_v07.py'
@@ -25,6 +26,7 @@ on:
       - 'tests/test_shadow_external_anchor_v10.py'
       - 'tests/test_shadow_backup_restore_v11.py'
       - 'tests/test_deploy_shadow_evidence_mac_v12.py'
+      - 'tests/test_shadow_offsite_export_v13.py'
       - 'tests/test_shadow_decision_engine_v05.py'
       - 'tests/test_monthly_proxy_backtest_v04.py'
       - 'scripts/nbp_long_history_monthly.py'
@@ -82,6 +84,7 @@ on:
       - 'scripts/shadow_external_anchor_v10.py'
       - 'scripts/shadow_backup_restore_v11.py'
       - 'scripts/deploy_shadow_evidence_mac_v12.py'
+      - 'scripts/shadow_offsite_export_v13.py'
       - 'tests/test_shadow_forward_evaluation_v05.py'
       - 'tests/test_shadow_journal_v06.py'
       - 'tests/test_shadow_capture_v07.py'
@@ -90,6 +93,7 @@ on:
       - 'tests/test_shadow_external_anchor_v10.py'
       - 'tests/test_shadow_backup_restore_v11.py'
       - 'tests/test_deploy_shadow_evidence_mac_v12.py'
+      - 'tests/test_shadow_offsite_export_v13.py'
       - 'tests/test_shadow_decision_engine_v05.py'
       - 'tests/test_monthly_proxy_backtest_v04.py'
       - 'scripts/nbp_long_history_monthly.py'
@@ -184,6 +188,8 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_shadow_backup_restore_v11.py' -v
       - name: Validate v0.12 isolated host install and no-overwrite behavior
         run: python -m unittest discover -s tests -p 'test_deploy_shadow_evidence_mac_v12.py' -v
+      - name: Validate v0.13 explicit destination copy and adversarial path controls
+        run: python -m unittest discover -s tests -p 'test_shadow_offsite_export_v13.py' -v
       - name: Validate read-only shadow decisions and source-quality fail-close
         run: python -m unittest discover -s tests -p 'test_shadow_decision_engine_v05.py' -v
       - name: Validate v0.4 monthly backtester, no database/network
