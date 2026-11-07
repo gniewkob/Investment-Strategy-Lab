@@ -20,6 +20,7 @@ on:
       - 'scripts/nav_forward_freeze_v22.py'
       - 'scripts/nav_forward_admission_v23.py'
       - 'scripts/nav_forward_preflight_v24.py'
+      - 'scripts/nav_fx_evidence_capture_v25.py'
       - 'scripts/shadow_forward_evaluation_v05.py'
       - 'scripts/shadow_journal_v06.py'
       - 'scripts/shadow_capture_v07.py'
@@ -49,6 +50,7 @@ on:
       - 'tests/test_nav_forward_freeze_v22.py'
       - 'tests/test_nav_forward_admission_v23.py'
       - 'tests/test_nav_forward_preflight_v24.py'
+      - 'tests/test_nav_fx_evidence_capture_v25.py'
       - 'tests/test_monthly_proxy_backtest_v04.py'
       - 'tests/test_monthly_cost_sensitivity_v14.py'
       - 'scripts/nbp_long_history_monthly.py'
@@ -109,6 +111,7 @@ on:
       - 'scripts/nav_forward_freeze_v22.py'
       - 'scripts/nav_forward_admission_v23.py'
       - 'scripts/nav_forward_preflight_v24.py'
+      - 'scripts/nav_fx_evidence_capture_v25.py'
       - 'scripts/shadow_forward_evaluation_v05.py'
       - 'scripts/shadow_journal_v06.py'
       - 'scripts/shadow_capture_v07.py'
@@ -138,6 +141,7 @@ on:
       - 'tests/test_nav_forward_freeze_v22.py'
       - 'tests/test_nav_forward_admission_v23.py'
       - 'tests/test_nav_forward_preflight_v24.py'
+      - 'tests/test_nav_fx_evidence_capture_v25.py'
       - 'tests/test_monthly_proxy_backtest_v04.py'
       - 'tests/test_monthly_cost_sensitivity_v14.py'
       - 'scripts/nbp_long_history_monthly.py'
@@ -254,6 +258,8 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_nav_forward_admission_v23.py' -v
       - name: Validate v0.24 offline future source/revision preflight
         run: python -m unittest discover -s tests -p 'test_nav_forward_preflight_v24.py' -v
+      - name: Validate v0.25 opt-in NBP original evidence capture and no-provider safety
+        run: python -m unittest discover -s tests -p 'test_nav_fx_evidence_capture_v25.py' -v
       - name: Run v0.16 decision cycle against real archived source plus tamper tests
         run: |
           python -m unittest discover -s tests -p 'test_research_decision_pipeline_v16.py' -v
