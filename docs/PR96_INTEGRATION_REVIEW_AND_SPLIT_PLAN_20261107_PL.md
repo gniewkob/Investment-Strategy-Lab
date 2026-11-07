@@ -106,3 +106,19 @@ Exit 0 oznacza wyłącznie czyste `merge-tree`; exit 2 konflikt. `git fetch` cel
 2. Utworzyć **izolowany testowy merge commit** (zachowując obie historie) tylko w tymczasowej gałęzi i uruchomić testy na jego *rzeczywistym drzewie*, nigdy na starym SHA research.
 3. Przygotować mniejsze PR A–E zależne w uporządkowanej kolejności, z osobnymi checks i punktami odbioru.
 4. Nie przepisywać zamrożonych `v0.22` receipt SHA, historycznego NAV/NBP ani anchorów Issue #97.
+
+
+## 8. Odbiór kompletnej regresji jednostkowej na połączonym drzewie — 2026-11-08
+
+**Pierwszy przebieg Mac (Python 3.15.2) nie przeszedł:** 933 testy, 34 błędy, 1 nieudana asercja, 1 pominięty; `ModuleNotFoundError: psycopg` w testach staging, `portfolio_release_canary` odrzucał celowo brudny stan `git merge --no-commit`, a pełny pakiet zgłaszał liczne `ResourceWarning` SQLite oraz niewyczyszczone błędy HTTP.
+
+**Remediacja odbioru bez zmieniania testów lub polityki:**
+- Nowy workflow `.github/workflows/pr96-combined-tree-regression.yml`, kod commitu `4ca982211e24bfe937ca43aff489b11a79b13527`.
+- Checkout bazowego `main`, fetch dokładnego HEAD PR, walidacja `merge-tree --write-tree`, a następnie lokalny, **tymczasowy czysty commit merge na runnerze bez push**; test atestacji sprawdza rzeczywisty HEAD, zamiast obchodzić kontrolę.
+- Python 3.12.16, zainstalowany `psycopg[binary]>=3.1,<4` (w przebiegu 3.3.8); brak usług PostgreSQL i brak podanych sekretów lub DSN.
+- **Wynik rzeczywistego CI:** [run #42423630342](https://github.com/gniewkob/Investment-Strategy-Lab/actions/runs/42423630342), **933 testy, 0 błędów, 0 failed, 1 skipped, PASS (15.675 s)**; `ISL_COMBINED_UNIT_TESTS_PASS`. W logu nie odnotowano `ResourceWarning`.
+- SHA wynikowego drzewa na tym przebiegu: `f37cbb53d47ca97e88c4e1c079340427c631912d`, tymczasowy commit `a34cdc54bda8e9e07f3cc92984a04ab6f7f222a3`. To nowa wersja drzewa po dodaniu workflowu CI; nie należy utożsamiać jej z poprzednim lokalnym SHA `67dd983...`.
+
+**Granica dowodu:** regresja *unit* połączonego drzewa to PASS w Linux/Python 3.12, lecz pełna integracja SQL na tym połączonym drzewie i niezależny przegląd 133+ plików nie zostały jeszcze zatwierdzone. Testy SQLite/HTTP na Mac Python 3.15 wymagają osobnego porządkowania i nie powinny być ukrywane przez blanket warning filters. SHA sprawdzonego połączonego kodu nie jest kryptograficzną atestacją licencji, PIT ani wydajności rynkowej.
+
+**Decyzja:** `COMBINED_TREE_UNIT_REGRESSION_PASS`; `PR_96_MERGE_STILL_BLOCKED` do zakończenia kontroli MF-01/02/03/05 i bramek PostgreSQL/Workflow.
