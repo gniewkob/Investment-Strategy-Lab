@@ -93,7 +93,12 @@ def verify(capture, run, artifacts, *, cutoff_utc):
             or artifact.get("workflow_run", {}).get("head_sha") != sha):
         raise ShadowInputError("artifact identity or retention invalid")
     artifact_created = _utc(artifact.get("created_at"))
-    if not captured <= artifact_created < cutoff:
+    # GitHub Actions artifact timestamps have second resolution, while the
+    # capture receipt records fractional seconds. Treat a within-second
+    # overlap as ambiguous ordering, not a proven early artifact. An artifact
+    # one or more complete seconds earlier is still rejected. The result does
+    # NOT certify independent timing.
+    if artifact_created >= cutoff or artifact_created + timedelta(seconds=1) <= captured:
         raise ShadowInputError("artifact was not preserved before cutoff")
     return {
         "schema": SCHEMA,
