@@ -1,0 +1,77 @@
+name: PR96 combined-tree isolated unit regression
+
+# Independent integration gate. No DB service, account secrets, wallet or
+# external trading API. Tests run only against a local ephemeral merge commit.
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/pr96-combined-tree-regression.yml'
+      - 'scripts/pr96_git_merge_preflight.py'
+      - 'tests/test_pr96_git_merge_preflight.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  combined-tree-unit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout the actual default branch baseline
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Build clean throwaway integration commit without pushing refs
+        shell: bash
+        env:
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          DISPATCH_HEAD: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          git config user.name "ISL Integration CI"
+          git config user.email "isl-integration-ci@example.invalid"
+
+          BASE="$(git rev-parse HEAD)"
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            TARGET="$PR_HEAD"
+          else
+            TARGET="$DISPATCH_HEAD"
+          fi
+          [[ "$TARGET" =~ ^[0-9a-f]{40}$ ]]
+
+          # Direct SHA fetch, not untrusted branch-name shell interpolation.
+          git fetch --no-tags origin "$TARGET"
+          git cat-file -e "$TARGET^{commit}"
+          EXPECTED="$(git merge-tree --write-tree "$BASE" "$TARGET")"
+          [[ "$EXPECTED" =~ ^[0-9a-f]{40}$ ]]
+          git merge --no-ff --no-edit "$TARGET"
+          ACTUAL="$(git rev-parse HEAD^{tree})"
+          test "$ACTUAL" = "$EXPECTED"
+          test -z "$(git status --porcelain --untracked-files=all)"
+          echo "ISL_COMBINED_TREE_VERIFIED=$ACTUAL"
+          echo "ISL_EPHEMERAL_HEAD=$(git rev-parse HEAD)"
+          echo "ISL_MAIN_BASE=$BASE"
+          echo "ISL_RESEARCH_HEAD=$TARGET"
+          echo "ISL_NO_REMOTE_PUSH=TRUE"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install isolated Python dependency for offline mocked tests
+        run: |
+          python -m pip install 'psycopg[binary]>=3.1,<4'
+          python -c 'import psycopg; print("PSYCOPG_AVAILABLE", psycopg.__version__)'
+      - name: Full offline unit test suite against clean combined HEAD
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest discover -s tests -p 'test_*.py' -q
+          test -z "$(git status --porcelain --untracked-files=all)"
+          echo "ISL_COMBINED_UNIT_TESTS_PASS"
+      - name: Report explicit safety boundary
+        if: always()
+        run: |
+          echo "NO_DB_SERVICE_NO_SECRETS_NO_TRADING_NO_MAIN_PUSH"
+          git status --short
