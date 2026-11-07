@@ -107,7 +107,7 @@ def append(path, bundle):
     canonical, digest = _validated_bundle(bundle)
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    with sqlite3.connect(path, timeout=15) as conn:
+    with closing(sqlite3.connect(path, timeout=15)) as conn, conn:
         conn.execute("PRAGMA synchronous=FULL")
         conn.execute("BEGIN IMMEDIATE")
         _install(conn)
