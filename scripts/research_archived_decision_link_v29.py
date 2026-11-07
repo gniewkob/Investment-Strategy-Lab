@@ -8,6 +8,7 @@ observation, treat GitHub metadata as trusted clock, or mark trading ready.
 from __future__ import annotations
 
 import argparse
+from contextlib import closing
 import json
 from pathlib import Path
 import re
@@ -31,7 +32,7 @@ def _ledger_match(ledger_path, bundle, digest):
     cp = bundle["checkpoint"]
     identity = (cp["run_id"], cp["run_attempt"], cp["artifact_id"])
     uri = path.resolve().as_uri().replace("file://", "file:") + "?mode=ro"
-    with sqlite3.connect(uri, uri=True) as conn:
+    with closing(sqlite3.connect(uri, uri=True)) as conn:
         matches = conn.execute(
             """SELECT seq, bundle_sha256, entry_sha256 FROM evidence
                WHERE run_id=? AND run_attempt=? AND artifact_id=?""",
