@@ -24,6 +24,7 @@ on:
       - 'scripts/research_decision_robustness_v26.py'
       - 'scripts/research_decision_quality_v27.py'
       - 'scripts/research_chronological_decision_audit_v28.py'
+      - 'scripts/research_archived_decision_link_v29.py'
       - 'scripts/shadow_forward_evaluation_v05.py'
       - 'scripts/shadow_journal_v06.py'
       - 'scripts/shadow_capture_v07.py'
@@ -57,6 +58,7 @@ on:
       - 'tests/test_research_decision_robustness_v26.py'
       - 'tests/test_research_decision_quality_v27.py'
       - 'tests/test_research_chronological_decision_audit_v28.py'
+      - 'tests/test_research_archived_decision_link_v29.py'
       - 'tests/test_monthly_proxy_backtest_v04.py'
       - 'tests/test_monthly_cost_sensitivity_v14.py'
       - 'scripts/nbp_long_history_monthly.py'
@@ -121,6 +123,7 @@ on:
       - 'scripts/research_decision_robustness_v26.py'
       - 'scripts/research_decision_quality_v27.py'
       - 'scripts/research_chronological_decision_audit_v28.py'
+      - 'scripts/research_archived_decision_link_v29.py'
       - 'scripts/shadow_forward_evaluation_v05.py'
       - 'scripts/shadow_journal_v06.py'
       - 'scripts/shadow_capture_v07.py'
@@ -154,6 +157,7 @@ on:
       - 'tests/test_research_decision_robustness_v26.py'
       - 'tests/test_research_decision_quality_v27.py'
       - 'tests/test_research_chronological_decision_audit_v28.py'
+      - 'tests/test_research_archived_decision_link_v29.py'
       - 'tests/test_monthly_proxy_backtest_v04.py'
       - 'tests/test_monthly_cost_sensitivity_v14.py'
       - 'scripts/nbp_long_history_monthly.py'
@@ -278,6 +282,8 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_research_decision_quality_v27.py' -v
       - name: Validate v0.28 chronological M1-M3 decision stability journal
         run: python -m unittest discover -s tests -p 'test_research_chronological_decision_audit_v28.py' -v
+      - name: Validate v0.29 archived decision evidence bridge and ledger integrity
+        run: python -m unittest discover -s tests -p 'test_research_archived_decision_link_v29.py' -v
       - name: Run v0.16 decision cycle against real archived source plus tamper tests
         run: |
           python -m unittest discover -s tests -p 'test_research_decision_pipeline_v16.py' -v
