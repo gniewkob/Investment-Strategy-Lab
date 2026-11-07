@@ -15,12 +15,14 @@ on:
       - 'scripts/github_checkpoint_verify_v08.py'
       - 'scripts/shadow_evidence_ledger_v09.py'
       - 'scripts/shadow_external_anchor_v10.py'
+      - 'scripts/shadow_backup_restore_v11.py'
       - 'tests/test_shadow_forward_evaluation_v05.py'
       - 'tests/test_shadow_journal_v06.py'
       - 'tests/test_shadow_capture_v07.py'
       - 'tests/test_github_checkpoint_verify_v08.py'
       - 'tests/test_shadow_evidence_ledger_v09.py'
       - 'tests/test_shadow_external_anchor_v10.py'
+      - 'tests/test_shadow_backup_restore_v11.py'
       - 'tests/test_shadow_decision_engine_v05.py'
       - 'tests/test_monthly_proxy_backtest_v04.py'
       - 'scripts/nbp_long_history_monthly.py'
@@ -76,12 +78,14 @@ on:
       - 'scripts/github_checkpoint_verify_v08.py'
       - 'scripts/shadow_evidence_ledger_v09.py'
       - 'scripts/shadow_external_anchor_v10.py'
+      - 'scripts/shadow_backup_restore_v11.py'
       - 'tests/test_shadow_forward_evaluation_v05.py'
       - 'tests/test_shadow_journal_v06.py'
       - 'tests/test_shadow_capture_v07.py'
       - 'tests/test_github_checkpoint_verify_v08.py'
       - 'tests/test_shadow_evidence_ledger_v09.py'
       - 'tests/test_shadow_external_anchor_v10.py'
+      - 'tests/test_shadow_backup_restore_v11.py'
       - 'tests/test_shadow_decision_engine_v05.py'
       - 'tests/test_monthly_proxy_backtest_v04.py'
       - 'scripts/nbp_long_history_monthly.py'
@@ -172,6 +176,8 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_shadow_evidence_ledger_v09.py' -v
       - name: Validate v0.10 externally pinned anchor and deleted-tail detection
         run: python -m unittest discover -s tests -p 'test_shadow_external_anchor_v10.py' -v
+      - name: Validate v0.11 private snapshot and safe restore drill
+        run: python -m unittest discover -s tests -p 'test_shadow_backup_restore_v11.py' -v
       - name: Validate read-only shadow decisions and source-quality fail-close
         run: python -m unittest discover -s tests -p 'test_shadow_decision_engine_v05.py' -v
       - name: Validate v0.4 monthly backtester, no database/network
