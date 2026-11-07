@@ -123,6 +123,18 @@ def _private_path(path, max_bytes):
     return path.read_bytes()
 
 
+
+def _write_private_raw(dest, raw):
+    """Exclusive original-byte write, never a permissive intermediate file."""
+    dest = Path(dest)
+    dest.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    fd = os.open(dest, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, "wb") as f:
+        f.write(raw)
+        f.flush()
+        os.fsync(f.fileno())
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--freeze", type=Path, required=True)
@@ -149,16 +161,7 @@ def main():
                        allow_nbp_fetch=args.fetch_official_nbp)
     if nbp is not None:
         # File must be private; never write to repo, shared runner or Neon.
-        dest = args.private_nbp_out
-        dest.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-        # Atomically create private output: never expose source bytes under
-        # the process umask before a later chmod, and never replace an old
-        # file (including a pre-existing symlink).
-        fd = os.open(dest, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-        with os.fdopen(fd, "wb") as f:
-            f.write(nbp)
-            f.flush()
-            os.fsync(f.fileno())
+        _write_private_raw(args.private_nbp_out, nbp)
     print("ISL_NAV_FX_CAPTURE_V25="+
           json.dumps(out, sort_keys=True, separators=(",", ":")))
 
