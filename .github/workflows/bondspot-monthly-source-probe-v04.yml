@@ -1,0 +1,32 @@
+name: ISL v0.4 official BondSpot month-end research probe
+# Live provider probes run by explicit research dispatch, not every PR push.
+# All offline parser and safety tests remain in working-engine-v01-ci.yml.
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  read-public-bond-index:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify offline exact day parsing and failure rules
+        run: python -m unittest discover -s tests -p 'test_bondspot_monthly_archive_v04.py' -v
+      - name: Read 60 months of genuine official BondSpot index candidates
+        run: |
+          python -m scripts.bondspot_monthly_archive_v04 \
+            --start-month 2021-11 --end-month 2026-10 \
+            --out bondspot-month-end-source-proof-v04.json
+      - name: Save only proven research values and provider hashes
+        uses: actions/upload-artifact@v4
+        with:
+          name: bondspot-month-end-source-proof-v04
+          path: bondspot-month-end-source-proof-v04.json
+          if-no-files-found: error
+          retention-days: 14

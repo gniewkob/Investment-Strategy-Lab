@@ -384,8 +384,8 @@ class WorkingEngineAcceptance(unittest.TestCase):
           (instrument_code,source_code,observed_for,ingested_at,
            interval_code,return_basis,close_price,source_url)
           SELECT 'USDPLN_NBP','nbp_rates',
-                 now()-interval '28 days'+s.i*interval '1 day',
                  now()-interval '27 days'+s.i*interval '1 day',
+                 now()-interval '26 days'+s.i*interval '1 day',
                  '1d','FX_RATE',100+s.i,
                  'https://api.nbp.pl/api/exchangerates/tables/a/'
           FROM generate_series(0,20) s(i)""")

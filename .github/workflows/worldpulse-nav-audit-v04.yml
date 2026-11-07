@@ -1,0 +1,30 @@
+name: WorldPulse.ai NAV candidate availability audit v04
+# The provider returned repeated transport failures; do not probe
+# this external endpoint on every unrelated PR commit. The offline
+# fail-closed parser suite remains in working-engine-v01-ci.yml.
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  nav-candidate-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate read-only financial-source fail-close offline
+        run: python -m unittest discover -s tests -p 'test_worldpulse_nav_availability_v04.py' -v
+      - name: Probe only advertised public WorldPulse.ai financial NAV JSON and CSV endpoints
+        run: python -m scripts.worldpulse_nav_availability_v04 --output worldpulse-nav-audit.json
+      - name: Publish metadata and hashes only - never raw NAV data
+        uses: actions/upload-artifact@v4
+        with:
+          name: worldpulse-nav-availability-audit-v04
+          path: worldpulse-nav-audit.json
+          if-no-files-found: error
+          retention-days: 7

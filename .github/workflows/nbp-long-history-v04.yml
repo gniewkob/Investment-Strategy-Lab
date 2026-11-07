@@ -1,0 +1,33 @@
+name: ISL v0.4 NBP five-year official reference archive
+# One-time historical source capture: not repeated on every PR commit.
+# Re-run verified Actions jobs; dispatch becomes available after integration.
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+
+jobs:
+  official-60-month-reference:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate archive code with fake HTTP responses
+        run: python -m unittest discover -s tests -p 'test_nbp_long_history_monthly.py' -v
+      - name: Acquire 60 monthly NBP reference observations per series
+        run: |
+          python -m scripts.nbp_long_history_monthly \
+            --start-month 2021-11 --end-month 2026-10 \
+            --out nbp-research-evidence-202111-202610.json
+      - name: Retain source hashes and monthly evidence as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nbp-5y-reference-202111-202610
+          path: nbp-research-evidence-202111-202610.json
+          if-no-files-found: error
+          retention-days: 14

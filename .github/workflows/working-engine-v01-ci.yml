@@ -6,6 +6,61 @@ on:
       - 'db/working_engine_v02_research_cycle.sql'
       - 'db/working_engine_v03_research_cycle.sql'
       - 'db/working_engine_v03_health_READONLY.sql'
+      - 'db/monthly_backtest_v04_readiness_READONLY.sql'
+      - 'scripts/monthly_proxy_backtest_v04.py'
+      - 'scripts/monthly_cost_sensitivity_v14.py'
+      - 'scripts/shadow_decision_engine_v05.py'
+      - 'scripts/research_decision_controller_v15.py'
+      - 'scripts/research_decision_pipeline_v16.py'
+      - 'scripts/research_forward_journal_v17.py'
+      - 'scripts/real_reference_gateway_v18.py'
+      - 'scripts/acwi_netr_offline_intake_v19.py'
+      - 'scripts/shadow_forward_evaluation_v05.py'
+      - 'scripts/shadow_journal_v06.py'
+      - 'scripts/shadow_capture_v07.py'
+      - 'scripts/github_checkpoint_verify_v08.py'
+      - 'scripts/shadow_evidence_ledger_v09.py'
+      - 'scripts/shadow_external_anchor_v10.py'
+      - 'scripts/shadow_backup_restore_v11.py'
+      - 'scripts/deploy_shadow_evidence_mac_v12.py'
+      - 'scripts/shadow_offsite_export_v13.py'
+      - 'tests/test_shadow_forward_evaluation_v05.py'
+      - 'tests/test_shadow_journal_v06.py'
+      - 'tests/test_shadow_capture_v07.py'
+      - 'tests/test_github_checkpoint_verify_v08.py'
+      - 'tests/test_shadow_evidence_ledger_v09.py'
+      - 'tests/test_shadow_external_anchor_v10.py'
+      - 'tests/test_shadow_backup_restore_v11.py'
+      - 'tests/test_deploy_shadow_evidence_mac_v12.py'
+      - 'tests/test_shadow_offsite_export_v13.py'
+      - 'tests/test_shadow_decision_engine_v05.py'
+      - 'tests/test_research_decision_controller_v15.py'
+      - 'tests/test_research_decision_pipeline_v16.py'
+      - 'tests/test_research_forward_journal_v17.py'
+      - 'tests/test_real_reference_gateway_v18.py'
+      - 'tests/test_acwi_netr_offline_intake_v19.py'
+      - 'tests/test_monthly_proxy_backtest_v04.py'
+      - 'tests/test_monthly_cost_sensitivity_v14.py'
+      - 'scripts/nbp_long_history_monthly.py'
+      - 'scripts/official_market_source_probe_v04.py'
+      - 'scripts/bondspot_monthly_archive_v04.py'
+      - 'tests/test_bondspot_monthly_archive_v04.py'
+      - 'tests/test_official_market_source_probe_v04.py'
+      - 'tests/test_nbp_long_history_monthly.py'
+      - 'scripts/reference_archive_calendar_v04.py'
+      - 'scripts/nbp_bondspot_exact_date_v04.py'
+      - 'tests/test_reference_archive_calendar_v04.py'
+      - 'scripts/vanguard_nav_to_pln_reference_v04.py'
+      - 'scripts/vanguard_xlsx_offline_intake_v04.py'
+      - 'scripts/vanguard_nav_intake_bundle_v04.py'
+      - 'scripts/run_local_vanguard_nav_preflight_v04.sh'
+      - 'tests/test_vanguard_nav_intake_bundle_v04.py'
+      - 'tests/test_vanguard_xlsx_offline_intake_v04.py'
+      - 'tests/test_vanguard_nav_to_pln_reference_v04.py'
+      - 'scripts/tbsp_official_archive_v04.py'
+      - 'scripts/tbsp_archive_merge_v04.py'
+      - 'tests/test_tbsp_official_archive_v04.py'
+      - 'tests/integration/test_monthly_backtest_v04_readiness.py'
       - 'db/working_engine_v02_health_READONLY.sql'
       - 'db/nbp_reference_metrics_v01_READONLY.sql'
       - 'db/working_engine_v01_health_READONLY.sql'
@@ -17,6 +72,11 @@ on:
       - 'tests/test_nbp_lab_ingest_sql.py'
       - 'tests/test_nbp_lab_daily_source.py'
       - 'tests/integration/test_working_engine_v01.py'
+      - 'scripts/world_bank_gem_audit_v04.py'
+      - 'tests/test_world_bank_gem_audit_v04.py'
+      - 'scripts/worldpulse_nav_availability_v04.py'
+      - 'tests/test_worldpulse_nav_availability_v04.py'
+      - '.github/workflows/worldpulse-nav-audit-v04.yml'
       - '.github/workflows/working-engine-v01-ci.yml'
   push:
     branches: [main]
@@ -25,6 +85,47 @@ on:
       - 'db/working_engine_v02_research_cycle.sql'
       - 'db/working_engine_v03_research_cycle.sql'
       - 'db/working_engine_v03_health_READONLY.sql'
+      - 'db/monthly_backtest_v04_readiness_READONLY.sql'
+      - 'scripts/monthly_proxy_backtest_v04.py'
+      - 'scripts/monthly_cost_sensitivity_v14.py'
+      - 'scripts/shadow_decision_engine_v05.py'
+      - 'scripts/research_decision_controller_v15.py'
+      - 'scripts/research_decision_pipeline_v16.py'
+      - 'scripts/research_forward_journal_v17.py'
+      - 'scripts/real_reference_gateway_v18.py'
+      - 'scripts/acwi_netr_offline_intake_v19.py'
+      - 'scripts/shadow_forward_evaluation_v05.py'
+      - 'scripts/shadow_journal_v06.py'
+      - 'scripts/shadow_capture_v07.py'
+      - 'scripts/github_checkpoint_verify_v08.py'
+      - 'scripts/shadow_evidence_ledger_v09.py'
+      - 'scripts/shadow_external_anchor_v10.py'
+      - 'scripts/shadow_backup_restore_v11.py'
+      - 'scripts/deploy_shadow_evidence_mac_v12.py'
+      - 'scripts/shadow_offsite_export_v13.py'
+      - 'tests/test_shadow_forward_evaluation_v05.py'
+      - 'tests/test_shadow_journal_v06.py'
+      - 'tests/test_shadow_capture_v07.py'
+      - 'tests/test_github_checkpoint_verify_v08.py'
+      - 'tests/test_shadow_evidence_ledger_v09.py'
+      - 'tests/test_shadow_external_anchor_v10.py'
+      - 'tests/test_shadow_backup_restore_v11.py'
+      - 'tests/test_deploy_shadow_evidence_mac_v12.py'
+      - 'tests/test_shadow_offsite_export_v13.py'
+      - 'tests/test_shadow_decision_engine_v05.py'
+      - 'tests/test_research_decision_controller_v15.py'
+      - 'tests/test_research_decision_pipeline_v16.py'
+      - 'tests/test_research_forward_journal_v17.py'
+      - 'tests/test_real_reference_gateway_v18.py'
+      - 'tests/test_acwi_netr_offline_intake_v19.py'
+      - 'tests/test_monthly_proxy_backtest_v04.py'
+      - 'tests/test_monthly_cost_sensitivity_v14.py'
+      - 'scripts/nbp_long_history_monthly.py'
+      - 'tests/test_nbp_long_history_monthly.py'
+      - 'scripts/tbsp_official_archive_v04.py'
+      - 'scripts/tbsp_archive_merge_v04.py'
+      - 'tests/test_tbsp_official_archive_v04.py'
+      - 'tests/integration/test_monthly_backtest_v04_readiness.py'
       - 'db/working_engine_v02_health_READONLY.sql'
       - 'db/nbp_reference_metrics_v01_READONLY.sql'
       - 'db/working_engine_v01_health_READONLY.sql'
@@ -36,6 +137,11 @@ on:
       - 'tests/test_nbp_lab_ingest_sql.py'
       - 'tests/test_nbp_lab_daily_source.py'
       - 'tests/integration/test_working_engine_v01.py'
+      - 'scripts/world_bank_gem_audit_v04.py'
+      - 'tests/test_world_bank_gem_audit_v04.py'
+      - 'scripts/worldpulse_nav_availability_v04.py'
+      - 'tests/test_worldpulse_nav_availability_v04.py'
+      - '.github/workflows/worldpulse-nav-audit-v04.yml'
       - '.github/workflows/working-engine-v01-ci.yml'
 permissions:
   contents: read
@@ -68,7 +174,68 @@ jobs:
           python -m unittest discover -s tests -p 'test_nbp_lab_prepare.py' -v
           python -m unittest discover -s tests -p 'test_nbp_lab_ingest_sql.py' -v
           python -m unittest discover -s tests -p 'test_nbp_lab_daily_source.py' -v
+      - name: Validate GEM availability audit offline
+        run: python -m unittest discover -s tests -p 'test_world_bank_gem_audit_v04.py' -v
+      - name: Validate TBSP dated-source and digest controls offline
+        run: python -m unittest discover -s tests -p 'test_tbsp_official_archive_v04.py' -v
+      - name: Validate month-end BondSpot history parser offline
+        run: python -m unittest discover -s tests -p 'test_bondspot_monthly_archive_v04.py' -v
+      - name: Validate official provider source candidate detection offline
+        run: python -m unittest discover -s tests -p 'test_official_market_source_probe_v04.py' -v
+      - name: Validate local Mac NAV preflight shell syntax
+        run: bash -n scripts/run_local_vanguard_nav_preflight_v04.sh
+      - name: Validate complete local NAV XLSX and exact-date NBP source bundle
+        run: python -m unittest discover -s tests -p 'test_vanguard_nav_intake_bundle_v04.py' -v
+      - name: Validate WorldPulse.ai financial source availability fail-close
+        run: python -m unittest discover -s tests -p 'test_worldpulse_nav_availability_v04.py' -v
+      - name: Validate safe original NAV XLSX intake with no fund-identity assumptions
+        run: python -m unittest discover -s tests -p 'test_vanguard_xlsx_offline_intake_v04.py' -v
+      - name: Validate authenticated offline NAV USD to exact-day NBP PLN conversion
+        run: python -m unittest discover -s tests -p 'test_vanguard_nav_to_pln_reference_v04.py' -v
+      - name: Validate calendar mismatches and proof integrity offline
+        run: python -m unittest discover -s tests -p 'test_reference_archive_calendar_v04.py' -v
+      - name: Validate 60-month NBP archive window controls offline
+        run: python -m unittest discover -s tests -p 'test_nbp_long_history_monthly.py' -v
+      - name: Validate frozen forward reference attribution with no execution
+        run: python -m unittest discover -s tests -p 'test_shadow_forward_evaluation_v05.py' -v
+      - name: Validate ordered multi-period shadow receipts without financial execution
+        run: python -m unittest discover -s tests -p 'test_shadow_journal_v06.py' -v
+      - name: Validate v0.7 independent-run-context capture input controls
+        run: python -m unittest discover -s tests -p 'test_shadow_capture_v07.py' -v
+      - name: Validate v0.8 GitHub checkpoint integrity and fail-closed retrospective gates
+        run: python -m unittest discover -s tests -p 'test_github_checkpoint_verify_v08.py' -v
+      - name: Validate v0.9 durable local evidence ledger, idempotency and tamper detection
+        run: python -m unittest discover -s tests -p 'test_shadow_evidence_ledger_v09.py' -v
+      - name: Validate v0.10 externally pinned anchor and deleted-tail detection
+        run: python -m unittest discover -s tests -p 'test_shadow_external_anchor_v10.py' -v
+      - name: Validate v0.11 private snapshot and safe restore drill
+        run: python -m unittest discover -s tests -p 'test_shadow_backup_restore_v11.py' -v
+      - name: Validate v0.12 isolated host install and no-overwrite behavior
+        run: python -m unittest discover -s tests -p 'test_deploy_shadow_evidence_mac_v12.py' -v
+      - name: Validate v0.13 explicit destination copy and adversarial path controls
+        run: python -m unittest discover -s tests -p 'test_shadow_offsite_export_v13.py' -v
+      - name: Validate read-only shadow decisions and source-quality fail-close
+        run: python -m unittest discover -s tests -p 'test_shadow_decision_engine_v05.py' -v
+      - name: Validate v0.15 source-gated M1-M3 decision orchestration and M3 confirmation
+        run: python -m unittest discover -s tests -p 'test_research_decision_controller_v15.py' -v
+      - name: Validate v0.17 chronological research journal and later forward results
+        run: python -m unittest discover -s tests -p 'test_research_forward_journal_v17.py' -v
+      - name: Validate v0.18 official reference gateway fail-closed model source classification
+        run: python -m unittest discover -s tests -p 'test_real_reference_gateway_v18.py' -v
+      - name: Validate v0.19 licensed ACWI NETR offline intake and exact-day NBP FX coverage
+        run: python -m unittest discover -s tests -p 'test_acwi_netr_offline_intake_v19.py' -v
+      - name: Run v0.16 decision cycle against real archived source plus tamper tests
+        run: |
+          python -m unittest discover -s tests -p 'test_research_decision_pipeline_v16.py' -v
+          python -m scripts.research_decision_pipeline_v16 --archived-v09 evidence/shadow/v09/checkpoint-bundle-run-42305280062.json
+
+      - name: Validate v0.4 monthly backtester, no database/network
+        run: python -m unittest discover -s tests -p 'test_monthly_proxy_backtest_v04.py' -v
+      - name: Validate v0.14 non-executable cost sensitivity and missing-data gates
+        run: python -m unittest discover -s tests -p 'test_monthly_cost_sensitivity_v14.py' -v
       - name: Verify live SQL script against disposable Postgres
         env:
           ISL_TEST_POSTGRES_DSN: postgresql://postgres:postgres@localhost:5432/investment_lab
-        run: python -m unittest discover -s tests/integration -p 'test_working_engine_v01.py' -v
+        run: |
+          python -m unittest discover -s tests/integration -p 'test_working_engine_v01.py' -v
+          python -m unittest discover -s tests/integration -p 'test_monthly_backtest_v04_readiness.py' -v

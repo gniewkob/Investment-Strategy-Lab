@@ -1,0 +1,85 @@
+name: ISL v0.5 shadow source observations from verified NBP/TBSP archive
+on:
+  pull_request:
+    paths:
+      - 'scripts/shadow_decision_engine_v05.py'
+      - 'tests/test_shadow_decision_engine_v05.py'
+      - 'scripts/real_reference_gateway_v18.py'
+      - 'tests/test_real_reference_gateway_v18.py'
+      - '.github/workflows/shadow-source-receipt-v05.yml'
+permissions:
+  contents: read
+  actions: read
+jobs:
+  read-only-shadow:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate deterministic partial-data decision gate
+        run: python -m unittest discover -s tests -p 'test_shadow_decision_engine_v05.py' -v
+      - name: Get independently validated 60-month read-only reference archive
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p source-evidence
+          gh run download 42255251036 --repo gniewkob/Investment-Strategy-Lab \
+            --name audited-nbp-bondspot-60-month-reference-calendar \
+            --dir source-evidence
+          find source-evidence -type f -maxdepth 3 -print
+          f="$(find source-evidence -type f -name 'nbp-tbsp-exact-day-reference-v04.json' -print -quit)"
+          test -n "$f"
+          test -s "$f"
+          printf '%s\n' "$f" > source-evidence/input-path.txt
+      - name: Evaluate archived genuine NBP/TBSP sources without promoting them to total-return assets
+        run: |
+          f="$(cat source-evidence/input-path.txt)"
+          python -m scripts.shadow_decision_engine_v05 \
+            --reference-archive "$f" --output shadow-source-receipt-v05.json
+          python - <<'PY'
+          import json
+          r=json.load(open('shadow-source-receipt-v05.json'))
+          assert r['status']=='SHADOW_REFERENCE_OBSERVATION_ONLY'
+          assert r['reference_months']==60
+          assert r['first_month']=='2021-11' and r['last_month']=='2026-10'
+          assert r['source_archive_sha256']
+          assert len(r['missing_model_sources'])==3
+          assert all(x['status']=='HOLD_CASH' for x in r['model_decisions'].values())
+          assert not r['historical_pit_certified']
+          assert not r['future_oos_returns_observed']
+          assert r['orders_sent']==r['paper_fills']==r['database_writes']==r['financial_operations']==0
+          print('SHADOW_REAL_REFERENCE_PASS: 60 months, 3 HOLD_CASH, 0 orders/fills/writes')
+          PY
+      - name: Run v0.18 REAL downloaded NBP and BondSpot references through v0.16 decision pipeline
+        run: |
+          python -m unittest discover -s tests -p 'test_real_reference_gateway_v18.py' -v
+          f="$(cat source-evidence/input-path.txt)"
+          python -m scripts.real_reference_gateway_v18 \
+            --reference-archive "$f" \
+            --as-of-utc "$(date -u +%Y-%m-%dT%H:%M:%SZ)" | tee real-reference-gateway-v18.log
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          raw = Path('real-reference-gateway-v18.log').read_text().strip()
+          report = json.loads(raw.removeprefix('ISL_REAL_REFERENCE_GATEWAY_V18='))
+          assert report['status'] == 'REFERENCE_DATA_OBSERVED_MODELS_BLOCKED'
+          assert report['reference_months'] == 60
+          assert len(report['real_reference_families']) == 3
+          assert len(report['missing_qualified_model_series']) == 3
+          assert all(v == 'HOLD_CASH' for v in report['model_states'].values())
+          assert report['candidate_models'] == []
+          assert report['financial_operations'] == report['orders_sent'] == 0
+          print('REAL_REFERENCE_GATEWAY_V18_PASS: genuine 60-month source; qualified models 0')
+          PY
+      - name: Preserve only source-receipt and shadow readiness, never raw market observations
+        uses: actions/upload-artifact@v4
+        with:
+          name: isl-v05-shadow-real-reference-receipt
+          path: shadow-source-receipt-v05.json
+          if-no-files-found: error
+          retention-days: 14

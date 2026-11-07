@@ -1,0 +1,170 @@
+name: ISL v0.8 independent GitHub checkpoint audit
+on:
+  pull_request:
+    paths:
+      - 'scripts/github_checkpoint_verify_v08.py'
+      - 'tests/test_github_checkpoint_verify_v08.py'
+      - 'scripts/shadow_evidence_ledger_v09.py'
+      - 'tests/test_shadow_evidence_ledger_v09.py'
+      - 'scripts/shadow_external_anchor_v10.py'
+      - 'tests/test_shadow_external_anchor_v10.py'
+      - 'scripts/shadow_backup_restore_v11.py'
+      - 'tests/test_shadow_backup_restore_v11.py'
+      - '.github/workflows/github-checkpoint-audit-v08.yml'
+  workflow_dispatch:
+    inputs:
+      capture_run_id:
+        description: 'Existing successful v0.7 GitHub Actions capture run ID'
+        required: true
+        type: string
+      cutoff_utc:
+        description: 'Declared independent audit cutoff, ISO UTC (not a trusted timestamp)'
+        required: true
+        type: string
+permissions:
+  contents: read
+  actions: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Offline integrity and cutoff regression
+        run: python -m unittest discover -s tests -p 'test_github_checkpoint_verify_v08.py' -v
+      - name: Corroborate earlier successful capture using independent GitHub API
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          HEAD_REF: ${{ github.head_ref }}
+          INPUT_RUN_ID: ${{ inputs.capture_run_id }}
+          INPUT_CUTOFF_UTC: ${{ inputs.cutoff_utc }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p checkpoint-evidence/source
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            # Cross-run GitHub server creation time; not a self-declared source timestamp.
+            export CUTOFF_UTC="$(gh api "repos/gniewkob/Investment-Strategy-Lab/actions/runs/$GITHUB_RUN_ID" --jq .created_at)"
+            gh api "repos/gniewkob/Investment-Strategy-Lab/actions/runs?per_page=100&event=pull_request&status=success" \
+              > checkpoint-evidence/prior-runs.json
+            RUN_ID="$(python -c 'import json,os; rs=json.load(open("checkpoint-evidence/prior-runs.json"))["workflow_runs"]; prior=[r for r in rs if r.get("path","").split("@")[0]==".github/workflows/shadow-capture-v07.yml" and r.get("head_branch")==os.environ["HEAD_REF"] and r.get("created_at","")<os.environ["CUTOFF_UTC"] and r.get("updated_at","")<os.environ["CUTOFF_UTC"]]; print(prior[0]["id"] if prior else "")')"
+            test -n "$RUN_ID" || { echo 'No completed earlier v0.7 capture available for this PR'; exit 1; }
+          else
+            RUN_ID="$INPUT_RUN_ID"
+            CUTOFF_UTC="$INPUT_CUTOFF_UTC"
+          fi
+          [[ "$RUN_ID" =~ ^[1-9][0-9]{0,17}$ ]] || { echo 'invalid run id'; exit 1; }
+          gh api "repos/gniewkob/Investment-Strategy-Lab/actions/runs/$RUN_ID" > checkpoint-evidence/run.json
+          gh api "repos/gniewkob/Investment-Strategy-Lab/actions/runs/$RUN_ID/artifacts?per_page=100" > checkpoint-evidence/artifacts.json
+          RUN_ATTEMPT="$(python -c 'import json; print(json.load(open("checkpoint-evidence/run.json"))["run_attempt"])')"
+          NAME="isl-v07-shadow-capture-run-${RUN_ID}-attempt-${RUN_ATTEMPT}"
+          gh run download "$RUN_ID" --repo gniewkob/Investment-Strategy-Lab \
+            --name "$NAME" --dir checkpoint-evidence/source
+          test -s checkpoint-evidence/source/shadow-capture-v07.json
+          python -m scripts.github_checkpoint_verify_v08 \
+            --capture checkpoint-evidence/source/shadow-capture-v07.json \
+            --run checkpoint-evidence/run.json \
+            --artifacts checkpoint-evidence/artifacts.json \
+            --cutoff-utc "$CUTOFF_UTC" \
+            --output github-checkpoint-audit-v08.json
+      - name: Validate local append-only evidence bundle using live GitHub audit data
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest discover -s tests -p 'test_shadow_evidence_ledger_v09.py' -v
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root = Path('checkpoint-evidence')
+          capture = json.loads((root / 'source/shadow-capture-v07.json').read_text())
+          source_run = json.loads((root / 'run.json').read_text())
+          source_artifacts = json.loads((root / 'artifacts.json').read_text())
+          checkpoint = json.loads(Path('github-checkpoint-audit-v08.json').read_text())
+          keep = ('id', 'run_attempt', 'head_sha', 'event', 'status',
+                  'conclusion', 'path', 'created_at', 'run_started_at', 'updated_at')
+          run = {key: source_run[key] for key in keep}
+          run['repository'] = {'full_name': source_run['repository']['full_name']}
+          run['head_repository'] = {'full_name': source_run['head_repository']['full_name']}
+          matches = [a for a in source_artifacts['artifacts']
+                     if a['id'] == checkpoint['artifact_id']]
+          assert len(matches) == 1, 'exactly one artifact required'
+          a = matches[0]
+          artifact = {key: a[key] for key in ('id', 'name', 'expired', 'created_at')}
+          artifact['workflow_run'] = {
+              key: a['workflow_run'][key] for key in ('id', 'head_sha')}
+          bundle = {'capture': capture, 'run': run,
+                    'artifacts': {'artifacts': [artifact]}, 'checkpoint': checkpoint}
+          (root / 'checkpoint-bundle-v09.json').write_text(
+              json.dumps(bundle, sort_keys=True, separators=(',', ':')) + '\n')
+          PY
+          python -m scripts.shadow_evidence_ledger_v09 \
+            --ledger checkpoint-evidence/evidence-shadow-ledger.sqlite3 \
+            --append-bundle checkpoint-evidence/checkpoint-bundle-v09.json
+          python -m scripts.shadow_evidence_ledger_v09 \
+            --ledger checkpoint-evidence/evidence-shadow-ledger.sqlite3 --verify
+      - name: Validate bounded external-anchor mechanics on disposable runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest discover -s tests -p 'test_shadow_external_anchor_v10.py' -v
+          mkdir -p checkpoint-evidence/anchors
+          ANCHOR_RESULT="$(python -m scripts.shadow_external_anchor_v10 \
+            --ledger checkpoint-evidence/evidence-shadow-ledger.sqlite3 \
+            --create-in checkpoint-evidence/anchors)"
+          printf '%s\n' "$ANCHOR_RESULT" | tee checkpoint-evidence/anchor-generation-receipt.txt
+          ANCHOR_PATH="$(python -c 'import json,sys; print(json.loads(sys.argv[1].split("=",1)[1])["path"])' "$ANCHOR_RESULT")"
+          ANCHOR_SHA="$(python -c 'import json,sys; print(json.loads(sys.argv[1].split("=",1)[1])["anchor_sha256"])' "$ANCHOR_RESULT")"
+          python -m scripts.shadow_external_anchor_v10 \
+            --ledger checkpoint-evidence/evidence-shadow-ledger.sqlite3 \
+            --verify "$ANCHOR_PATH" --expected-sha256 "$ANCHOR_SHA" \
+            | tee checkpoint-evidence/anchor-local-check.txt
+          # CI's SHA comes from this same runner. It is NOT independently pinned.
+      - name: Verify v0.11 backup and non-destructive restore against live checkpoint
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest discover -s tests -p 'test_shadow_backup_restore_v11.py' -v
+          mkdir -p checkpoint-evidence/v11-backups checkpoint-evidence/v11-restores
+          chmod 700 checkpoint-evidence/v11-backups checkpoint-evidence/v11-restores
+          ANCHOR_PATH="$(python -c 'import json;print(json.loads(open("checkpoint-evidence/anchor-generation-receipt.txt").read().split("=",1)[1])["path"])')"
+          ANCHOR_SHA="$(python -c 'import json;print(json.loads(open("checkpoint-evidence/anchor-generation-receipt.txt").read().split("=",1)[1])["anchor_sha256"])')"
+          python -m scripts.shadow_backup_restore_v11 create \
+            --ledger checkpoint-evidence/evidence-shadow-ledger.sqlite3 \
+            --anchor "$ANCHOR_PATH" --anchor-sha256 "$ANCHOR_SHA" \
+            --destination-root checkpoint-evidence/v11-backups \
+            | tee checkpoint-evidence/v11-backup-receipt.txt
+          BACKUP_PATH="$(python -c 'import json;print(json.loads(open("checkpoint-evidence/v11-backup-receipt.txt").read().split("=",1)[1])["path"])')"
+          MANIFEST_SHA="$(python -c 'import json;print(json.loads(open("checkpoint-evidence/v11-backup-receipt.txt").read().split("=",1)[1])["manifest_sha256"])')"
+          python -m scripts.shadow_backup_restore_v11 verify \
+            --snapshot "$BACKUP_PATH" --manifest-sha256 "$MANIFEST_SHA" \
+            | tee checkpoint-evidence/v11-verify-receipt.txt
+          python -m scripts.shadow_backup_restore_v11 restore-drill \
+            --snapshot "$BACKUP_PATH" --manifest-sha256 "$MANIFEST_SHA" \
+            --restore-root checkpoint-evidence/v11-restores \
+            | tee checkpoint-evidence/v11-restore-receipt.txt
+          # All files are on the same disposable runner, NOT independent offsite backup.
+      - name: Save only bounded audit receipt (not source archive)
+        uses: actions/upload-artifact@v4
+        with:
+          name: isl-v08-checkpoint-audit-${{ github.run_id }}
+          path: |
+            github-checkpoint-audit-v08.json
+            checkpoint-evidence/checkpoint-bundle-v09.json
+            checkpoint-evidence/evidence-shadow-ledger.sqlite3
+            checkpoint-evidence/anchors/*.json
+            checkpoint-evidence/anchor-generation-receipt.txt
+            checkpoint-evidence/anchor-local-check.txt
+            checkpoint-evidence/v11-backup-receipt.txt
+            checkpoint-evidence/v11-verify-receipt.txt
+            checkpoint-evidence/v11-restore-receipt.txt
+            checkpoint-evidence/v11-backups/*/manifest.json
+            checkpoint-evidence/v11-backups/*/anchor.json
+            checkpoint-evidence/v11-backups/*/ledger.sqlite3
+          if-no-files-found: error
+          retention-days: 90
