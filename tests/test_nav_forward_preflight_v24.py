@@ -54,7 +54,7 @@ class NAVForwardPreflightV24Tests(unittest.TestCase):
 
     def test_new_synthetic_export_revisions_fail_close(self):
         frozen,baseline=sources()
-        out=evaluate(frozen,baseline,raw_export=fake_xlsx(61),
+        out=evaluate(frozen,baseline,raw_export=fake_xlsx(61,localized=True),
                      raw_nbp=NOV_FX,clock=lambda:DEC,
                      export_retrieved_at_utc="2026-12-02T12:00:00+00:00",
                      nbp_retrieved_at_utc="2026-12-01T12:00:00+00:00")
@@ -62,6 +62,20 @@ class NAVForwardPreflightV24Tests(unittest.TestCase):
                          "BLOCKED_HISTORICAL_SOURCE_REVISIONS_REQUIRE_REVIEW")
         self.assertGreater(out["historical_revisions_count"],0)
         self.assertEqual(out["prospective_eligible_months"],0)
+
+    def test_complete_new_source_reaches_candidate_only_not_trading(self):
+        frozen,baseline=sources()
+        out=evaluate(frozen,baseline,raw_export=fake_xlsx(61),
+                     raw_nbp=NOV_FX,clock=lambda:DEC,
+                     export_retrieved_at_utc="2026-12-02T12:00:00+00:00",
+                     nbp_retrieved_at_utc="2026-12-01T12:00:00+00:00")
+        self.assertEqual(out["status"],
+                         "CANDIDATE_FORWARD_REFERENCE_REQUIRES_INDEPENDENT_SOURCE_REVIEW")
+        self.assertEqual(out["historical_revisions_count"],0)
+        self.assertEqual(out["future_candidate_observed_for"],"2026-11-30")
+        self.assertEqual(out["prospective_eligible_months"],0)
+        self.assertFalse(out["qualified_m1_model_backtest"])
+        self.assertEqual(out["financial_operations"],0)
 
     def test_wrong_baseline_source_sha_rejected(self):
         frozen,baseline=sources()
