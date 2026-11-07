@@ -6,6 +6,8 @@ on:
       - 'tests/test_github_checkpoint_verify_v08.py'
       - 'scripts/shadow_evidence_ledger_v09.py'
       - 'tests/test_shadow_evidence_ledger_v09.py'
+      - 'scripts/shadow_external_anchor_v10.py'
+      - 'tests/test_shadow_external_anchor_v10.py'
       - '.github/workflows/github-checkpoint-audit-v08.yml'
   workflow_dispatch:
     inputs:
@@ -104,6 +106,23 @@ jobs:
             --append-bundle checkpoint-evidence/checkpoint-bundle-v09.json
           python -m scripts.shadow_evidence_ledger_v09 \
             --ledger checkpoint-evidence/evidence-shadow-ledger.sqlite3 --verify
+      - name: Validate bounded external-anchor mechanics on disposable runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest discover -s tests -p 'test_shadow_external_anchor_v10.py' -v
+          mkdir -p checkpoint-evidence/anchors
+          ANCHOR_RESULT="$(python -m scripts.shadow_external_anchor_v10 \
+            --ledger checkpoint-evidence/evidence-shadow-ledger.sqlite3 \
+            --create-in checkpoint-evidence/anchors)"
+          printf '%s\n' "$ANCHOR_RESULT" | tee checkpoint-evidence/anchor-generation-receipt.txt
+          ANCHOR_PATH="$(python -c 'import json,sys; print(json.loads(sys.argv[1].split("=",1)[1])["path"])' "$ANCHOR_RESULT")"
+          ANCHOR_SHA="$(python -c 'import json,sys; print(json.loads(sys.argv[1].split("=",1)[1])["anchor_sha256"])' "$ANCHOR_RESULT")"
+          python -m scripts.shadow_external_anchor_v10 \
+            --ledger checkpoint-evidence/evidence-shadow-ledger.sqlite3 \
+            --verify "$ANCHOR_PATH" --expected-sha256 "$ANCHOR_SHA" \
+            | tee checkpoint-evidence/anchor-local-check.txt
+          # CI's SHA comes from this same runner. It is NOT independently pinned.
       - name: Save only bounded audit receipt (not source archive)
         uses: actions/upload-artifact@v4
         with:
@@ -112,5 +131,8 @@ jobs:
             github-checkpoint-audit-v08.json
             checkpoint-evidence/checkpoint-bundle-v09.json
             checkpoint-evidence/evidence-shadow-ledger.sqlite3
+            checkpoint-evidence/anchors/*.json
+            checkpoint-evidence/anchor-generation-receipt.txt
+            checkpoint-evidence/anchor-local-check.txt
           if-no-files-found: error
           retention-days: 90
