@@ -22,7 +22,8 @@ def _cell(ref, value, *, inline=False, formula=False):
 
 
 def fake_xlsx(months=60, *, skip=None, duplicate=False, numeric_dates=False,
-              wrong_header=False, formula=False, macro=False, localized=False):
+              wrong_header=False, formula=False, macro=False, localized=False,
+              bad_pl_month=False, bad_decimal=False):
     contents=[
         '<row r="1">'+_cell("A1","Date",inline=True)
         +_cell("B1","Market price (USD)",inline=True)
@@ -37,12 +38,14 @@ def fake_xlsx(months=60, *, skip=None, duplicate=False, numeric_dates=False,
         if localized:
             months_pl=("sty","lut","mar","kwi","maj","cze",
                        "lip","sie","wrz","paź","lis","gru")
-            value=f"{day.day:02d} {months_pl[day.month-1]} {day.year}"
+            short="abc" if bad_pl_month and i == 0 else months_pl[day.month-1]
+            value=f"{day.day:02d} {short} {day.year}"
         else:
             value=str((day-date(1899,12,30)).days) if numeric_dates else day.isoformat()
         cells=_cell(f"A{i+2}",value,inline=not numeric_dates)
         cells+=_cell(f"B{i+2}",888+i)
-        nav=f"{100+i},4672\\u00a0USD" if localized else 100+i
+        nav=(f"{100+i}.4672\\u00a0USD" if bad_decimal and i == 0
+             else f"{100+i},4672\\u00a0USD") if localized else 100+i
         cells+=_cell(f"C{i+2}",nav,inline=localized,formula=formula and i==0)
         contents.append(f'<row r="{i+2}">{cells}</row>')
         if duplicate and i==0:
@@ -94,12 +97,11 @@ class VanguardOfflineXLSXIntakeTests(unittest.TestCase):
         self.assertFalse(document["historical_pit_certified"])
 
     def test_polish_export_rejects_wrong_month_or_currency(self):
-        raw=fake_xlsx(60,localized=True)
         with self.assertRaisesRegex(InvalidVanguardXLSX,"unrecognized Polish month"):
-            inspect_export(raw.replace(b"lis 2021",b"abc 2021"),
+            inspect_export(fake_xlsx(60,localized=True,bad_pl_month=True),
                            "2021-11","2026-10",as_of=date(2026,11,7))
         with self.assertRaisesRegex(InvalidVanguardXLSX,"localized NAV USD decimal"):
-            inspect_export(raw.replace(b"100,4672",b"100.4672"),
+            inspect_export(fake_xlsx(60,localized=True,bad_decimal=True),
                            "2021-11","2026-10",as_of=date(2026,11,7))
 
     def test_excel_numeric_date_serial_and_nav_vs_market_price(self):
