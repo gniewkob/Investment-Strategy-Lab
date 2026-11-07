@@ -1,5 +1,6 @@
 """v0.29 real archived metadata fixture, no proprietary price series."""
 from copy import deepcopy
+from contextlib import closing
 import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -75,7 +76,9 @@ class ArchivedDecisionLinkTests(unittest.TestCase):
             # Disturb the ledger's canonical data without rewriting the
             # externally known checkpoint: mandatory full audit rejects.
             import sqlite3
-            with sqlite3.connect(path) as conn:
+            # sqlite3.Connection.__exit__ commits/rolls back but does NOT
+            # close the connection; closing() prevents a GC ResourceWarning.
+            with closing(sqlite3.connect(path)) as conn, conn:
                 conn.execute("DROP TRIGGER evidence_no_update")
                 conn.execute("UPDATE evidence SET bundle_sha256=? WHERE seq=1",("a"*64,))
             with self.assertRaises(ShadowInputError):
