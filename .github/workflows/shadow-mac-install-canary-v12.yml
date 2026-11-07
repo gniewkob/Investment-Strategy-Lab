@@ -1,0 +1,64 @@
+name: ISL v0.12 isolated macOS shadow ledger deployment canary
+on:
+  pull_request:
+    paths:
+      - 'scripts/deploy_shadow_evidence_mac_v12.py'
+      - 'tests/test_deploy_shadow_evidence_mac_v12.py'
+      - '.github/workflows/shadow-mac-install-canary-v12.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  disposable-macos-canary:
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify no credential or account integrations are required
+        run: |
+          set -euo pipefail
+          python3 --version
+          git rev-parse HEAD
+      - name: Test isolated research-only installation
+        run: python3 -m unittest discover -s tests -p 'test_deploy_shadow_evidence_mac_v12.py' -v
+      - name: Preflight exact checked-out commit on disposable macOS runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          HEAD_SHA="$(git rev-parse HEAD)"
+          python3 -m scripts.deploy_shadow_evidence_mac_v12 \
+            --repo-root . --base-dir "$RUNNER_TEMP/isl-v12-research-ledger" \
+            --expected-commit "$HEAD_SHA" --preflight
+      - name: Apply and read back isolated research-ledger on disposable macOS
+        shell: bash
+        run: |
+          set -euo pipefail
+          HEAD_SHA="$(git rev-parse HEAD)"
+          python3 -m scripts.deploy_shadow_evidence_mac_v12 \
+            --repo-root . --base-dir "$RUNNER_TEMP/isl-v12-research-ledger" \
+            --expected-commit "$HEAD_SHA" --apply \
+            | tee "$RUNNER_TEMP/isl-v12-disposable-install-log.txt"
+          python3 - <<'PY'
+          import json, os, pathlib
+          from scripts.shadow_evidence_ledger_v09 import audit
+          from scripts.shadow_backup_restore_v11 import verify_snapshot
+          root = pathlib.Path(os.environ["RUNNER_TEMP"]) / "isl-v12-research-ledger"
+          receipt = json.loads((root / "state/deployment-receipt-v12.json").read_text())
+          assert audit(root / receipt["ledger_relpath"])["head_sha256"] == receipt["head_sha256"]
+          assert verify_snapshot(root / receipt["backup_relpath"],
+                                 receipt["backup_manifest_sha256"])["current_entries"] == 1
+          assert verify_snapshot(root / receipt["restore_relpath"],
+                                 receipt["backup_manifest_sha256"])["current_entries"] == 1
+          assert receipt["financial_operations"] == 0
+          assert not receipt["active_scheduler_changed"] and not receipt["neon_modified"]
+          print("MACOS_HOST_CANARY_PASS: isolated durable-on-runner files, no live systems changed")
+          PY
+      - name: Archive only bounded canary receipt, never investor credentials
+        uses: actions/upload-artifact@v4
+        with:
+          name: isl-v12-macos-disposable-canary
+          path: ${{ runner.temp }}/isl-v12-research-ledger/state/deployment-receipt-v12.json
+          if-no-files-found: error
+          retention-days: 14
