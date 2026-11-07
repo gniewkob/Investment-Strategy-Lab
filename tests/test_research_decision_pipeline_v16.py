@@ -41,7 +41,7 @@ class ResearchCycleV16Tests(unittest.TestCase):
     def test_archive_mutation_rejected(self):
         bad = deepcopy(self.bundle)
         bad["capture"]["decision"]["as_of_utc"] = "1999-01-01T00:00:00+00:00"
-        with self.assertRaisesRegex(ShadowInputError, "decision fingerprint"):
+        with self.assertRaisesRegex(ShadowInputError, "capture fingerprint"):
             run_cycle(archived_bundle=bad)
 
     def test_archive_capture_mutation_rejected(self):
