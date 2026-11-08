@@ -9,7 +9,7 @@
 - `scripts/nbp_bondspot_exact_date_v04.py` — matches exact calendar dates, preserves NBP receipts and fails closed rather than imputing values. This function **can optionally call the public NBP API at runtime** when mismatched dates need new sources and no injected fetcher is provided. It has **no scheduled/provider-running workflow in this PR**, and CI always injects synthetic sources and forbids Python socket connections.
 - `scripts/vanguard_nav_to_pln_reference_v04.py` — requires raw original NAV CSV bytes (not arbitrary self-declared XLSX CSV-equivalence) and compatible exact-date original NBP receipts before reference USD-to-PLN matching. This is not executable equity total return or an ETF fill.
 
-Each module is copied byte-for-byte from the research PR #96, preserving the exact Git blob SHA. The existing `scripts/nbp_reference_capture.py` is already on `main`; this PR does not modify it. No dependency on the A1 backtester or its tests. Test modules:
+Each source and test module is copied byte-for-byte from the research PR #96 branch, preserving exact Git blob SHA. **Dependency discovered in the first CI run:** `scripts/nbp_reference_capture.py` is NOT on `main`, although it is imported by `scripts/nbp_bondspot_exact_date_v04.py`. It has now been included unchanged from the source branch; otherwise this Draft PR would fail during import. The source capture helper can access public NBP HTTPS when invoked outside tests, but CI blocks all Python socket connections. No dependency on the A1 backtester or its tests. Test modules:
 `test_vanguard_xlsx_offline_intake_v04.py`,
 `test_reference_archive_calendar_v04.py`,
 `test_vanguard_nav_to_pln_reference_v04.py`.
@@ -31,4 +31,8 @@ The job is not a blanket guarantee against hypothetical subprocess/network usage
 
 This source-checking module is independent of Draft A1 PR #98. Both A1 and A2 are sourced from broad Draft PR #96. Do not merge PR #96 wholesale after merging isolated modules; plan a dependency-aware replacement of the broad PR so the same Git blobs and workflow schedules cannot be merged twice without review. Other online acquisition modules and provider-probing workflows belong to a separate A2-provider review, not to this offline slice.
 
-**Acceptance criteria:** isolated CI PASS for all three synthetic offline suites, exact seven original Git blobs matched against PR #96, separate code/security review, no original provider price artifacts uploaded, no merged state.
+**Acceptance criteria:** isolated CI PASS for all three synthetic offline suites, exact eight original Git blobs matched against PR #96, separate code/security review, no original provider price artifacts uploaded, no merged state.
+
+## CI correction record
+
+The initial A2 workflow run failed because the referenced `scripts.nbp_reference_capture` was missing from `main` (module import error); 12 XLSX fixture tests passed before the import errors. This is an **incomplete dependency closure**, not evidence of invalid market data. Corrective action: include the exact source module as the eighth original source/test file and extend the workflow path filter; rerun the entire offline suite. Do not reduce coverage or enable provider downloads to repair this.
