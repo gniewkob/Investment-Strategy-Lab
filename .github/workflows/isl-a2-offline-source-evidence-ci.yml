@@ -8,6 +8,7 @@ on:
       - 'scripts/vanguard_xlsx_offline_intake_v04.py'
       - 'scripts/reference_archive_calendar_v04.py'
       - 'scripts/nbp_bondspot_exact_date_v04.py'
+      - 'scripts/nbp_reference_capture.py'
       - 'scripts/vanguard_nav_to_pln_reference_v04.py'
       - 'tests/test_vanguard_xlsx_offline_intake_v04.py'
       - 'tests/test_reference_archive_calendar_v04.py'
