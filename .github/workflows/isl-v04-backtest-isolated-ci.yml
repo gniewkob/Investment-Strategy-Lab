@@ -1,0 +1,85 @@
+name: ISL isolated v0.4 research backtest acceptance
+
+# Dedicated independent baseline for Draft PR A1. All strategies are
+# non-executable reference simulations. SQL connects only to a disposable
+# localhost PostgreSQL 16 service, never to Neon or broker/wallet accounts.
+on:
+  pull_request:
+    paths:
+      - 'scripts/monthly_proxy_backtest_v04.py'
+      - 'tests/test_monthly_proxy_backtest_v04.py'
+      - 'scripts/monthly_cost_sensitivity_v14.py'
+      - 'tests/test_monthly_cost_sensitivity_v14.py'
+      - 'db/monthly_backtest_v04_readiness_READONLY.sql'
+      - 'tests/integration/test_monthly_backtest_v04_readiness.py'
+      - '.github/workflows/isl-v04-backtest-isolated-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  synthetic-core:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify original synthetic proxy backtest
+        run: python -m unittest discover -s tests -p 'test_monthly_proxy_backtest_v04.py' -v
+      - name: Verify v0.14 controlled cost sensitivity
+        run: python -m unittest discover -s tests -p 'test_monthly_cost_sensitivity_v14.py' -v
+      - name: Enforce non-executable test boundary
+        run: echo "SYNTHETIC_M1_M2_M3_ONLY_NO_FUNDS_NO_NETWORK_NO_NEON"
+
+  disposable-postgres-readiness:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: investment_lab
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d investment_lab"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install isolated PostgreSQL test driver
+        run: python -m pip install 'psycopg[binary]>=3.1,<4'
+      - name: Prove disposable localhost target before schema fixture
+        env:
+          ISL_TEST_POSTGRES_DSN: postgresql://postgres:postgres@localhost:5432/investment_lab
+        run: |
+          python - <<'PY'
+          import os
+          import psycopg
+          data = psycopg.conninfo.conninfo_to_dict(os.environ['ISL_TEST_POSTGRES_DSN'])
+          assert data['host'] == 'localhost'
+          assert data['dbname'] == 'investment_lab'
+          with psycopg.connect(os.environ['ISL_TEST_POSTGRES_DSN']) as c:
+              assert c.info.host in ('localhost','127.0.0.1','::1')
+              assert c.execute('SELECT current_database()').fetchone()[0] == 'investment_lab'
+          print('DISPOSABLE_POSTGRES_ONLY')
+          PY
+      - name: Verify missing, future, incomplete and untradable source readiness
+        env:
+          ISL_TEST_POSTGRES_DSN: postgresql://postgres:postgres@localhost:5432/investment_lab
+        run: python -m unittest discover -s tests/integration -p 'test_monthly_backtest_v04_readiness.py' -v
+      - name: No external database, orders or source promotion
+        run: echo "READ_ONLY_RESEARCH_SQL_LOCAL_DISPOSABLE_POSTGRES_ONLY"
