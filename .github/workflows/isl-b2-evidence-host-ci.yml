@@ -1,0 +1,57 @@
+name: ISL B2 isolated host copy and restore CI
+
+# Offline, temporary-fixture validation only. No host installation or launchd,
+# no actual offsite destination, no provider/network requests, no secrets,
+# no wallet, no broker, no production databases and no financial operations.
+on:
+  pull_request:
+    paths:
+      - 'scripts/deploy_shadow_evidence_mac_v12.py'
+      - 'tests/test_deploy_shadow_evidence_mac_v12.py'
+      - 'scripts/shadow_offsite_export_v13.py'
+      - 'tests/test_shadow_offsite_export_v13.py'
+      - '.github/workflows/isl-b2-evidence-host-ci.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  isolated-fixture:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate B2 isolated temporary-directory installation and copy safeguards
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import socket
+          import unittest
+
+          def reject_network(*_args, **_kwargs):
+              raise AssertionError('B2 sandbox fixture attempted a network connection')
+          socket.socket.connect=reject_network
+          socket.socket.connect_ex=reject_network
+          socket.create_connection=reject_network
+
+          suite=unittest.defaultTestLoader.loadTestsFromNames([
+              'tests.test_deploy_shadow_evidence_mac_v12',
+              'tests.test_shadow_offsite_export_v13',
+          ])
+          result=unittest.TextTestRunner(verbosity=2).run(suite)
+          if not result.wasSuccessful() or result.testsRun < 16 or result.skipped:
+              raise SystemExit('B2_HOST_EVIDENCE_SANDBOX_BLOCKED')
+          print('B2_ISOLATED_HOST_EVIDENCE_PASS tests='+str(result.testsRun))
+          print('B2_NO_REAL_HOST_INSTALL_NO_OFFSITE_ATTESTATION')
+          PY
+      - name: Keep the evidence boundary explicit
+        run: echo "FIXTURE_ONLY_NO_LAUNCHD_NO_REAL_OFFSITE_NO_NEON_NO_WALLET_NO_TRADES"
