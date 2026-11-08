@@ -1,0 +1,60 @@
+name: ISL A2 offline source-evidence contract regression
+
+# Draft A2: only synthetic source fixtures, no public-provider fetch, no
+# originals, no secrets, no Neon/database, no wallet and no trades.
+on:
+  pull_request:
+    paths:
+      - 'scripts/vanguard_xlsx_offline_intake_v04.py'
+      - 'scripts/reference_archive_calendar_v04.py'
+      - 'scripts/nbp_bondspot_exact_date_v04.py'
+      - 'scripts/vanguard_nav_to_pln_reference_v04.py'
+      - 'tests/test_vanguard_xlsx_offline_intake_v04.py'
+      - 'tests/test_reference_archive_calendar_v04.py'
+      - 'tests/test_vanguard_nav_to_pln_reference_v04.py'
+      - '.github/workflows/isl-a2-offline-source-evidence-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  source-contract-offline:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify test suite uses only synthetic, local source fixtures
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import socket
+          import unittest
+
+          def deny_network(*_args, **_kwargs):
+              raise AssertionError('A2 offline source contract test attempted network access')
+
+          # Network disabled at Python socket layer during all three suites.
+          socket.socket.connect = deny_network
+          socket.socket.connect_ex = deny_network
+          socket.create_connection = deny_network
+
+          suites = [
+              'tests.test_vanguard_xlsx_offline_intake_v04',
+              'tests.test_reference_archive_calendar_v04',
+              'tests.test_vanguard_nav_to_pln_reference_v04',
+          ]
+          tests = unittest.defaultTestLoader.loadTestsFromNames(suites)
+          result = unittest.TextTestRunner(verbosity=2).run(tests)
+          if not result.wasSuccessful() or result.testsRun == 0 or result.skipped:
+              raise SystemExit('A2_SOURCE_CONTRACTS_BLOCKED')
+          print(f'A2_OFFLINE_SOURCE_CONTRACTS_PASS tests={result.testsRun}')
+          PY
+      - name: Confirm no private data, finance, or provider-side execution
+        run: echo "OFFLINE_SYNTHETIC_TESTS_ONLY_NO_NEON_NO_PROVIDER_FETCH_NO_WALLET_NO_ORDERS"
