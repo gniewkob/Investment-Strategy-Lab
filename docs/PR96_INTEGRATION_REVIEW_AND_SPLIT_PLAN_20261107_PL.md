@@ -122,3 +122,29 @@ Exit 0 oznacza wyłącznie czyste `merge-tree`; exit 2 konflikt. `git fetch` cel
 **Granica dowodu:** regresja *unit* połączonego drzewa to PASS w Linux/Python 3.12, lecz pełna integracja SQL na tym połączonym drzewie i niezależny przegląd 133+ plików nie zostały jeszcze zatwierdzone. Testy SQLite/HTTP na Mac Python 3.15 wymagają osobnego porządkowania i nie powinny być ukrywane przez blanket warning filters. SHA sprawdzonego połączonego kodu nie jest kryptograficzną atestacją licencji, PIT ani wydajności rynkowej.
 
 **Decyzja:** `COMBINED_TREE_UNIT_REGRESSION_PASS`; `PR_96_MERGE_STILL_BLOCKED` do zakończenia kontroli MF-01/02/03/05 i bramek PostgreSQL/Workflow.
+
+
+## 9. PostgreSQL combined tree oraz pierwszy wydzielony Draft PR — 2026-11-08
+
+### Połączone drzewo — niezależne dwie bramki
+
+Rozszerzono `.github/workflows/pr96-combined-tree-regression.yml` o zadanie `combined-tree-postgres`, które pobiera dokładne SHA obu gałęzi, buduje czysty tymczasowy commit łączący, niezależnie porównuje wynik `git merge-tree --write-tree`, podnosi wyłącznie **disposable PostgreSQL 16 na `localhost`** i uruchamia istniejące integracyjne testy SQL. Brak Neon, wallet, broker, secrets, main merge i push. Wprowadzona zmiana: `9dac41a92d7a6c782abeb6fd8bced134fb3e0b82`.
+
+**Rzeczywisty odbiór**: GitHub Actions [#42427650325](https://github.com/gniewkob/Investment-Strategy-Lab/actions/runs/42427650325), dwa zadania SUCCESS na **tym samym tree SHA `b8a4a3c0f90ed109f9b6bf15be434177ac631862`**:
+- `combined-tree-unit`: 933 testy, 0 failures/errors, 1 skipped.
+- `combined-tree-postgres`: 25 testów `test_working_engine_v01.py` PASS i 6 testów `test_monthly_backtest_v04_readiness.py` PASS.
+- `ResourceWarning` w obu logach: 0. To nie potwierdza jeszcze braku ostrzeżeń w macOS/Python 3.15 i nie certyfikuje źródeł/PIT.
+
+Pozostałe 5 workflowów uruchomionych na `9dac...` również SUCCESS. **COMBINED_TREE_UNIT_AND_POSTGRES_REGRESSION_PASS.**
+
+### Draft PR #98 — wydzielony fragment A1, nie zmergowany
+
+[Draft PR #98 — samodzielny engine v0.4 i hipotetyczna wrażliwość kosztów v0.14](https://github.com/gniewkob/Investment-Strategy-Lab/pull/98) w branch `codex/isl-backtest-v04-core-isolated-20261108`, baza `main=d93e2ac3c5559f0d06f99f8026655905e4a8537d`, HEAD `f7e4890337be68ed8ee15bcdea64119449f57da0`.
+
+**9 plików**: cztery source+test do samowystarczalnego Python stdlib backtestu v0.4 i analizy kosztów v0.14, SQL+integracyjny test read-only gotowości źródeł, dwa oryginalne dokumenty oraz dedykowany workflow read-only. Wszystkie **osiem oryginalnych plików ma dokładnie zgodny Git blob SHA** z branch PR #96 — zostało zweryfikowane przez odczyt obu gałęzi. Nowy workflow jest jedynym nowym plikiem niebędącym kopią.
+
+**Niezależne CI:** [run #42427944205](https://github.com/gniewkob/Investment-Strategy-Lab/actions/runs/42427944205), oba zadania SUCCESS: `synthetic-core` 21+11 testów PASS; `disposable-postgres-readiness` 6 testów PASS. Łącznie 38 testów. Brak prawdziwych operacji finansowych i nowych danych rynkowych.
+
+**Wymóg integracyjny: NIE merge PR #96 i #98 wprost jeden po drugim bez reconciliacji.** Osiem plików jest współdzielonych między PR i należy formalnie usunąć je z przyszłego zakresu merge dużego PR albo zastąpić ten PR przez mniejsze, jednoznacznie zależne pakiety. PR #98 pozostaje draft do niezależnego review i kontroli zależności; zielone CI nie jest upoważnieniem do automatycznego merge. Kolejne wycinki A2/B/C/D/E powinny powstawać z nowej gałęzi głównej, po zachowaniu source evidence freeze SHA, bez kopiowania niezweryfikowanych credentials.
+
+**Nadal otwarte:** przegląd 133+ plików i workflowów (MF-01), praw licencyjnych i PIT (MF-03), semantyki live-provider artifacts GitHub (MF-05), uprawnień/ochrony main, lokalne ostrzeżenia SQLite na Python 3.15. Nie dopuszczać realnej realizacji finansowej.
