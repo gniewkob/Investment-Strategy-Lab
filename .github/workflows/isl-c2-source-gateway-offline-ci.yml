@@ -9,6 +9,7 @@ on:
       - 'tests/test_real_reference_gateway_v18.py'
       - 'scripts/acwi_netr_offline_intake_v19.py'
       - 'tests/test_acwi_netr_offline_intake_v19.py'
+      - 'docs/C2_CURRENCY_PROVENANCE_AND_SOURCE_RIGHTS_REVIEW_20261109_PL.md'
       - '.github/workflows/isl-c2-source-gateway-offline-ci.yml'
   workflow_dispatch:
 
@@ -49,7 +50,7 @@ jobs:
               'tests.test_acwi_netr_offline_intake_v19',
           ])
           result=unittest.TextTestRunner(verbosity=2).run(tests)
-          if not result.wasSuccessful() or result.testsRun!=19 or result.skipped:
+          if not result.wasSuccessful() or result.testsRun!=21 or result.skipped:
               raise SystemExit('C2_OFFLINE_SOURCE_GATE_BLOCKED')
           print('C2_SOURCE_GATEWAY_OFFLINE_PASS tests='+str(result.testsRun))
           print('C2_REAL_SOURCE_LICENSE_AND_PIT_NOT_CERTIFIED')
