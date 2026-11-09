@@ -10,6 +10,8 @@ on:
       - 'tests/test_monthly_proxy_backtest_v04.py'
       - 'scripts/monthly_cost_sensitivity_v14.py'
       - 'tests/test_monthly_cost_sensitivity_v14.py'
+      - 'tests/test_a1_independent_accounting_review_v01.py'
+      - 'docs/WORKING_ENGINE_V04_BACKTEST_ACCEPTANCE_PL.md'
       - 'db/monthly_backtest_v04_readiness_READONLY.sql'
       - 'tests/integration/test_monthly_backtest_v04_readiness.py'
       - '.github/workflows/isl-v04-backtest-isolated-ci.yml'
@@ -33,6 +35,8 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_monthly_proxy_backtest_v04.py' -v
       - name: Verify v0.14 controlled cost sensitivity
         run: python -m unittest discover -s tests -p 'test_monthly_cost_sensitivity_v14.py' -v
+      - name: Verify independent A1 accounting and chronology invariants
+        run: python -W error::ResourceWarning -m unittest discover -s tests -p 'test_a1_independent_accounting_review_v01.py' -v
       - name: Enforce non-executable test boundary
         run: echo "SYNTHETIC_M1_M2_M3_ONLY_NO_FUNDS_NO_NETWORK_NO_NEON"
 
