@@ -1,0 +1,76 @@
+name: ISL D1 conditional NAV reference and frozen forward policy (offline)
+
+# Stacked on A2 Draft #99. No original provider NAV data, browser automation,
+# scheduled API calls, broker, wallet, Neon, orders or portfolio access.
+on:
+  pull_request:
+    paths:
+      - 'scripts/vanguard_nav_intake_bundle_v04.py'
+      - 'tests/test_vanguard_nav_intake_bundle_v04.py'
+      - 'scripts/conditional_m1_nav_diagnostic_v20.py'
+      - 'tests/test_conditional_m1_nav_diagnostic_v20.py'
+      - 'scripts/conditional_m1_nav_analytics_v21.py'
+      - 'tests/test_conditional_m1_nav_analytics_v21.py'
+      - 'scripts/nav_forward_freeze_v22.py'
+      - 'tests/test_nav_forward_freeze_v22.py'
+      - 'scripts/nav_forward_admission_v23.py'
+      - 'tests/test_nav_forward_admission_v23.py'
+      - '.github/workflows/isl-d1-nav-freeze-offline-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-nav-freeze:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Enforce unchanged v0.22 and v0.23 code blobs
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git hash-object scripts/nav_forward_freeze_v22.py)" = "7a9c7e5cbc643b5ad760ec64d4212468b64a22bf"
+          test "$(git hash-object scripts/nav_forward_admission_v23.py)" = "d425076ea809f622e5b2c1c4e87ba59fe060f990"
+          echo "D1_FROZEN_V22_V23_ORIGINAL_BLOBS_VERIFIED"
+      - name: Verify source-gated candidate NAV arithmetic and no-lookahead chronology
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import socket
+          import unittest
+          from scripts import nav_forward_admission_v23 as v23
+
+          assert v23.ANCHORED_FREEZE_SHA == "3b8aca44ffa6aa72bf2d3a0b5d49102f0dd857d11191dc10e7d21b5051e704a2", "existing evidence anchor changed"
+          def deny_network(*_a, **_k):
+              raise AssertionError("D1 offline test attempted network access")
+          socket.socket.connect = deny_network
+          socket.socket.connect_ex = deny_network
+          socket.create_connection = deny_network
+          modules = [
+              "tests.test_vanguard_nav_intake_bundle_v04",
+              "tests.test_conditional_m1_nav_diagnostic_v20",
+              "tests.test_conditional_m1_nav_analytics_v21",
+              "tests.test_nav_forward_freeze_v22",
+              "tests.test_nav_forward_admission_v23",
+          ]
+          test_suite = unittest.defaultTestLoader.loadTestsFromNames(modules)
+          result = unittest.TextTestRunner(verbosity=2).run(test_suite)
+          if not result.wasSuccessful() or result.testsRun != 41 or result.skipped:
+              raise SystemExit("D1_NAV_SOURCE_OR_POLICY_GATE_BLOCKED")
+          print("D1_NAV_FREEZE_OFFLINE_PASS tests=" + str(result.testsRun))
+          print("D1_NO_PIT_OR_TRADING_QUALIFICATION")
+          PY
+      - name: Document non-production boundary
+        run: echo "ORIGINAL_PROVIDER_BYTES_NOT_IN_REPO_NO_BROWSER_NO_NEON_NO_ORDERS"
