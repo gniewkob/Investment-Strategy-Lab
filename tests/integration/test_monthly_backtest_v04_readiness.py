@@ -98,6 +98,21 @@ class MonthlyBacktestReadinessTest(unittest.TestCase):
                     'https://research.example.org/total-return')""",
                     (asset, day.isoformat(), interval, basis, i + 100))
 
+    def test_second_fixture_refuses_existing_schema_without_deletion(self):
+        # A connected target can be localhost and still hold valuable data.
+        # Opening a second fixture must not destroy this existing schema.
+        self.conn.execute(
+            "INSERT INTO investment_lab.instruments VALUES ('SENTINEL','PLN')")
+        other = type(self)("test_empty_live_equivalent_is_not_run")
+        with self.assertRaisesRegex(ValueError, "pre-existing investment_lab"):
+            other.setUp()
+        self.assertEqual(
+            self.conn.execute(
+                "SELECT instrument_code FROM investment_lab.instruments"
+            ).fetchone()[0],
+            "SENTINEL",
+        )
+
     def test_empty_live_equivalent_is_not_run(self):
         rows = self._query()
         self.assertEqual(len(rows), 3)
