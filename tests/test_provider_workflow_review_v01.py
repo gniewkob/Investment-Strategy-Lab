@@ -106,5 +106,42 @@ class ProviderWorkflowReviewTests(unittest.TestCase):
         self.assertFalse(flags["persist_credentials_false_literal"])
 
 
+    def test_governance_mode_rejects_exact_original_blob_without_approval(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            row = self.data["workflows"][0]
+            p = root / row["path"]
+            p.parent.mkdir(parents=True)
+            contents = b"name: fixture\\non:\\n  workflow_dispatch:\\n"
+            p.write_bytes(contents)
+            manifest = deepcopy(self.data)
+            manifest["workflows"][0]["git_blob_sha1"] = git_blob_sha1(contents)
+            result = audit(root, manifest, forbid_present=True)
+            self.assertEqual(result["status"], "QUARANTINED_WORKFLOW_PRESENT")
+            self.assertEqual(result["present_count"], 1)
+            self.assertEqual(result["changed_count"], 0)
+            self.assertFalse(result["activation_approved"])
+            self.assertEqual(result["financial_operations"], 0)
+
+    def test_governance_mode_succeeds_only_with_all_16_absent(self):
+        with TemporaryDirectory() as tmp:
+            result = audit(tmp, self.data, forbid_present=True)
+            self.assertEqual(result["status"], "SOURCE_REVIEW_REQUIRED")
+            self.assertEqual(result["missing_count"], 16)
+            self.assertEqual(result["present_count"], 0)
+
+    def test_conflicting_audit_modes_are_rejected(self):
+        with TemporaryDirectory() as tmp:
+            with self.assertRaisesRegex(InventoryError, "mutually exclusive"):
+                audit(tmp, self.data, require_all=True, forbid_present=True)
+
+    def test_governance_ci_triggers_on_workflows_and_uses_strict_mode(self):
+        ci = (Path(__file__).resolve().parents[1] /
+              ".github/workflows/isl-source-governance-g1-ci.yml").read_text(encoding="utf-8")
+        self.assertIn("- '.github/workflows/**'", ci)
+        self.assertIn("--forbid-present", ci)
+        self.assertIn("assert record['present_count']==0", ci)
+
+
 if __name__ == "__main__":
     unittest.main()
