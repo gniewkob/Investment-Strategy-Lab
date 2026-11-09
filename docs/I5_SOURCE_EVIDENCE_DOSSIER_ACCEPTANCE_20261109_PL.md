@@ -53,9 +53,9 @@ Można podać tylko jedną lub dwie opcje, albo żadnej — wtedy braki pozostaj
 
 ## 5. Kryteria odbioru
 
-`tests/test_source_evidence_dossier_v01.py`: 16 testów negatywnych i deterministycznych. Testy generują sztuczne dane MSCI/NBP i sztuczny XLSX Vanguard oraz wykorzystują poprzednie offline audytory. Próby sfałszowania `PIT`, `source rights`, waluty, TR, stanu konta i cen (nawet z poprawnie ponownie policzonym SHA-256) nie dają kwalifikacji. Potwierdzane są: `HOLD_CASH`, brak kopiowania oryginalnych NAV do wyników, brak skutków ubocznych oraz poprawność listy wymagań.
+`tests/test_source_evidence_dossier_v01.py`: 18 testów negatywnych i deterministycznych. Testy generują sztuczne dane MSCI/NBP i sztuczny XLSX Vanguard oraz wykorzystują poprzednie offline audytory. Próby sfałszowania `PIT`, `source rights`, waluty, TR, stanu konta i cen (nawet z poprawnie ponownie policzonym SHA-256) nie dają kwalifikacji. Potwierdzane są: `HOLD_CASH`, brak kopiowania oryginalnych NAV do wyników, brak skutków ubocznych oraz poprawność listy wymagań.
 
-Nowy read-only CI `.github/workflows/isl-i5-source-evidence-dossier-ci.yml` oczekuje **49 testów na Ubuntu i 49 na macOS** (16 I5 + 14 MSCI + 12 Vanguard + 7 NBP/BondSpot), blokuje połączenia Python socket i nie ma `schedule`, `push`, sekretów ani tokena write. **Nie uznawać implementacji za przyjętą przed udanym CI na końcowym SHA.**
+Nowy read-only CI `.github/workflows/isl-i5-source-evidence-dossier-ci.yml` oczekuje **51 testów na Ubuntu i 51 na macOS** (18 I5 + 14 MSCI + 12 Vanguard + 7 NBP/BondSpot), blokuje połączenia Python socket i nie ma `schedule`, `push`, sekretów ani tokena write. **Nie uznawać implementacji za przyjętą przed udanym CI na końcowym SHA.**
 
 ## 6. Zasady i źródła pomocnicze
 
