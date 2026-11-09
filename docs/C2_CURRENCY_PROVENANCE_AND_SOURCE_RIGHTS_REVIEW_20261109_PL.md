@@ -14,7 +14,7 @@ Takie oznaczenie jest nieprawidłowe także dla syntetycznych fixture'ów. Nawet
 - `usd_pln_conversion_performed: false` oraz `nbp_fx_date_matches_are_diagnostic_only: true`, niezależnie od liczby dopasowań kalendarza.
 - `claimed_return_basis: NET_TOTAL_RETURN` pozostaje opisem wariantu `NETR` z treści CSV, **nie** niezależnie uwierzytelnioną informacją — jawne `claimed_return_basis_independently_verified: false`.
 - `eligible_M1: false`, `pln_tr_model_qualification: BLOCKED_UNVERIFIED_RIGHTS_AND_PIT`, `estimated_returns: null` pozostają bez zmian; nie powstaje ani jedna decyzja o inwestycji.
-- Dodano dwa testy syntetyczne: komplet dat FX i brak dopasowań muszą mieć identyczną, ostrożną kwalifikację waluty. CI na Linux/macOS sprawdza teraz **21 testów**, z wyłączonymi połączeniami Python socket.
+- Dodano dwa testy syntetyczne: komplet dat FX i brak dopasowań muszą mieć identyczną, ostrożną kwalifikację waluty. CI na Linux/macOS uruchamia łącznie **26 testów** (21 z C2 + 5 z bramki A2), z wyłączonymi połączeniami Python socket.
 
 ## 3. Źródła pierwotne, zakres dowodu i wymagania projektu
 
@@ -44,3 +44,15 @@ PR #103 jest *stacked* na #102 → #100 → #99; #99 ma nowy HEAD po wcześniejs
 ## 6. Pierwszy przebieg CI po poprawce
 
 Pierwszy uruchomiony workflow [#42672899142](https://github.com/gniewkob/Investment-Strategy-Lab/actions/runs/42672899142) miał wynik **workflow = FAILURE**, choć jedyny raportowany przez GitHub API job `source-categories (macos-15)` zakończył się `SUCCESS`; zadanie `ubuntu-24.04` nie pojawiło się na liście jobs (GitHub API: `total_count=1`). **Nie wolno interpretować udanego macOS jako pełnej akceptacji matrix.** Zachowano obie platformy i tę samą liczbę testów. Dodatkowy commit dokumentacyjny wyzwala ponowne wykonanie; ostateczny status wymaga nowego, pełnego wyniku z Ubuntu i macOS.
+
+## 7. Oddzielne joby CI i synchronizacja A2 → C2
+
+Pierwotne przebiegi matrix dla C2 po zmianie semantyki waluty [#42672899142](https://github.com/gniewkob/Investment-Strategy-Lab/actions/runs/42672899142) i [#42673285997](https://github.com/gniewkob/Investment-Strategy-Lab/actions/runs/42673285997) kończyły się statusem całego workflow `FAILURE`, mimo macOS `21/21 PASS` i braku zadania Ubuntu w GitHub API. Niezależne, jawnie nazwane joby `source-categories-ubuntu` i `source-categories-macos` pomyślnie uruchomiły oba systemy w [#42674499221](https://github.com/gniewkob/Investment-Strategy-Lab/actions/runs/42674499221), oba `SUCCESS`. To dokumentuje poprawę obserwowalności i działający wariant CI; pierwotna przyczyna wewnętrznej porażki matrix GitHub nie jest ustalona.
+
+Niezależny przegląd obecnego stosu PR ujawnił, że historyczny HEAD C2 nadal dziedziczył **stare** `scripts/nbp_reference_capture.py` i `scripts/nbp_bondspot_exact_date_v04.py` z pierwotnego A2, mimo że Draft #99 już naprawił oba moduły, wymagając jawnego fetchera. Dokonano kontrolowanego *forward-port* dokładnych treści z aktualnego A2. Blob SHA po forward-port:
+- `scripts/nbp_reference_capture.py` — `07f97726687540960bdae2ef93070a86844473bd`.
+- `scripts/nbp_bondspot_exact_date_v04.py` — `67bf0ee370ab277aee282622bb4f7250355e8cf5`.
+
+Oba zgadzają się z aktualnym #99. Do C2 skopiowano identyczny syntetyczny test `tests/test_a2_explicit_source_access_v01.py`; nowy zintegrowany zakres **26 testów na platformę** sprawdza semantykę źródeł C2 (21) i zakaz niejawnego pobierania NBP (5). Wprowadzone zmiany do plików A2 są widoczne w porównaniu C2 z jego **starym** rodzicem C1, więc przed merge rodzice B1/C1 i ich relacja do #99 wymagają osobnego uzgodnienia. **Forward-port do C2 nie jest rebase'em całego stosu.** 
+
+Joby nie czytają realnych danych dostawców, nie zapisują aktywów, nie wykonują połączeń z brokerem/walletem ani źródłami rynkowymi. `M1/M2/M3` pozostają zablokowane dla rzeczywistego scoringu, niezależnie od PASS. Pełny nowy wynik CI należy odczytywać wyłącznie z ostatniego SHA, a nie z wcześniejszego sukcesu.
