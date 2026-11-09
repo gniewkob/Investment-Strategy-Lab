@@ -24,6 +24,12 @@ ASSETS = ("usdpln", "eurpln", "gold")
 def match(nbp: dict, bondspot: dict, *, fetch=None, clock=None) -> dict:
     proof = reconcile(nbp, bondspot)
     date_mismatches = proof["different_date_months"]
+    if date_mismatches and fetch is None:
+        # This module belongs to the offline A2 source contract. Missing
+        # reference dates do not implicitly authorize public HTTP requests.
+        raise ValueError(
+            "EXPLICIT_FETCH_REQUIRED: same-day NBP source retrieval is not automatic"
+        )
     by_month = {row["month"]: row for row in bondspot["monthly"]}
     original = {key: {row["month"]: row
                       for row in nbp["monthly_observations"][key]}
