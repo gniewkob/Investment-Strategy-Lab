@@ -43,13 +43,13 @@ jobs:
       postgres:
         image: postgres:16
         env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: investment_lab
+          POSTGRES_USER: isl_v04_ci
+          POSTGRES_PASSWORD: disposable_ci_only
+          POSTGRES_DB: isl_v04_disposable
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U postgres -d investment_lab"
+          --health-cmd "pg_isready -U isl_v04_ci -d isl_v04_disposable"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 12
@@ -64,22 +64,24 @@ jobs:
         run: python -m pip install 'psycopg[binary]>=3.1,<4'
       - name: Prove disposable localhost target before schema fixture
         env:
-          ISL_TEST_POSTGRES_DSN: postgresql://postgres:postgres@localhost:5432/investment_lab
+          ISL_TEST_POSTGRES_DSN: postgresql://isl_v04_ci:disposable_ci_only@localhost:5432/isl_v04_disposable
         run: |
           python - <<'PY'
           import os
           import psycopg
           data = psycopg.conninfo.conninfo_to_dict(os.environ['ISL_TEST_POSTGRES_DSN'])
           assert data['host'] == 'localhost'
-          assert data['dbname'] == 'investment_lab'
+          assert data['dbname'] == 'isl_v04_disposable'
+          assert data['user'] == 'isl_v04_ci'
           with psycopg.connect(os.environ['ISL_TEST_POSTGRES_DSN']) as c:
               assert c.info.host in ('localhost','127.0.0.1','::1')
-              assert c.execute('SELECT current_database()').fetchone()[0] == 'investment_lab'
+              assert c.execute('SELECT current_database(), current_user').fetchone() == ('isl_v04_disposable', 'isl_v04_ci')
+              assert not c.execute(\"SELECT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname='investment_lab')\").fetchone()[0]
           print('DISPOSABLE_POSTGRES_ONLY')
           PY
       - name: Verify missing, future, incomplete and untradable source readiness
         env:
-          ISL_TEST_POSTGRES_DSN: postgresql://postgres:postgres@localhost:5432/investment_lab
+          ISL_TEST_POSTGRES_DSN: postgresql://isl_v04_ci:disposable_ci_only@localhost:5432/isl_v04_disposable
         run: python -m unittest discover -s tests/integration -p 'test_monthly_backtest_v04_readiness.py' -v
       - name: No external database, orders or source promotion
         run: echo "READ_ONLY_RESEARCH_SQL_LOCAL_DISPOSABLE_POSTGRES_ONLY"
