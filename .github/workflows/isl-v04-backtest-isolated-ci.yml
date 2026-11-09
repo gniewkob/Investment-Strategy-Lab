@@ -76,7 +76,7 @@ jobs:
           with psycopg.connect(os.environ['ISL_TEST_POSTGRES_DSN']) as c:
               assert c.info.host in ('localhost','127.0.0.1','::1')
               assert c.execute('SELECT current_database(), current_user').fetchone() == ('isl_v04_disposable', 'isl_v04_ci')
-              assert not c.execute(\"SELECT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname='investment_lab')\").fetchone()[0]
+              assert not c.execute("SELECT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname='investment_lab')").fetchone()[0]
           print('DISPOSABLE_POSTGRES_ONLY')
           PY
       - name: Verify missing, future, incomplete and untradable source readiness
