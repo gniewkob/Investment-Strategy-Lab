@@ -1,7 +1,8 @@
 """Disposable PostgreSQL acceptance of read-only v0.4 data readiness.
 
-Test database schema is destructively reset ONLY after the strict localhost
-host check. Never run this test against Neon or any real investment datastore.
+Test fixtures create and remove only their own schema after a strict
+localhost + dedicated database + dedicated role verification. An existing
+schema is never deleted on setup. Never point this test at Neon.
 """
 from __future__ import annotations
 
@@ -9,6 +10,17 @@ from datetime import date
 import os
 from pathlib import Path
 import unittest
+
+
+DISPOSABLE_DB = "isl_v04_disposable"
+DISPOSABLE_USER = "isl_v04_ci"
+
+
+def verify_disposable_connection(*, host, dbname, user):
+    """Pure fail-closed target guard: localhost alone is insufficient."""
+    if (host not in ("localhost", "127.0.0.1", "::1")
+            or dbname != DISPOSABLE_DB or user != DISPOSABLE_USER):
+        raise ValueError("expected dedicated localhost v0.4 disposable CI DB and role")
 
 
 READINESS_SQL = (
@@ -25,11 +37,26 @@ class MonthlyBacktestReadinessTest(unittest.TestCase):
 
         self.conn = psycopg.connect(os.environ["ISL_TEST_POSTGRES_DSN"],
                                     autocommit=True)
-        if self.conn.info.host not in ("localhost", "127.0.0.1", "::1"):
+        self._owns_schema = False
+        try:
+            verify_disposable_connection(
+                host=self.conn.info.host,
+                dbname=self.conn.info.dbname,
+                user=self.conn.info.user,
+            )
+            # The test must never erase a pre-existing schema, even in the
+            # designated disposable DB (for example after a prior crash).
+            exists = self.conn.execute(
+                "SELECT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = %s)",
+                ("investment_lab",),
+            ).fetchone()[0]
+            if exists:
+                raise ValueError("pre-existing investment_lab schema: refuse reset")
+            self.conn.execute("CREATE SCHEMA investment_lab")
+            self._owns_schema = True
+        except BaseException:
             self.conn.close()
-            raise ValueError("Fixture requires disposable localhost PostgreSQL")
-        self.conn.execute("DROP SCHEMA IF EXISTS investment_lab CASCADE")
-        self.conn.execute("CREATE SCHEMA investment_lab")
+            raise
         self.conn.execute("""CREATE TABLE investment_lab.instruments(
           instrument_code text PRIMARY KEY,
           quote_currency text NOT NULL)""")
@@ -42,7 +69,12 @@ class MonthlyBacktestReadinessTest(unittest.TestCase):
           source_url text)""")
 
     def tearDown(self):
-        self.conn.close()
+        try:
+            if self._owns_schema:
+                # Only the schema created by this test is eligible for cleanup.
+                self.conn.execute("DROP SCHEMA investment_lab CASCADE")
+        finally:
+            self.conn.close()
 
     def _query(self):
         return {r[0]: r for r in self.conn.execute(READINESS_SQL).fetchall()}
@@ -130,6 +162,28 @@ class MonthlyBacktestReadinessTest(unittest.TestCase):
         self.assertEqual(
             self.conn.execute("""SELECT count(*) FROM
                 investment_lab.price_observations""").fetchone()[0], 108)
+
+
+class DisposableDatabaseGuardTests(unittest.TestCase):
+    def test_rejects_local_tunnel_to_real_investment_lab_database(self):
+        with self.assertRaisesRegex(ValueError, "dedicated localhost"):
+            verify_disposable_connection(
+                host="localhost", dbname="investment_lab", user="postgres")
+
+    def test_rejects_remote_database_even_with_expected_name_and_role(self):
+        with self.assertRaisesRegex(ValueError, "dedicated localhost"):
+            verify_disposable_connection(
+                host="db.example.org", dbname=DISPOSABLE_DB, user=DISPOSABLE_USER)
+
+    def test_rejects_wrong_user_even_on_dedicated_db(self):
+        with self.assertRaisesRegex(ValueError, "dedicated localhost"):
+            verify_disposable_connection(
+                host="127.0.0.1", dbname=DISPOSABLE_DB, user="postgres")
+
+    def test_accepts_exact_disposable_target(self):
+        self.assertIsNone(verify_disposable_connection(
+            host="localhost", dbname=DISPOSABLE_DB, user=DISPOSABLE_USER))
+
 
 
 if __name__ == "__main__":
