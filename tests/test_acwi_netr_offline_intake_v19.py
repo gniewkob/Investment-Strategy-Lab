@@ -41,6 +41,11 @@ class AcwiNetrV19Tests(unittest.TestCase):
         self.assertTrue(r["same_date_fx_complete"])
         self.assertEqual(r["same_date_nbp_fx_matches"], 36)
         self.assertEqual(r["claimed_return_basis"], "NET_TOTAL_RETURN")
+        self.assertFalse(r["claimed_return_basis_independently_verified"])
+        self.assertEqual(r["claimed_currency"], "UNKNOWN_NOT_IN_SOURCE_CSV")
+        self.assertFalse(r["source_currency_independently_verified"])
+        self.assertFalse(r["usd_pln_conversion_performed"])
+        self.assertTrue(r["nbp_fx_date_matches_are_diagnostic_only"])
         self.assertEqual(r["original_csv_sha256"], sha256(raw).hexdigest())
         self.assertFalse(r["eligible_M1"])
         self.assertEqual(r["pln_tr_model_qualification"], "BLOCKED_UNVERIFIED_RIGHTS_AND_PIT")
@@ -49,6 +54,24 @@ class AcwiNetrV19Tests(unittest.TestCase):
         self.assertFalse(r["historical_first_publication_independently_verified"])
         self.assertEqual(r["orders_sent"], 0)
         self.assertEqual(r["database_writes"], 0)
+
+    def test_currency_not_in_csv_cannot_be_inferred_even_when_fx_dates_align(self):
+        raw, nbp = fixture()
+        self.assertEqual(raw.splitlines()[0], b"Date,Code,Index name,Index variant,Index level")
+        result = audit(raw, nbp, as_of_utc="2026-11-07T16:00:00Z")
+        self.assertEqual(result["same_date_nbp_fx_matches"], 36)
+        self.assertEqual(result["claimed_currency"], "UNKNOWN_NOT_IN_SOURCE_CSV")
+        self.assertFalse(result["source_currency_independently_verified"])
+        self.assertFalse(result["usd_pln_conversion_performed"])
+        self.assertFalse(result["eligible_M1"])
+
+    def test_fx_calendar_mismatch_does_not_create_a_conversion_claim(self):
+        raw, nbp = fixture(match=False)
+        result = audit(raw, nbp, as_of_utc="2026-11-07T16:00:00Z")
+        self.assertEqual(result["same_date_nbp_fx_matches"], 0)
+        self.assertEqual(result["claimed_currency"], "UNKNOWN_NOT_IN_SOURCE_CSV")
+        self.assertFalse(result["usd_pln_conversion_performed"])
+        self.assertIsNone(result["estimated_returns"])
 
     def test_repeat_and_no_source_mutation(self):
         raw, nbp = fixture()
