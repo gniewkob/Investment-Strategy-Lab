@@ -19,7 +19,8 @@ import re
 
 SCHEMA = "ISL_I6_NBP_TABLE_A_USDPLN_DATE_LAG_OFFLINE_V01"
 MAX_INPUT_BYTES = 250_000
-MAX_ROWS = 93
+MAX_ROWS = 93  # Local bound; separately enforce NBP's 93-day API window.
+MAX_SPAN_DAYS = 93
 MIN_PUBLICATION_DAY = date(2002, 1, 2)
 MAX_PUBLICATION_DAY = date(2100, 12, 30)
 CODE = "USD"
@@ -81,6 +82,7 @@ def _validate(snapshot):
     if not isinstance(rows, list) or not 1 <= len(rows) <= MAX_ROWS:
         raise NBPDateLagError("1-93 NBP publication rows required")
     dates = set()
+    first = None
     previous = None
     for item in rows:
         if not isinstance(item, dict) or set(item) != ROW_FIELDS:
@@ -105,8 +107,12 @@ def _validate(snapshot):
             raise NBPDateLagError("invalid NBP rate") from exc
         if not val.is_finite() or val <= 0:
             raise NBPDateLagError("positive NBP reference FX expected")
+        if first is None:
+            first = day
         dates.add(day)
         previous = day
+    if (previous - first).days > MAX_SPAN_DAYS:
+        raise NBPDateLagError("one API snapshot spans over 93 days")
     return dates, _canonical(snapshot)
 
 
