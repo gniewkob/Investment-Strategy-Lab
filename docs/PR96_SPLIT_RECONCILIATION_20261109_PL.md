@@ -15,7 +15,7 @@
 | D1 — NAV analytics / freeze v0.20–23 | [#104](https://github.com/gniewkob/Investment-Strategy-Lab/pull/104) | #99 | 10 | [41/41 PASS Linux i macOS](https://github.com/gniewkob/Investment-Strategy-Lab/actions/runs/42640373249) |
 | D2 — prywatny NAV/FX v0.24/25 | [#105](https://github.com/gniewkob/Investment-Strategy-Lab/pull/105) | #104 | 4 | [19/19 PASS Linux i macOS](https://github.com/gniewkob/Investment-Strategy-Lab/actions/runs/42640741885) |
 | E1 — syntetyczne testy v0.26–28 | [#106](https://github.com/gniewkob/Investment-Strategy-Lab/pull/106) | #102 | 6 | [23/23 PASS Linux i macOS](https://github.com/gniewkob/Investment-Strategy-Lab/actions/runs/42641455098) |
-| E2 — archived v0.9 decision bridge v0.29 | [#107](https://github.com/gniewkob/Investment-Strategy-Lab/pull/107) | #106 | 2 | [8/8 PASS Linux; macOS w kolejce w chwili opracowania](https://github.com/gniewkob/Investment-Strategy-Lab/actions/runs/42641864529) |
+| E2 — archived v0.9 decision bridge v0.29 | [#107](https://github.com/gniewkob/Investment-Strategy-Lab/pull/107) | #106 | 2 | [8/8 PASS Linux i 8/8 PASS macOS](https://github.com/gniewkob/Investment-Strategy-Lab/actions/runs/42641864529) |
 
 **Razem: 69 oryginalnych plików** z PR #96 wydzielono przez dokładne kopiowanie, a ich zgodność Git blob SHA z badawczą gałęzią niezależnie ponownie odczytano. Nowo dodane w małych PR pliki CI/dokumentacji **nie** są liczone do tych 69. Oryginalny PR #96 miał w tym audycie **137 zmienionych plików**; około **68 jego plików** pozostaje poza opisanym zestawem identycznych kopii (workflowy, źródłowe kolektory i ich testy, audytowe skrypty, raporty/dokumenty). To nie jest podział wszystkich elementów monolitu.
 
