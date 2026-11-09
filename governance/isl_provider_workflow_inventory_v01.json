@@ -1,0 +1,191 @@
+{
+  "schema": "ISL_PROVIDER_WORKFLOW_GOVERNANCE_V01",
+  "source_repo": "gniewkob/Investment-Strategy-Lab",
+  "source_ref": "codex/v04-monthly-backtest-engine-20261106",
+  "observed_on": "2026-11-09",
+  "authorization": "NOT_GRANTED",
+  "count": 16,
+  "workflows": [
+    {
+      "path": ".github/workflows/bondspot-monthly-source-probe-v04.yml",
+      "git_blob_sha1": "e9c8fa485c868e3b8fe3d29ad2a909e2ab294b91",
+      "group": "PUBLIC_PROVIDER",
+      "provider": "BONDSPOT",
+      "observed_flags": [
+        "LIVE_FETCH",
+        "ARTIFACT_UPLOAD"
+      ],
+      "approval": "HOLD_FOR_SEPARATE_REVIEW"
+    },
+    {
+      "path": ".github/workflows/github-checkpoint-audit-v08.yml",
+      "git_blob_sha1": "53ff312d2f189077ee11028beb8e36a3d273fafe",
+      "group": "EVIDENCE_PIPELINE",
+      "provider": "GITHUB",
+      "observed_flags": [
+        "PR_TRIGGER",
+        "PINNED_ARTIFACT_REFERENCE",
+        "ARTIFACT_UPLOAD"
+      ],
+      "approval": "HOLD_FOR_SEPARATE_REVIEW"
+    },
+    {
+      "path": ".github/workflows/nbp-long-history-v04.yml",
+      "git_blob_sha1": "c3c28d3bf5e4add78ac643c65141fabd6e8da13e",
+      "group": "PUBLIC_PROVIDER",
+      "provider": "NBP",
+      "observed_flags": [
+        "LIVE_FETCH",
+        "ARTIFACT_UPLOAD"
+      ],
+      "approval": "HOLD_FOR_SEPARATE_REVIEW"
+    },
+    {
+      "path": ".github/workflows/official-market-source-probe-v04.yml",
+      "git_blob_sha1": "42e4266c66c2ff304cc4fd289a13c12098dad880",
+      "group": "PUBLIC_PROVIDER",
+      "provider": "VANGUARD_BONDSPOT",
+      "observed_flags": [
+        "LIVE_FETCH",
+        "ARTIFACT_UPLOAD"
+      ],
+      "approval": "HOLD_FOR_SEPARATE_REVIEW"
+    },
+    {
+      "path": ".github/workflows/pr96-combined-tree-regression.yml",
+      "git_blob_sha1": "a08ec604074558dc9eb0245e026c30a048747716",
+      "group": "CI_ONLY",
+      "provider": "NONE",
+      "observed_flags": [
+        "PR_TRIGGER",
+        "DISPOSABLE_DB"
+      ],
+      "approval": "HOLD_FOR_SEPARATE_REVIEW"
+    },
+    {
+      "path": ".github/workflows/shadow-capture-v07.yml",
+      "git_blob_sha1": "ea54d9e30924d436cd7650d95132ba9ca029616f",
+      "group": "EVIDENCE_PIPELINE",
+      "provider": "GITHUB",
+      "observed_flags": [
+        "SCHEDULE",
+        "PR_TRIGGER",
+        "ARTIFACT_UPLOAD"
+      ],
+      "approval": "HOLD_FOR_SEPARATE_REVIEW"
+    },
+    {
+      "path": ".github/workflows/shadow-mac-install-canary-v12.yml",
+      "git_blob_sha1": "f284553bf659d585a7c8db2316bf5f65f224ae42",
+      "group": "CI_ONLY",
+      "provider": "NONE",
+      "observed_flags": [
+        "PR_TRIGGER",
+        "ARTIFACT_UPLOAD"
+      ],
+      "approval": "HOLD_FOR_SEPARATE_REVIEW"
+    },
+    {
+      "path": ".github/workflows/shadow-source-receipt-v05.yml",
+      "git_blob_sha1": "b4ddcfe4dde91c7f8809cf305996ff33d5b49683",
+      "group": "EVIDENCE_PIPELINE",
+      "provider": "GITHUB",
+      "observed_flags": [
+        "PR_TRIGGER",
+        "PINNED_ARTIFACT_REFERENCE",
+        "ARTIFACT_UPLOAD"
+      ],
+      "approval": "HOLD_FOR_SEPARATE_REVIEW"
+    },
+    {
+      "path": ".github/workflows/tbsp-official-60months-v04.yml",
+      "git_blob_sha1": "7bace1cac2bd4eb96b07ad3f25ebbc66df8413a8",
+      "group": "PUBLIC_PROVIDER",
+      "provider": "BONDSPOT",
+      "observed_flags": [
+        "LIVE_FETCH",
+        "ARTIFACT_UPLOAD"
+      ],
+      "approval": "HOLD_FOR_SEPARATE_REVIEW"
+    },
+    {
+      "path": ".github/workflows/v04-nbp-bondspot-calendar-e2e.yml",
+      "git_blob_sha1": "124043fe9f312f57ff908247d2d29ab20b3dc8db",
+      "group": "PUBLIC_PROVIDER",
+      "provider": "NBP_BONDSPOT",
+      "observed_flags": [
+        "LIVE_FETCH",
+        "PINNED_ARTIFACT_REFERENCE",
+        "ARTIFACT_UPLOAD"
+      ],
+      "approval": "HOLD_FOR_SEPARATE_REVIEW"
+    },
+    {
+      "path": ".github/workflows/v04-official-nav-bond-index-probe.yml",
+      "git_blob_sha1": "38a60d53a9a884fa5caaa71b1f078fe688cd27be",
+      "group": "PUBLIC_PROVIDER",
+      "provider": "VANGUARD_BONDSPOT",
+      "observed_flags": [
+        "LIVE_FETCH"
+      ],
+      "approval": "HOLD_FOR_SEPARATE_REVIEW"
+    },
+    {
+      "path": ".github/workflows/v04-vanguard-official-nav-export.yml",
+      "git_blob_sha1": "f78cc123c4fbf68c970eb4f3e14f97a6996c8cbe",
+      "group": "RAW_PROVIDER",
+      "provider": "VANGUARD_UK",
+      "observed_flags": [
+        "LIVE_FETCH",
+        "RAW_ARTIFACT_UPLOAD"
+      ],
+      "approval": "HOLD_FOR_SEPARATE_REVIEW"
+    },
+    {
+      "path": ".github/workflows/v04-vanguard-retail-nav-probe.yml",
+      "git_blob_sha1": "0d5ea0dbc1b16fd5a33492db4778ed1aaa7613e3",
+      "group": "RAW_PROVIDER",
+      "provider": "VANGUARD_UK",
+      "observed_flags": [
+        "LIVE_FETCH",
+        "RAW_ARTIFACT_UPLOAD"
+      ],
+      "approval": "HOLD_FOR_SEPARATE_REVIEW"
+    },
+    {
+      "path": ".github/workflows/working-engine-v01-ci.yml",
+      "git_blob_sha1": "dc00c67e331995134f35dae1749687d081329cac",
+      "group": "CI_ONLY",
+      "provider": "NONE",
+      "observed_flags": [
+        "PR_TRIGGER",
+        "PUSH_TRIGGER",
+        "CHECKOUT_CREDENTIALS_DEFAULT"
+      ],
+      "approval": "HOLD_FOR_SEPARATE_REVIEW"
+    },
+    {
+      "path": ".github/workflows/world-bank-gem-audit-v04.yml",
+      "git_blob_sha1": "12f9db48d81543ebb0f050bc57fabb05b885bfa8",
+      "group": "PUBLIC_PROVIDER",
+      "provider": "WORLD_BANK",
+      "observed_flags": [
+        "LIVE_FETCH",
+        "ARTIFACT_UPLOAD",
+        "CHECKOUT_CREDENTIALS_DEFAULT"
+      ],
+      "approval": "HOLD_FOR_SEPARATE_REVIEW"
+    },
+    {
+      "path": ".github/workflows/worldpulse-nav-audit-v04.yml",
+      "git_blob_sha1": "eb428359ac8c8420478dd97818641920bd44e335",
+      "group": "PUBLIC_PROVIDER",
+      "provider": "WORLDPULSE",
+      "observed_flags": [
+        "LIVE_FETCH",
+        "ARTIFACT_UPLOAD"
+      ],
+      "approval": "HOLD_FOR_SEPARATE_REVIEW"
+    }
+  ]
+}
