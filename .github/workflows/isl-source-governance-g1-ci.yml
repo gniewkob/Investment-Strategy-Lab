@@ -38,7 +38,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python -m scripts.provider_workflow_review_v01 --source-root . > /tmp/isl-provider-workflow-review-summary.json
+          python -m scripts.provider_workflow_review_v01 --source-root . --forbid-present > /tmp/isl-provider-workflow-review-summary.json
           python - <<'PY'
           import json
           s=open('/tmp/isl-provider-workflow-review-summary.json',encoding='utf-8').read()
