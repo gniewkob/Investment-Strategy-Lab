@@ -40,3 +40,7 @@ Takie oznaczenie jest nieprawidłowe także dla syntetycznych fixture'ów. Nawet
 PR #103 jest *stacked* na #102 → #100 → #99; #99 ma nowy HEAD po wcześniejszym zaostrzeniu bramki offline. Testy C2 na jego własnej bazie **nie** dowodzą zgodności z najnowszą bazą #99. Przed merge należy sprawdzić wszystkie zależności, świeży combined tree i powtórzyć CI. Skrypt źródłowy v0.19 celowo przestał być byte-identical z monolitem PR #96: zmiana naprawia oznaczenie waluty, nie przepisuje historycznych źródeł ani zamrożonych anchorów.
 
 **Status:** `C2_SOURCE_CURRENCY_UNVERIFIED_HOLD`, `SOURCE_RIGHTS_UNVERIFIED`, `NO_M1_ADMISSION`; zero połączeń z brokerem, wallet, DB i dostawcami w tym etapie.
+
+## 6. Pierwszy przebieg CI po poprawce
+
+Pierwszy uruchomiony workflow [#42672899142](https://github.com/gniewkob/Investment-Strategy-Lab/actions/runs/42672899142) miał wynik **workflow = FAILURE**, choć jedyny raportowany przez GitHub API job `source-categories (macos-15)` zakończył się `SUCCESS`; zadanie `ubuntu-24.04` nie pojawiło się na liście jobs (GitHub API: `total_count=1`). **Nie wolno interpretować udanego macOS jako pełnej akceptacji matrix.** Zachowano obie platformy i tę samą liczbę testów. Dodatkowy commit dokumentacyjny wyzwala ponowne wykonanie; ostateczny status wymaga nowego, pełnego wyniku z Ubuntu i macOS.
