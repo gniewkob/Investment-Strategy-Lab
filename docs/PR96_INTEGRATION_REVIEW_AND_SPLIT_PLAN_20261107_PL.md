@@ -181,3 +181,17 @@ Wydzielono dwa **stacked Draft PR** zachowujące zależności źródeł zamiast 
 **Dependency graph:** A2 #99 → B1 #100 → C1 #102 → C2 #103. B2 #101 to niezależny fork po B1; A1 #98 jest niezależny od C. Żadnego `merge`, `rebase`, zmian w `main` ani w frozen Vanguard v0.22/v0.23. Zakres E (synthetic robustness v0.26–v0.29) potrzebuje B1/C1 i oryginalnych archiwalnych dowodów; zakres D (warunkowy NAV i forward v0.20–v0.25) wymaga osobnego źródłowego review, nie wolno importować przez przypadek workflowów pobierających raw provider data.
 
 **Decyzja:** C1 ACCEPTED technicznie w testach offline, C2 ACCEPTED technicznie offline na Ubuntu i macOS. Oba Draft, merge blocked until independent review, branch protection, overlap reconciliation and genuine data-source licensing/PIT checks. Sintetyczne `HOLD_CASH`, `M3` two-month confirmation i forward evaluator nie są rynkową certyfikacją wyników.
+
+
+## 13. D1/D2 i E1/E2 — domknięcie wydzielania logiki badawczej (2026-11-09)
+
+Szczegółowy graf, status CI, listę komponentów i krytyczne nierozwiązane bramki zawiera `docs/PR96_SPLIT_RECONCILIATION_20261109_PL.md`.
+
+- **[D1 Draft #104](https://github.com/gniewkob/Investment-Strategy-Lab/pull/104)** — base A2 #99, 12 plików diff; 10 oryginalnych source/test Git blob SHA potwierdzonych identycznych z #96. Conditional NAV v0.20/v0.21, oryginalna polityka freeze v0.22 i admission v0.23, wraz z wymaganym bundle intake i testem. [CI #42640373249](https://github.com/gniewkob/Investment-Strategy-Lab/actions/runs/42640373249) **41/41 PASS Linux i 41/41 PASS macOS**.
+- **[D2 Draft #105](https://github.com/gniewkob/Investment-Strategy-Lab/pull/105)** — base D1 #104, 6 plików diff; 4/4 oryginalne bloby; preflight v0.24 i prywatny zapis v0.25 z `O_EXCL` i `0600`. [CI #42640741885](https://github.com/gniewkob/Investment-Strategy-Lab/actions/runs/42640741885) **19/19 PASS Linux i 19/19 PASS macOS**.
+- **[E1 Draft #106](https://github.com/gniewkob/Investment-Strategy-Lab/pull/106)** — base C1 #102, 8 plików diff; 6/6 oryginalne bloby; odporność/quality/chronologia v0.26–v0.28 w syntetycznych scenariuszach. [CI #42641455098](https://github.com/gniewkob/Investment-Strategy-Lab/actions/runs/42641455098) **23/23 PASS Linux i 23/23 PASS macOS** przy `-W error::ResourceWarning`.
+- **[E2 Draft #107](https://github.com/gniewkob/Investment-Strategy-Lab/pull/107)** — base E1 #106, 4 pliki diff; 2/2 oryginalne bloby; v0.29 read-only archived decision link. [CI #42641864529](https://github.com/gniewkob/Investment-Strategy-Lab/actions/runs/42641864529) **8/8 PASS Linux i 8/8 PASS macOS**, rygorystyczne `ResourceWarning`, oryginalne v0.9 bundle SHA zweryfikowane.
+
+Razem D/E **22/22 Git blob SHA source/test bez zmian** względem PR #96. Zamrożone kodowe v0.22 SHA `7a9c7e5cbc643b5ad760ec64d4212468b64a22bf` oraz v0.23 `d425076ea809f622e5b2c1c4e87ba59fe060f990`; historyczny freeze `3b8aca44ffa6aa72bf2d3a0b5d49102f0dd857d11191dc10e7d21b5051e704a2` niezmieniony. **Nowa rzeczywista listopadowa obserwacja NAV nie została zweryfikowana**; status `PENDING`.
+
+**Łącznie 10 etapowych Draft PR #98–#107**, z **69 oryginalnymi plikami** z PR #96 źródłowo rozdzielonymi i przetestowanymi. **Duży PR #96 nadal ma 137 zmienionych plików i nie jest bezpiecznym kandydatem do automatycznego merge**: nieprzeniesione online workflowy źródeł, raw artifact Vanguard, dodatkowe kolektory, raporty i CI wymagają osobnego przeglądu/rozstrzygnięcia. Zero merge/rebase do `main`, zero operacji finansowych.
