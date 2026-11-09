@@ -1,0 +1,68 @@
+name: ISL E2 archived v0.9 evidence to decision bridge CI
+
+# Archived read-only metadata linkage. This is NOT a WORM store, independent
+# timestamp witness, historical PIT record or live broker/trading workflow.
+on:
+  pull_request:
+    paths:
+      - 'scripts/research_archived_decision_link_v29.py'
+      - 'tests/test_research_archived_decision_link_v29.py'
+      - '.github/workflows/isl-e2-archived-evidence-link-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  archived-evidence-bridge:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify original archived bundle and source/test blobs
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git hash-object scripts/research_archived_decision_link_v29.py)" = "694de8ac036d9109a0e0b8669bd9a7cd92f3771a"
+          test "$(git hash-object tests/test_research_archived_decision_link_v29.py)" = "6f81df40caf1ac6d1390dfe464cdf65dae94e3e8"
+          python - <<'PY'
+          from hashlib import sha256
+          from pathlib import Path
+          archive = Path('evidence/shadow/v09/checkpoint-bundle-run-42305280062.json').read_bytes()
+          assert sha256(archive).hexdigest() == '4a4fece5c84996cf7e663abae81d5c583e5397904bbe17ab57b8f0a150b797d3'
+          print('E2_ORIGINAL_ARCHIVE_SHA256_VERIFIED')
+          PY
+      - name: Run strict SQLite lifecycle and evidence replay tests offline
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -W error::ResourceWarning - <<'PY'
+          import socket
+          import unittest
+
+          def deny_network(*_args, **_kwargs):
+              raise AssertionError('E2 archival evidence test attempted external connection')
+          socket.socket.connect=deny_network
+          socket.socket.connect_ex=deny_network
+          socket.create_connection=deny_network
+
+          tests=unittest.defaultTestLoader.loadTestsFromNames([
+              'tests.test_research_archived_decision_link_v29',
+          ])
+          result=unittest.TextTestRunner(verbosity=2).run(tests)
+          if not result.wasSuccessful() or result.testsRun!=8 or result.skipped:
+              raise SystemExit('E2_ARCHIVED_EVIDENCE_LINK_BLOCKED')
+          print('E2_ARCHIVED_DECISION_LINK_PASS tests='+str(result.testsRun))
+          print('E2_NO_INDEPENDENT_TIMESTAMP_PIT_OR_TRADING_AUTHORIZATION')
+          PY
+      - name: Confirm scope
+        run: echo "ARCHIVED_HOLD_CASH_ONLY_NO_ORDERS_NO_NEON_NO_WALLET_NO_SOURCE_PROMOTION"
