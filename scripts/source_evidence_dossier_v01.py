@@ -147,6 +147,11 @@ def _next_month(x):
     return date(x.year + (x.month == 12), 1 if x.month == 12 else x.month + 1, 1)
 
 
+def _month_span_matches(first, last, count):
+    a, b = _month(first), _month(last)
+    return (a <= b and (b.year - a.year) * 12 + b.month - a.month + 1 == count)
+
+
 def _msci(record):
     label = "MSCI"
     _check_header(record, MSCI_KEYS,
@@ -186,7 +191,7 @@ def _msci(record):
             or any(not isinstance(m, str) for m in missing)
             or record["minimum_months_met"] is not (n >= 36)
             or record["same_date_fx_complete"] is not (not missing)
-            or _month(record["first_month"]) > _month(record["last_month"])):
+            or not _month_span_matches(record["first_month"], record["last_month"], n)):
         raise EvidenceDossierError(label + ": malformed coverage / FX diagnostics")
     return {
         "source_kind": "MSCI_ACWI_NETR_CSV_CANDIDATE",
@@ -284,7 +289,8 @@ def _reference(record):
                    "database_writes"), label)
     n = record["reference_months"]
     if (type(n) is not int or n < 36 or n > 120
-            or _month(record["first_month"]) > _month(record["last_month"])):
+            or not _month_span_matches(
+                record["first_month"], record["last_month"], n)):
         raise EvidenceDossierError(label + ": invalid reference coverage")
     return {
         "source_kind": "NBP_BONDSPOT_NONEXECUTABLE_REFERENCE",
