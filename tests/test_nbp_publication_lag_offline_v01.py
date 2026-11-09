@@ -184,6 +184,13 @@ class NBPPublicationLagOfflineTests(unittest.TestCase):
         with self.assertRaisesRegex(NBPDateLagError, "1-93"):
             check(d)
 
+    def test_source_window_over_93_days_is_rejected(self):
+        doc = sample()
+        doc["rates"][-1]["effectiveDate"] = "2027-02-05"
+        doc["rates"][-1]["no"] = "021/A/NBP/2027"
+        with self.assertRaisesRegex(NBPDateLagError, "93 days"):
+            check(doc)
+
     def test_local_symlink_and_oversized_snapshot_rejected(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
