@@ -73,7 +73,7 @@ class ChainBlocked(ValueError):
 
 
 def git_blob_sha(raw: bytes) -> str:
-    return sha1(b"blob " + str(len(raw)).encode("ascii") + b"\\0" + raw).hexdigest()
+    return sha1(b"blob " + str(len(raw)).encode("ascii") + b"\0" + raw).hexdigest()
 
 
 def _bounded_file(root: Path, relative: str) -> bytes:
