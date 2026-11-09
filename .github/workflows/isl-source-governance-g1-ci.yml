@@ -1,0 +1,56 @@
+name: ISL G1 source workflow governance inventory (offline only)
+
+# Independent Draft change on main. No provider access, network fetch, DB,
+# real account, wallet, broker, trading operations, or new provider schedule.
+on:
+  pull_request:
+    paths:
+      - 'governance/isl_provider_workflow_inventory_v01.json'
+      - 'scripts/provider_workflow_review_v01.py'
+      - 'tests/test_provider_workflow_review_v01.py'
+      - '.github/workflows/isl-source-governance-g1-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit-contract:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate reviewed inventory schema and fail-closed source signature semantics
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -W error::ResourceWarning -m unittest discover -s tests -p 'test_provider_workflow_review_v01.py' -v
+      - name: Audit this independent main-based branch without network or provider workflows
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m scripts.provider_workflow_review_v01 --source-root . > /tmp/isl-provider-workflow-review-summary.json
+          python - <<'PY'
+          import json
+          s=open('/tmp/isl-provider-workflow-review-summary.json',encoding='utf-8').read()
+          assert s.startswith('ISL_PROVIDER_WORKFLOW_REVIEW=')
+          record=json.loads(s.split('=',1)[1])
+          assert record['inventory_count']==16
+          assert record['activation_approved'] is False
+          assert record['provider_rights_verified'] is False
+          assert record['financial_operations']==0
+          assert record['changed_count']==0
+          print('ISL_G1_PROVIDER_ACTIVATION_NOT_AUTHORIZED')
+          print('ISL_G1_SNAPSHOT_PATHS_PRESENT='+str(record['present_count']))
+          PY
+      - name: Keep approval boundary explicit
+        run: echo "RESEARCH_GOVERNANCE_ONLY_NOT_MARKET_LICENSE_OR_TRADING_AUTHORIZATION"
