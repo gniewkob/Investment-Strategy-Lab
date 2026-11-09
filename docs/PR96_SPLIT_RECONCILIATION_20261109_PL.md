@@ -17,7 +17,7 @@
 | E1 — syntetyczne testy v0.26–28 | [#106](https://github.com/gniewkob/Investment-Strategy-Lab/pull/106) | #102 | 6 | [23/23 PASS Linux i macOS](https://github.com/gniewkob/Investment-Strategy-Lab/actions/runs/42641455098) |
 | E2 — archived v0.9 decision bridge v0.29 | [#107](https://github.com/gniewkob/Investment-Strategy-Lab/pull/107) | #106 | 2 | [8/8 PASS Linux i 8/8 PASS macOS](https://github.com/gniewkob/Investment-Strategy-Lab/actions/runs/42641864529) |
 
-**Razem: 69 oryginalnych plików** z PR #96 wydzielono przez dokładne kopiowanie, a ich zgodność Git blob SHA z badawczą gałęzią niezależnie ponownie odczytano. Nowo dodane w małych PR pliki CI/dokumentacji **nie** są liczone do tych 69. Oryginalny PR #96 miał w tym audycie **137 zmienionych plików**; około **68 jego plików** pozostaje poza opisanym zestawem identycznych kopii (workflowy, źródłowe kolektory i ich testy, audytowe skrypty, raporty/dokumenty). To nie jest podział wszystkich elementów monolitu.
+**Razem: 69 oryginalnych plików** z PR #96 wydzielono przez dokładne kopiowanie, a ich zgodność Git blob SHA z badawczą gałęzią niezależnie ponownie odczytano. Nowo dodane w małych PR pliki CI/dokumentacji **nie** są liczone do tych 69. Przed dopisaniem tego raportu PR #96 miał **137 zmienionych plików** (68 nieobjętych opisanymi kopiami). **Po dodaniu tego dokumentu** [aktualna lista GitHub PR](https://github.com/gniewkob/Investment-Strategy-Lab/pull/96/files) pokazuje **138 plików**, z czego **69 pozostaje poza 69 oryginalnymi plikami przeniesionymi do mniejszych PR** (workflowy, źródłowe kolektory i ich testy, audytowe skrypty, raporty/dokumenty). To nie jest podział wszystkich elementów monolitu.
 
 ## 2. Graf zależności
 
