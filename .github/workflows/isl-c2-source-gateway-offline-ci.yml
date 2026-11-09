@@ -16,13 +16,48 @@ on:
 permissions:
   contents: read
 
+# Separate named jobs expose Linux scheduling failures independently.
+# A green macOS job is not sufficient for overall acceptance.
 jobs:
-  source-categories:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-24.04, macos-15]
-    runs-on: ${{ matrix.os }}
+  source-categories-ubuntu:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify synthetic source-category and fail-closed audits offline
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import socket
+          import unittest
+
+          def no_network(*_a,**_k):
+              raise AssertionError('C2 source tests attempted external network connection')
+          socket.socket.connect=no_network
+          socket.socket.connect_ex=no_network
+          socket.create_connection=no_network
+
+          tests=unittest.defaultTestLoader.loadTestsFromNames([
+              'tests.test_real_reference_gateway_v18',
+              'tests.test_acwi_netr_offline_intake_v19',
+          ])
+          result=unittest.TextTestRunner(verbosity=2).run(tests)
+          if not result.wasSuccessful() or result.testsRun!=21 or result.skipped:
+              raise SystemExit('C2_OFFLINE_SOURCE_GATE_BLOCKED')
+          print('C2_SOURCE_GATEWAY_OFFLINE_PASS tests='+str(result.testsRun))
+          print('C2_REAL_SOURCE_LICENSE_AND_PIT_NOT_CERTIFIED')
+          PY
+      - name: Declare intentional non-production constraints
+        run: echo "NO_MSCI_DOWNLOAD_NO_NEON_NO_BROKER_NO_WALLET_NO_TRANSACTIONS"
+
+  source-categories-macos:
+    runs-on: macos-15
     timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
