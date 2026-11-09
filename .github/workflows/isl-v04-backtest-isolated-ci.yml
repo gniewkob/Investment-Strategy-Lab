@@ -12,6 +12,7 @@ on:
       - 'tests/test_monthly_cost_sensitivity_v14.py'
       - 'tests/test_a1_independent_accounting_review_v01.py'
       - 'docs/WORKING_ENGINE_V04_BACKTEST_ACCEPTANCE_PL.md'
+      - 'docs/A1_POST_SPLIT_INDEPENDENT_REVIEW_20261109_PL.md'
       - 'db/monthly_backtest_v04_readiness_READONLY.sql'
       - 'tests/integration/test_monthly_backtest_v04_readiness.py'
       - '.github/workflows/isl-v04-backtest-isolated-ci.yml'
