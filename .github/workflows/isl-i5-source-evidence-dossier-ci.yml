@@ -47,7 +47,7 @@ jobs:
           ]
           suite = unittest.defaultTestLoader.loadTestsFromNames(modules)
           result = unittest.TextTestRunner(verbosity=2).run(suite)
-          if not result.wasSuccessful() or result.testsRun != 49 or result.skipped:
+          if not result.wasSuccessful() or result.testsRun != 51 or result.skipped:
               raise SystemExit('I5_UNVERIFIED_MARKET_DATA_GATE_BLOCKED')
           print('I5_SOURCE_EVIDENCE_DOSSIER_OFFLINE_PASS tests=' + str(result.testsRun))
           print('I5_QUALIFIED_SERIES_ZERO_MANUAL_EVIDENCE_REQUIRED')
@@ -87,7 +87,7 @@ jobs:
           ]
           suite = unittest.defaultTestLoader.loadTestsFromNames(modules)
           result = unittest.TextTestRunner(verbosity=2).run(suite)
-          if not result.wasSuccessful() or result.testsRun != 49 or result.skipped:
+          if not result.wasSuccessful() or result.testsRun != 51 or result.skipped:
               raise SystemExit('I5_UNVERIFIED_MARKET_DATA_GATE_BLOCKED')
           print('I5_SOURCE_EVIDENCE_DOSSIER_OFFLINE_PASS tests=' + str(result.testsRun))
           print('I5_QUALIFIED_SERIES_ZERO_MANUAL_EVIDENCE_REQUIRED')
