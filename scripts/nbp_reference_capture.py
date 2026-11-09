@@ -33,8 +33,14 @@ def _fetch(url):
         return response.read()
 
 
-def capture(start, end, fetch=_fetch, clock=lambda: datetime.now(timezone.utc)):
-    """Return evidence receipt for at most 93 inclusive days; fail on any gap in response shape."""
+def capture(start, end, fetch=None, clock=lambda: datetime.now(timezone.utc)):
+    """Return read-only source receipt only with an explicitly injected fetch.
+
+    No network transport is assumed by the offline research API.
+    The separate CLI --allow-public-nbp-fetch gate is an explicit opt-in.
+    """
+    if fetch is None:
+        raise ValueError("EXPLICIT_FETCH_REQUIRED: no implicit public NBP network access")
     begin, finish = date.fromisoformat(start), date.fromisoformat(end)
     if finish < begin or (finish - begin).days >= 93:
         raise ValueError("expected an ordered interval of at most 93 days")
@@ -90,8 +96,16 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("start")
     parser.add_argument("end")
+    parser.add_argument(
+        "--allow-public-nbp-fetch", action="store_true",
+        help="explicitly opt in to public NBP HTTPS; default is offline/fail-closed",
+    )
     args = parser.parse_args()
-    print(json.dumps(capture(args.start, args.end), indent=2, sort_keys=True))
+    if not args.allow_public_nbp_fetch:
+        parser.error("public NBP source access needs --allow-public-nbp-fetch")
+    print(json.dumps(
+        capture(args.start, args.end, fetch=_fetch), indent=2, sort_keys=True,
+    ))
 
 
 if __name__ == "__main__":
