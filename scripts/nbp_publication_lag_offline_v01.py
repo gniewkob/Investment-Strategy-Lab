@@ -21,6 +21,7 @@ SCHEMA = "ISL_I6_NBP_TABLE_A_USDPLN_DATE_LAG_OFFLINE_V01"
 MAX_INPUT_BYTES = 250_000
 MAX_ROWS = 93
 MIN_PUBLICATION_DAY = date(2002, 1, 2)
+MAX_PUBLICATION_DAY = date(2100, 12, 30)
 CODE = "USD"
 DATE_RE = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}$")
 ROOT_FIELDS = {"table", "currency", "code", "rates"}
@@ -85,15 +86,19 @@ def _validate(snapshot):
         if not isinstance(item, dict) or set(item) != ROW_FIELDS:
             raise NBPDateLagError("unsupported NBP rate row schema")
         day = _date(item["effectiveDate"])
-        if day < MIN_PUBLICATION_DAY or (previous is not None and day <= previous):
+        if (day < MIN_PUBLICATION_DAY or day > MAX_PUBLICATION_DAY
+                or (previous is not None and day <= previous)):
             raise NBPDateLagError("duplicate, unsorted, or unsupported publication day")
-        if (not isinstance(item["no"], str) or not item["no"]
-                or len(item["no"]) > 80):
-            raise NBPDateLagError("NBP source table number required")
+        no = item["no"]
+        if (not isinstance(no, str)
+                or re.fullmatch(r"[0-9]{1,3}/A/NBP/[0-9]{4}", no) is None
+                or not no.endswith("/" + str(day.year))):
+            raise NBPDateLagError("NBP Table A source number/year mismatch")
         raw = item["mid"]
-        if (isinstance(raw, bool) or not isinstance(raw, (int, str, Decimal))
-                or (isinstance(raw, str) and (not raw or raw.strip() != raw))):
-            raise NBPDateLagError("invalid rate numeric representation")
+        # JSON numbers are usually parsed as Python float. No arithmetic
+        # here uses floating-point rates: they are validated, then redacted.
+        if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+            raise NBPDateLagError("NBP API mid must be a JSON number")
         try:
             val = Decimal(str(raw))
         except (InvalidOperation, ValueError) as exc:
@@ -115,8 +120,8 @@ def assess_nbp_publication_lag(snapshot, *, requested_effective_date,
     requested = _date(requested_effective_date)
     decision = _utc(decision_at_utc)
     dates, raw = _validate(snapshot)
-    if requested < MIN_PUBLICATION_DAY:
-        raise NBPDateLagError("publication date predates NBP Table A history")
+    if requested < MIN_PUBLICATION_DAY or requested > MAX_PUBLICATION_DAY:
+        raise NBPDateLagError("publication date outside supported source history")
     # Date-only input cannot authenticate the exact first-published time.
     # The deliberate +1 calendar day UTC convention removes same-day use.
     not_before = datetime.combine(
@@ -132,7 +137,7 @@ def assess_nbp_publication_lag(snapshot, *, requested_effective_date,
         "schema": SCHEMA,
         "status": status,
         "source_kind": "NBP_USDPLN_TABLE_A_MID_NON_EXECUTABLE_FX",
-        "source_snapshot_sha256": sha256(raw).hexdigest(),
+        "canonical_local_snapshot_sha256": sha256(raw).hexdigest(),
         "source_rows_examined": len(dates),
         "requested_effective_date": requested.isoformat(),
         "decision_at_utc": decision.isoformat(),
