@@ -12,6 +12,7 @@ import json
 from pathlib import Path
 
 from scripts.research_decision_controller_v15 import decide
+from scripts.research_backtest_decision_boundary_v01 import review_backtest
 from scripts.shadow_decision_engine_v05 import (
     ShadowInputError, _digest, evaluate, MODEL_ASSETS,
 )
@@ -97,7 +98,13 @@ def _manifest_from_archived_bundle(bundle):
     }
 
 
-def run_cycle(*, current=None, previous=None, archived_bundle=None):
+def run_cycle(*, current=None, previous=None, archived_bundle=None,
+              backtest_report=None):
+    if backtest_report is not None:
+        if current is not None or previous is not None or archived_bundle is not None:
+            raise ShadowInputError("A1 backtest cannot be combined with decision sources")
+        # Intentional one-way firewall. Never call decide() on A1 data.
+        return review_backtest(backtest_report)
     if (current is None) == (archived_bundle is None):
         raise ShadowInputError("exactly one current manifest or archived bundle required")
     if archived_bundle is not None:
@@ -154,15 +161,18 @@ def main():
     inputs = parser.add_mutually_exclusive_group(required=True)
     inputs.add_argument("--current", type=Path)
     inputs.add_argument("--archived-v09", type=Path)
+    inputs.add_argument("--backtest-report", type=Path)
     parser.add_argument("--previous", type=Path)
     args = parser.parse_args()
     result = run_cycle(
         current=_load(args.current) if args.current else None,
         archived_bundle=_load(args.archived_v09) if args.archived_v09 else None,
         previous=_load(args.previous) if args.previous else None,
+        backtest_report=_load(args.backtest_report) if args.backtest_report else None,
     )
-    print("ISL_RESEARCH_CYCLE_V16=" +
-          json.dumps(result, sort_keys=True, separators=(",", ":")))
+    label = ("ISL_A1_TO_C1_FIREWALL=" if args.backtest_report
+             else "ISL_RESEARCH_CYCLE_V16=")
+    print(label + json.dumps(result, sort_keys=True, separators=(",", ":")))
 
 
 if __name__ == "__main__":
