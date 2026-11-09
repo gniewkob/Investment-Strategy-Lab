@@ -151,6 +151,8 @@ def _msci(record):
     label = "MSCI"
     _check_header(record, MSCI_KEYS,
                   "SOURCE_CANDIDATE_RIGHTS_AND_PIT_UNVERIFIED", label)
+    if record["schema"] != "ISL_ACWI_NETR_MONTHLY_INTAKE_V19_001":
+        raise EvidenceDossierError(label + ": incorrect source audit schema")
     _check_receipt(record, "audit_receipt_sha256", label)
     _sha(record["original_csv_sha256"], label)
     _sha(record["nbp_archive_sha256"], label)
@@ -259,6 +261,8 @@ def _reference(record):
     label = "NBP/BondSpot"
     _check_header(record, REFERENCE_KEYS,
                   "REFERENCE_DATA_OBSERVED_MODELS_BLOCKED", label)
+    if record["schema"] != "ISL_REAL_REFERENCE_GATEWAY_V18_001":
+        raise EvidenceDossierError(label + ": incorrect source audit schema")
     _check_receipt(record, "gateway_receipt_sha256", label)
     _sha(record["source_archive_sha256"], label)
     _sha(record["decision_cycle_sha256"], label)
