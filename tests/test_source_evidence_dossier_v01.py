@@ -222,6 +222,27 @@ class SourceEvidenceDossierTests(unittest.TestCase):
         with self.assertRaises(EvidenceDossierError):
             assess_dossier({"reference": float("nan")})
 
+    def test_rehashed_source_schema_substitution_rejected(self):
+        for name, receipt in (("msci", "audit_receipt_sha256"),
+                              ("reference", "gateway_receipt_sha256")):
+            report = deepcopy(synthetic_reports()[name])
+            report["schema"] = "UNTRUSTED_SOURCE_SCHEMA_V99"
+            repin(report, receipt)
+            with self.subTest(name=name), self.assertRaisesRegex(
+                    EvidenceDossierError, "schema"):
+                assess_dossier({name: report})
+
+    def test_rehashed_month_span_mismatch_rejected(self):
+        reports = synthetic_reports()
+        for name, receipt in (("msci", "audit_receipt_sha256"),
+                              ("reference", "gateway_receipt_sha256")):
+            report = deepcopy(reports[name])
+            report["last_month"] = "2026-08" if name == "reference" else "2024-11"
+            repin(report, receipt)
+            with self.subTest(name=name), self.assertRaisesRegex(
+                    EvidenceDossierError, "coverage"):
+                assess_dossier({name: report})
+
     def test_symlinked_or_oversized_metadata_file_rejected(self):
         with tempfile.TemporaryDirectory() as temp:
             base = Path(temp)
