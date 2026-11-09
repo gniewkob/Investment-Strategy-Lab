@@ -8,7 +8,7 @@ on:
       - 'governance/isl_provider_workflow_inventory_v01.json'
       - 'scripts/provider_workflow_review_v01.py'
       - 'tests/test_provider_workflow_review_v01.py'
-      - '.github/workflows/isl-source-governance-g1-ci.yml'
+      - '.github/workflows/**'
   workflow_dispatch:
 
 permissions:
@@ -49,6 +49,10 @@ jobs:
           assert record['provider_rights_verified'] is False
           assert record['financial_operations']==0
           assert record['changed_count']==0
+          # A byte-identical original provider workflow must not be introduced by G1.
+          assert record['present_count']==0, 'quarantined PR96 workflow unexpectedly present in G1'
+          assert record['missing_count']==16
+          assert record['status']=='SOURCE_REVIEW_REQUIRED'
           print('ISL_G1_PROVIDER_ACTIVATION_NOT_AUTHORIZED')
           print('ISL_G1_SNAPSHOT_PATHS_PRESENT='+str(record['present_count']))
           PY
