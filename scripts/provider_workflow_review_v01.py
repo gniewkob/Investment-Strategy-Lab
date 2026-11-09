@@ -71,7 +71,9 @@ def observed_signals(text):
     }
 
 
-def audit(root, inventory, *, require_all=False):
+def audit(root, inventory, *, require_all=False, forbid_present=False):
+    if require_all and forbid_present:
+        raise InventoryError("require_all and forbid_present are mutually exclusive")
     root = Path(root).resolve(strict=True)
     if not root.is_dir():
         raise InventoryError("source root must be an existing directory")
@@ -116,6 +118,10 @@ def audit(root, inventory, *, require_all=False):
     }
     if mismatch or (require_all and missing):
         report["status"] = "SNAPSHOT_INCOMPLETE_OR_CHANGED"
+    if forbid_present and missing != len(items):
+        # A matching Git blob is evidence of identity, never permission to
+        # carry a provider workflow into this governance-only branch.
+        report["status"] = "QUARANTINED_WORKFLOW_PRESENT"
     return report
 
 
@@ -124,10 +130,11 @@ def main():
     p.add_argument("--inventory", type=Path, default=Path("governance/isl_provider_workflow_inventory_v01.json"))
     p.add_argument("--source-root", type=Path, default=Path("."))
     p.add_argument("--require-all", action="store_true")
+    p.add_argument("--forbid-present", action="store_true", help="fail if any inventoried workflow exists in the checkout")
     args = p.parse_args()
-    result = audit(args.source_root, read_inventory(args.inventory), require_all=args.require_all)
+    result = audit(args.source_root, read_inventory(args.inventory), require_all=args.require_all, forbid_present=args.forbid_present)
     print("ISL_PROVIDER_WORKFLOW_REVIEW=" + json.dumps(result, sort_keys=True, separators=(",", ":")))
-    if result["status"] == "SNAPSHOT_INCOMPLETE_OR_CHANGED":
+    if result["status"] in {"SNAPSHOT_INCOMPLETE_OR_CHANGED", "QUARANTINED_WORKFLOW_PRESENT"}:
         raise SystemExit(2)
 
 
