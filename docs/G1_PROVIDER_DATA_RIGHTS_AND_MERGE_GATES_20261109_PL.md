@@ -92,3 +92,14 @@ To **tylko odczyt lokalnych plików**; oczekiwany wynik jeśli snapshot jest zgo
 - **Rzeczywisty CI nowego G1 na main-based Draft:** [GitHub Actions run #42647907196](https://github.com/gniewkob/Investment-Strategy-Lab/actions/runs/42647907196) **PASS 2/2**: Python 3.12 **9/9 testów Ubuntu i 9/9 macOS**; `ResourceWarning` nie zgłoszono. Na tym nowym niezależnym branchu żaden z 16 pierwotnych workflowów nie występuje (`ISL_G1_SNAPSHOT_PATHS_PRESENT=0`), co jest **oczekiwanym zachowaniem**, a nie dowodem, że skrypt odczytał source branch. Testuje się tam wyłącznie jego semantykę na fixture oraz poprawność manifestu.
 - **Dodatkowy odbiór Mac/research checkout (opcjonalny, wymagany przy zmianie oryginalnego branch):** uruchomić polecenie z §6 na świeżym worktree, gdzie wszystkie 16 plików są obecne, i zachować JSON z dokładnymi SHA; nie wymaga to GitHub tokenów ani dostępu do dostawców.
 - **Decyzja:** `G1_CODE_AND_MANIFEST_CI_PASS` oraz `ACTIVATION_NOT_AUTHORIZED`. Draft #108 nadal wymaga niezależnego review, by mógł być rozpatrywany do merge; nie przenosi w sobie żadnego providera.
+
+## 9. Domknięcie bramki kwarantanny workflowów (2026-11-09)
+
+**Ustalona luka CI:** pierwotny test G1 sprawdzał `changed_count==0`, lecz **nie wymagał `present_count==0`**. Oznaczało to, że wprowadzenie workflowu z #96 o identycznym Git blob SHA mogłoby pozostawić test zielony. Równocześnie pierwotny filtr `pull_request.paths` obserwował tylko własny plik G1, a nie wszystkie zmiany workflowów.
+
+**Poprawka w tym samym Draft #108:**
+- `scripts/provider_workflow_review_v01.py --forbid-present` odrzuca obecność **jakiegokolwiek** z 16 oryginalnych workflowów, nawet gdy SHA zgadza się z inwentaryzacją. Zwraca `QUARANTINED_WORKFLOW_PRESENT` i exit 2; bez plików pozostaje status `SOURCE_REVIEW_REQUIRED`, `activation_approved=false`. Tryby `--require-all` (sprawdzenie oryginalnego snapshotu PR #96) i `--forbid-present` (bramka G1) są wzajemnie wykluczające.
+- `.github/workflows/isl-source-governance-g1-ci.yml` uruchamia nowy tryb i dodatkowo asercję `present_count==0` oraz `missing_count==16`. Ścieżka wyzwalająca `.github/workflows/**` obejmuje zmiany innych workflowów w PR.
+- Testy obejmują próbę przeniesienia **identycznego** pliku, pusty checkout, wzajemną wyłączność trybów oraz kontrakt konfiguracji CI.
+
+**Granica dowodu:** blokada dotyczy 16 nazwanych oryginalnych ścieżek, a nie wszystkich możliwych nowych workflowów, ich wariantów po zmianie nazw lub wszystkich dróg pozyskiwania danych. Nadal wymagane są branch-protection i niezależny review. Zmiana nie aktywuje providerów i nie dopuszcza merge ani operacji finansowych. Wcześniejszy 9/9 PASS dokumentuje poprzedni SHA; dla tej poprawki rozstrzygające są **nowe** checks na końcowym HEAD.
