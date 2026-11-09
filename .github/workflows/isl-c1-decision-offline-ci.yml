@@ -1,0 +1,75 @@
+name: ISL C1 educational decision and chronological journal CI
+
+# Stacked on B1: no market provider, wallet, order, Neon, or live scheduler.
+# Test synthetic sources and pinned offline archive only.
+on:
+  pull_request:
+    paths:
+      - 'scripts/shadow_forward_evaluation_v05.py'
+      - 'tests/test_shadow_forward_evaluation_v05.py'
+      - 'scripts/shadow_journal_v06.py'
+      - 'tests/test_shadow_journal_v06.py'
+      - 'scripts/research_decision_controller_v15.py'
+      - 'tests/test_research_decision_controller_v15.py'
+      - 'scripts/research_decision_pipeline_v16.py'
+      - 'tests/test_research_decision_pipeline_v16.py'
+      - 'scripts/research_forward_journal_v17.py'
+      - 'tests/test_research_forward_journal_v17.py'
+      - '.github/workflows/isl-c1-decision-offline-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  chronological-decision:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify source-isolated decision and forward journal test contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import socket
+          import unittest
+          from hashlib import sha256
+          from pathlib import Path
+
+          archive=Path('evidence/shadow/v09/checkpoint-bundle-run-42305280062.json')
+          assert sha256(archive.read_bytes()).hexdigest()==(
+              '4a4fece5c84996cf7e663abae81d5c583e5397904bbe17ab57b8f0a150b797d3'
+          ), 'Original v0.9 evidence bytes changed'
+
+          def no_network(*_args,**_kwargs):
+              raise AssertionError('C1 offline decision tests attempted network access')
+          socket.socket.connect=no_network
+          socket.socket.connect_ex=no_network
+          socket.create_connection=no_network
+
+          suites=[
+              'tests.test_shadow_forward_evaluation_v05',
+              'tests.test_shadow_journal_v06',
+              'tests.test_research_decision_controller_v15',
+              'tests.test_research_decision_pipeline_v16',
+              'tests.test_research_forward_journal_v17',
+          ]
+          loaded=unittest.defaultTestLoader.loadTestsFromNames(suites)
+          result=unittest.TextTestRunner(verbosity=2).run(loaded)
+          if not result.wasSuccessful() or result.testsRun!=53 or result.skipped:
+              raise SystemExit('C1_DECISION_TESTS_NOT_ACCEPTED')
+          print('C1_DECISION_JOURNAL_OFFLINE_PASS tests='+str(result.testsRun))
+          print('C1_FROZEN_ORIGINAL_ARCHIVE_SHA256_VERIFIED')
+          PY
+      - name: Record execution boundary
+        run: echo "SYNTHETIC_OR_ARCHIVED_ONLY_NO_MARKET_PIT_NO_REAL_FINANCIAL_OPERATIONS_NO_NEON"
