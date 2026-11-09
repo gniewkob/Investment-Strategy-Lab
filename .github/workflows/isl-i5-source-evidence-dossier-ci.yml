@@ -1,0 +1,96 @@
+name: ISL I5 offline source-evidence dossier and no-promotion CI
+
+# Metadata-only intake of existing audited candidates. No vendor download,
+# licensed index-level artifact upload, broker, wallet, market calls or trading.
+on:
+  pull_request:
+    paths:
+      - 'scripts/source_evidence_dossier_v01.py'
+      - 'tests/test_source_evidence_dossier_v01.py'
+      - 'docs/I5_SOURCE_EVIDENCE_DOSSIER_ACCEPTANCE_20261109_PL.md'
+      - '.github/workflows/isl-i5-source-evidence-dossier-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dossier-ubuntu:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Audit sources and negative source-admission contracts entirely offline
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import socket
+          import unittest
+
+          def deny_network(*_a, **_k):
+              raise AssertionError('I5 source dossier attempted network')
+          socket.socket.connect = deny_network
+          socket.socket.connect_ex = deny_network
+          socket.create_connection = deny_network
+
+          modules = [
+              'tests.test_source_evidence_dossier_v01',
+              'tests.test_acwi_netr_offline_intake_v19',
+              'tests.test_vanguard_xlsx_offline_intake_v04',
+              'tests.test_real_reference_gateway_v18',
+          ]
+          suite = unittest.defaultTestLoader.loadTestsFromNames(modules)
+          result = unittest.TextTestRunner(verbosity=2).run(suite)
+          if not result.wasSuccessful() or result.testsRun != 49 or result.skipped:
+              raise SystemExit('I5_UNVERIFIED_MARKET_DATA_GATE_BLOCKED')
+          print('I5_SOURCE_EVIDENCE_DOSSIER_OFFLINE_PASS tests=' + str(result.testsRun))
+          print('I5_QUALIFIED_SERIES_ZERO_MANUAL_EVIDENCE_REQUIRED')
+          PY
+      - name: Enforce source governance and execution boundary
+        run: echo 'METADATA_ONLY_NO_PROVIDER_NO_PIT_ATTESTATION_NO_ORDERS'
+
+  dossier-macos:
+    runs-on: macos-15
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Audit sources and negative source-admission contracts entirely offline
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import socket
+          import unittest
+
+          def deny_network(*_a, **_k):
+              raise AssertionError('I5 source dossier attempted network')
+          socket.socket.connect = deny_network
+          socket.socket.connect_ex = deny_network
+          socket.create_connection = deny_network
+
+          modules = [
+              'tests.test_source_evidence_dossier_v01',
+              'tests.test_acwi_netr_offline_intake_v19',
+              'tests.test_vanguard_xlsx_offline_intake_v04',
+              'tests.test_real_reference_gateway_v18',
+          ]
+          suite = unittest.defaultTestLoader.loadTestsFromNames(modules)
+          result = unittest.TextTestRunner(verbosity=2).run(suite)
+          if not result.wasSuccessful() or result.testsRun != 49 or result.skipped:
+              raise SystemExit('I5_UNVERIFIED_MARKET_DATA_GATE_BLOCKED')
+          print('I5_SOURCE_EVIDENCE_DOSSIER_OFFLINE_PASS tests=' + str(result.testsRun))
+          print('I5_QUALIFIED_SERIES_ZERO_MANUAL_EVIDENCE_REQUIRED')
+          PY
+      - name: Enforce source governance and execution boundary
+        run: echo 'METADATA_ONLY_NO_PROVIDER_NO_PIT_ATTESTATION_NO_ORDERS'
