@@ -84,3 +84,11 @@ To **tylko odczyt lokalnych plików**; oczekiwany wynik jeśli snapshot jest zgo
 - Wymagać osobnej decyzji dla ewentualnego harmonogramu `shadow-capture` i jawnie odróżnić licencję/API/techniczne czytanie od historycznego PIT i dopuszczenia badań.
 
 **Status końcowy G1:** analiza i techniczna kontrola integralności workflowu — tak; aktywacja źródeł — **NIE**; realna inwestycja — **NIE**.
+
+
+## 8. Odbiór G1 i rozróżnienie dwóch rodzajów kontroli
+
+- **Kontrola snapshotu źródłowego:** niezależnie od skryptu audytowego odczytano przez GitHub **wszystkie 16 oryginalnych plików YAML** na research branch `codex/v04-monthly-backtest-engine-20261106`, a każde `git_blob_sha1` w `governance/isl_provider_workflow_inventory_v01.json` okazało się identyczne z API GitHub (**16/16 MATCH**). To oznacza zgodność inwentaryzacji z kodem na wskazanej gałęzi w momencie sprawdzenia, **nie** weryfikuje licencji, API prawa ani wykonania.
+- **Rzeczywisty CI nowego G1 na main-based Draft:** [GitHub Actions run #42647907196](https://github.com/gniewkob/Investment-Strategy-Lab/actions/runs/42647907196) **PASS 2/2**: Python 3.12 **9/9 testów Ubuntu i 9/9 macOS**; `ResourceWarning` nie zgłoszono. Na tym nowym niezależnym branchu żaden z 16 pierwotnych workflowów nie występuje (`ISL_G1_SNAPSHOT_PATHS_PRESENT=0`), co jest **oczekiwanym zachowaniem**, a nie dowodem, że skrypt odczytał source branch. Testuje się tam wyłącznie jego semantykę na fixture oraz poprawność manifestu.
+- **Dodatkowy odbiór Mac/research checkout (opcjonalny, wymagany przy zmianie oryginalnego branch):** uruchomić polecenie z §6 na świeżym worktree, gdzie wszystkie 16 plików są obecne, i zachować JSON z dokładnymi SHA; nie wymaga to GitHub tokenów ani dostępu do dostawców.
+- **Decyzja:** `G1_CODE_AND_MANIFEST_CI_PASS` oraz `ACTIVATION_NOT_AUTHORIZED`. Draft #108 nadal wymaga niezależnego review, by mógł być rozpatrywany do merge; nie przenosi w sobie żadnego providera.
