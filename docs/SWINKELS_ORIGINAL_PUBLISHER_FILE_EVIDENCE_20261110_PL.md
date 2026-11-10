@@ -31,3 +31,14 @@ Po nieudanym odczycie workflow jest **czerwony**, a stan `OFFICIAL_ORIGINAL_READ
 - Nie zmieniać kontrolera M1–M3, G1, kodu operacji finansowych, ustawień sekretów, harmonogramów ani `main`.
 
 **Decyzja na etapie utworzenia Draft:** oryginalny format ODS i DOI potwierdzone w metadanych zewnętrznych, **oryginalne bajty pliku jeszcze niepotwierdzone**. Końcowy wynik musi pochodzić z prawdziwego odczytu CI na dokładnym SHA.
+
+
+## Zweryfikowany endpoint repozytorium (10.11.2026)
+
+**Rzeczywista odpowiedź z GitHub Actions**, a nie wyłącznie katalog B2FIND: DataverseNL public Native API zwrócił pliki `International Monthly Government Bond Returns.ods`, dokładnie **913425 bajtów**, `datafile_id=512630`, oraz `Readme.pdf`, dokładnie **127043 bajty**, `datafile_id=512631`; API udostępnia również kontrolne sumy dla obu plików. To potwierdza istnienie publicznej oryginalnej wersji w aktualnym DataverseNL.
+
+Pierwszy odczyt pliku ODS został **celowo zablokowany przez kontrolę przekierowań**. Test odczytał wyłącznie host docelowy `objectstore.surf.nl`, bez logowania potencjalnie podpisanego URL i jego parametrów. To jest zgodne z [oficjalną instrukcją SURF o zmianie endpointu Object Store](https://servicedesk.surf.nl/wiki/spaces/WIKI/pages/112591626/Object+store+Differences+between+the+old+and+new+service), [opisaniem hostingu repozytoriów badawczych przez SURF](https://www.surf.nl/diensten/opslag-datamanagement/object-store) i [dokumentacją konfiguracji Dataverse dla SURF Object Store](https://guides.dataverse.org/en/6.7.1/installation/config.html). Źródło wciąż pozostaje `dataverse.nl`; SURF jest **infrastrukturą magazynową**, a nie nowym pośrednikiem danych.
+
+Dalsza kontrola dopuszcza **jedynie przekierowanie z `dataverse.nl` do `objectstore.surf.nl`, po HTTPS**. Przekierowania do innych domen pozostają odrzucane. Nie dopuszcza to użycia prywatnego klucza API, podpisywania własnych adresów ani kopiowania danych od nieautoryzowanych mirrorów.
+
+**Status:** `ORIGINAL_PUBLISHER_FILE_IDENTIFIERS_VERIFIED`, `SIGNED_STORAGE_REDIRECT_TRUST_ANCHORED`; *SHA-256 oryginalnych bajtów i rzeczywista struktura arkuszy wymagają odrębnego zielonego odczytu*.
