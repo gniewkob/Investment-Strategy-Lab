@@ -2,7 +2,7 @@
 import unittest
 
 from scripts.swinkels_multicountry_formula_dependencies_v01 import (
-    SourceUnavailable, classify_formula, _column_number
+    SourceUnavailable, classify_formula, _column_number, formula_numeric_constant_classes
 )
 
 
@@ -39,6 +39,18 @@ class TestSwinkelsMultiCountryFormulaDeps(unittest.TestCase):
     def test_no_references_rejected(self):
         with self.assertRaisesRegex(SourceUnavailable, "unsupported or missing"):
             classify_formula("of:=100+200", 20)
+
+    def test_percent_point_constant_inventory(self):
+        formula = "of:=(1+[.B20]/100)^(1/12)-1"
+        census = formula_numeric_constant_classes(formula)
+        self.assertEqual(census["known_constant_counts"]["percent_point_base"], 1)
+        self.assertEqual(census["known_constant_counts"]["months_per_year"], 1)
+        self.assertEqual(census["other_numeric_literal_count"], 0)
+
+    def test_unknown_constant_is_not_exported(self):
+        census = formula_numeric_constant_classes("of:=[.B20]+987654321")
+        self.assertEqual(census["other_numeric_literal_count"], 1)
+        self.assertNotIn("987654321", str(census))
 
     def test_no_formula_exposure(self):
         formula = "of:=([.B20]+[.C19])/[.D20]"
