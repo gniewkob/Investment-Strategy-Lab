@@ -34,7 +34,6 @@ jobs:
   official-source-equation3-diagnostic:
     runs-on: ubuntu-24.04
     timeout-minutes: 8
-    needs: synthetic-math-tests
     steps:
       - uses: actions/checkout@v4
         with:
