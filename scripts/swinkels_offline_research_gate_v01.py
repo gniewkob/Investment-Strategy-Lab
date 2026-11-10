@@ -5,9 +5,7 @@ unit from the magnitude of the historical observations.
 """
 from __future__ import annotations
 
-from datetime import date
 from decimal import Decimal, InvalidOperation
-import math
 import re
 
 EXPECTED_MONTHS = tuple(f"{y:04d}-{m:02d}" for y in range(2020, 2023) for m in range(1, 13))
@@ -56,7 +54,7 @@ def validate_monthly_series(*, country, observations, source_sha256,
         if not isinstance(item, (tuple, list)) or len(item) != 2:
             raise ResearchGateBlocked("INVALID_OBSERVATION_SHAPE")
         month, raw = item
-        if not isinstance(month, str) or not re.fullmatch(r"20\\d{2}-(0[1-9]|1[0-2])", month):
+        if not isinstance(month, str) or not re.fullmatch(r"20\d{2}-(0[1-9]|1[0-2])", month):
             raise ResearchGateBlocked("INVALID_MONTH")
         if month in seen:
             raise ResearchGateBlocked("DUPLICATE_MONTH")
