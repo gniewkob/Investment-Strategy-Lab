@@ -1,0 +1,55 @@
+name: ISL Swinkels independent US Eq3 reconciliation (one-shot)
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/swinkels_original_us_equation3_audit_v01.py'
+      - 'tests/test_swinkels_original_us_equation3_audit_v01.py'
+      - '.github/workflows/isl-swinkels-us-equation3-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  synthetic-math-tests:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Eight independent synthetic par-bond tests
+        run: |
+          set -euo pipefail
+          python -m unittest tests.test_swinkels_original_us_equation3_audit_v01 -v
+
+  official-source-equation3-diagnostic:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    needs: synthetic-math-tests
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Pinned original ODS independent monthly reconciliation, no raw values logged
+        run: |
+          set -euo pipefail
+          python -m scripts.swinkels_original_us_equation3_audit_v01
+      - name: Keep decision engine unqualified
+        if: always()
+        run: |
+          echo "MODEL_QUALIFIED_SERIES=[]"
+          echo "PIT_CERTIFIED=false"
+          echo "M1_M2_M3=HOLD_CASH"
+          echo "FINANCIAL_OPERATIONS=0"
