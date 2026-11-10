@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'scripts/swinkels_formula_topology_probe_v01.py'
+      - 'tests/test_swinkels_formula_shape_v01.py'
       - '.github/workflows/isl-swinkels-formula-topology-ci.yml'
   workflow_dispatch:
 
@@ -21,6 +22,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Six synthetic offline formula shape tests
+        run: |
+          set -euo pipefail
+          python -m unittest tests.test_swinkels_formula_shape_v01 -v
       - name: Verify source SHA and formula references without finance values
         run: |
           set -euo pipefail
