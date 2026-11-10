@@ -38,7 +38,9 @@ FIXED = {"freq": "M", "unit": "I25", "coicop18": "TOTAL", "geo": "PL"}
 RELEASE_LABELS = {"FIN": "Final", "FLS": "Flash"}
 FPD_IDS = frozenset((*FIXED, "release", "time"))
 MAX_MONTHS = 24
-KNOWN_FPD_EXCEPTION_MONTH = "2026-01"
+# Eurostat's 03-Mar/24-Apr-2026 FPD archive incident is explicitly
+# documented for EURO AREA aggregates, not for Poland as a country series.
+EURO_AREA_RESTORATION_NOTICE_MONTH = "2026-01"
 FIRST_SUPPORTED_OBSERVATION = "2026-01"
 MAX_FPD_RESPONSE_BYTES = 2_000_000
 
@@ -205,38 +207,37 @@ def compare_revisions(fpd, latest, *, since, until, observed_at_utc):
     rows = []
     used = []
     missing = []
-    exception_months = []
+    exception_months = []  # Reserved for independently verified PL-specific issues.
+    euro_area_notice_months = []  # Context only: NOT a Poland exception.
     for first_row, new_row in zip(fpd_rows, current_rows):
         month = first_row["month"]
         if new_row["month"] != month:
             raise HICPRevisionError("FPD/latest time dimensions do not align")
         final_level = first_row["level"]
         current_level = _decimal(new_row["index_2025_100"])
-        is_exception = month == KNOWN_FPD_EXCEPTION_MONTH
-        if is_exception:
-            exception_months.append(month)
+        is_euro_area_notice = month == EURO_AREA_RESTORATION_NOTICE_MONTH
+        if is_euro_area_notice:
+            euro_area_notice_months.append(month)
         unavailable = final_level is None or current_level is None
         if unavailable:
             missing.append(month)
         delta = (current_level - final_level) if not unavailable else None
-        if not unavailable and not is_exception:
+        if not unavailable:
             used.append(delta)
         rows.append({
             "month": month,
             "comparison_status": ("MISSING_SOURCE_OBSERVATION" if unavailable else
-                                  "KNOWN_FPD_ARCHIVE_RESTORATION_REVIEW" if is_exception else
                                   "COMPARABLE_LATEST_MINUS_FIRST_FINAL"),
             "first_release_kind": "FIN_FINAL",
             "first_final_flag": first_row["flag"],
             "latest_flag": new_row["status"],
             "revision_index_points": _plain(delta),
-            "included_in_revision_summary": not unavailable and not is_exception,
+            "included_in_revision_summary": not unavailable,
+            "euro_area_archive_notice_context_only": is_euro_area_notice,
             "first_publication_timestamp_proven": False,
         })
     if missing:
         status = "BLOCKED_INCOMPLETE_REVISIONS"
-    elif exception_months:
-        status = "REVIEW_REQUIRED_KNOWN_JAN_2026_FPD_EXCEPTION"
     else:
         status = "REVISION_COMPARISON_RESEARCH_ONLY"
     output = {
@@ -261,6 +262,9 @@ def compare_revisions(fpd, latest, *, since, until, observed_at_utc):
         "comparable_month_count": len(used),
         "missing_months": missing,
         "exception_months": exception_months,
+        "euro_area_archive_notice_months_context_only": euro_area_notice_months,
+        "euro_area_archive_restoration_notice_scope": "EURO_AREA_AGGREGATES_NOT_PL",
+        "notice_is_independent_evidence_of_poland_revision": False,
         "nonzero_revision_months": sum(1 for v in used if v != 0),
         "max_absolute_revision_index_points": _plain(max(map(abs, used), default=Decimal(0))),
         "rows": rows,
