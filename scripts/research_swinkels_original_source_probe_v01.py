@@ -37,8 +37,13 @@ class SourceUnavailable(RuntimeError):
 
 class RestrictedRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
-        if urllib.parse.urlparse(newurl).hostname != "dataverse.nl":
-            raise SourceUnavailable("third-party redirect not permitted")
+        target = urllib.parse.urlparse(newurl)
+        if target.scheme != "https" or target.hostname != "dataverse.nl":
+            # Print ONLY the hostname, never a signed URL or access tokens.
+            host = target.hostname or "MISSING_HOST"
+            if len(host) > 160 or not re.fullmatch(r"[A-Za-z0-9.-]+", host):
+                host = "UNSAFE_HOSTNAME"
+            raise SourceUnavailable("original Dataverse file redirects to storage hostname=" + host)
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
