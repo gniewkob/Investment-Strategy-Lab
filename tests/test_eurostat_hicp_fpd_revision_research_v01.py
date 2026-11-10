@@ -217,6 +217,41 @@ class FPDFinalRevisionResearchTests(unittest.TestCase):
         self.assertEqual(result["comparable_month_count"], 3)
         self.assert_safe(result)
 
+    def test_nine_months_jan_to_sep_complete_with_january_included(self):
+        months = tuple(f"2026-{m:02d}" for m in range(1, 10))
+        first = fpd()
+        first["dimension"]["time"]["category"]["index"] = {
+            month: i for i, month in enumerate(months)
+        }
+        first["size"][5] = 9
+        first["value"] = {
+            **{str(i): 100 + i for i in range(9)},  # FIN
+            **{str(9 + i): 200 + i for i in range(9)},  # FLS; never used
+        }
+        first["status"] = {}
+        current_levels = [100 + i for i in range(9)]
+        current_levels[2] = 102.2
+        current_levels[5] = 104.9
+        latest = current_fixture(months=months, values=current_levels)
+        result = run(first, latest, since="2026-01", until="2026-09")
+        self.assertEqual(result["status"], "REVISION_COMPARISON_RESEARCH_ONLY")
+        self.assertEqual(result["month_count"], 9)
+        self.assertEqual(result["comparable_month_count"], 9)
+        self.assertEqual(result["missing_months"], [])
+        self.assertEqual(result["nonzero_revision_months"], 2)
+        self.assertEqual(result["max_absolute_revision_index_points"], "0.2")
+        self.assertEqual([row["month"] for row in result["rows"]], list(months))
+        self.assertEqual(
+            {row["month"]: row["revision_index_points"] for row in result["rows"]
+             if row["revision_index_points"] not in ("0", "0.0")},
+            {"2026-03": "0.2", "2026-06": "-0.1"},
+        )
+        self.assertTrue(result["rows"][0]["included_in_revision_summary"])
+        self.assertEqual(result["euro_area_archive_notice_months_context_only"],
+                         ["2026-01"])
+        self.assertEqual(result["exception_months"], [])
+        self.assert_safe(result)
+
     def test_out_of_scope_months_and_timestamp_rejected(self):
         for a, b in (("2025-12", "2026-03"), ("2026-09", "2026-07"),
                      ("2026-01", "2028-05"), ("2026-13", "2026-14")):
