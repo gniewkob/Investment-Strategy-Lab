@@ -75,7 +75,12 @@ def _validate_synthetic_monthly_series(*, country, observations, source_sha256,
 
 
 def offline_statistics(monthly_decimals):
-    """Pure educational statistics; caller must first invoke validation."""
+    """Real-source statistics remain disabled until units are certified."""
+    raise ResearchGateBlocked("SOURCE_UNITS_NOT_CERTIFIED")
+
+
+def _offline_synthetic_statistics(monthly_decimals):
+    """Synthetic math fixture only; never qualify original market returns."""
     if not isinstance(monthly_decimals, tuple) or len(monthly_decimals) != 36:
         raise ResearchGateBlocked("UNVALIDATED_MONTHLY_SERIES")
     if any(not isinstance(r, Decimal) or not r.is_finite() or r <= -1 for r in monthly_decimals):
