@@ -34,6 +34,15 @@ class NineSeriesEquation3Tests(unittest.TestCase):
         result = compare_series(fake_source(6.0))
         self.assertGreater(float(result["rms_gap_simple_carry"]), 0)
 
+    def test_material_mismatch_is_not_accepted(self):
+        rows = fake_source()
+        rows["2020-01"]["return_fraction"] += 0.001
+        verdict = compare_series(rows)
+        self.assertEqual(
+            verdict["economic_reconciliation_status"],
+            "RECONCILIATION_NOT_ACCEPTED"
+        )
+
     def test_missing_month_rejected(self):
         rows = fake_source()
         del rows["2020-01"]
@@ -46,6 +55,7 @@ class NineSeriesEquation3Tests(unittest.TestCase):
         self.assertFalse(payload["formula_economic_semantics_certified"])
         self.assertFalse(payload["historical_pit_certified"])
         self.assertEqual(payload["qualified_model_series"], [])
+        self.assertEqual(payload["overall_economic_qualification"], "NOT_ACCEPTED_WITHOUT_SOURCE_FORMULA_REPRODUCTION")
         self.assertEqual(payload["model_state"], "HOLD_CASH")
         self.assertEqual(payload["financial_operations"], 0)
 
