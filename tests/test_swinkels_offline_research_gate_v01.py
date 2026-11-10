@@ -65,7 +65,7 @@ class TestSwinkelsGate(unittest.TestCase):
 
     def test_out_of_window_month(self):
         rows = example_rows()
-        rows[0] = ("2019-12", "0.01")
+        rows[0] = ("2023-01", "0.01")
         self.assert_blocked("MONTHLY_WINDOW_MISMATCH", observations=rows)
 
     def test_nan(self):
