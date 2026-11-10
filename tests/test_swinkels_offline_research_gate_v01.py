@@ -4,7 +4,8 @@ from decimal import Decimal
 
 from scripts.swinkels_offline_research_gate_v01 import (
     EXPECTED_MONTHS, SOURCE_SHA256, ResearchGateBlocked,
-    validate_monthly_series, _validate_synthetic_monthly_series, offline_statistics,
+    validate_monthly_series, _validate_synthetic_monthly_series,
+    offline_statistics, _offline_synthetic_statistics,
 )
 
 
@@ -104,10 +105,14 @@ class TestSwinkelsGate(unittest.TestCase):
 
     def test_no_statistics_on_unvalidated_data(self):
         with self.assertRaisesRegex(ResearchGateBlocked, "UNVALIDATED_MONTHLY_SERIES"):
-            offline_statistics([Decimal("0.01")] * 36)
+            _offline_synthetic_statistics([Decimal("0.01")] * 36)
+
+    def test_real_statistics_always_blocked(self):
+        with self.assertRaisesRegex(ResearchGateBlocked, "SOURCE_UNITS_NOT_CERTIFIED"):
+            offline_statistics(accepted())
 
     def test_synthetic_statistics(self):
-        receipt = offline_statistics(accepted())
+        receipt = _offline_synthetic_statistics(accepted())
         self.assertEqual(receipt["sample_months"], 36)
         self.assertEqual(receipt["compounded_total_return"], Decimal("1.01") ** 36 - 1)
         self.assertEqual(receipt["max_drawdown"], Decimal(0))
