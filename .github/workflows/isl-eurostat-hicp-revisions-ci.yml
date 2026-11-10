@@ -1,0 +1,127 @@
+name: ISL Eurostat HICP FIN first-vs-latest public research revision audit
+
+# Sources: Eurostat only, public free statistical API. No secret, schedule,
+# real trading, wallet, external DB, licensed index prices or trading signal.
+on:
+  pull_request:
+    paths:
+      - 'scripts/eurostat_hicp_fpd_revision_research_v01.py'
+      - 'tests/test_eurostat_hicp_fpd_revision_research_v01.py'
+      - 'docs/EUROSTAT_HICP_FIRST_FINAL_VS_CURRENT_ACCEPTANCE_20261110_PL.md'
+      - '.github/workflows/isl-eurostat-hicp-revisions-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  revision-ubuntu:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Socket-blocked offline revisions, latest HICP, FPD schema tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import socket
+          import unittest
+          def blocked(*args, **kwargs):
+              raise AssertionError("Offline HICP revision test attempted network")
+          socket.socket.connect = blocked
+          socket.socket.connect_ex = blocked
+          socket.create_connection = blocked
+          tests = unittest.defaultTestLoader.loadTestsFromNames([
+              "tests.test_eurostat_hicp_fpd_revision_research_v01",
+              "tests.test_eurostat_hicp_fpd_schema_probe_v01",
+              "tests.test_eurostat_hicp_macro_context_v01",
+          ])
+          result = unittest.TextTestRunner(verbosity=2).run(tests)
+          if not result.wasSuccessful() or result.skipped or result.testsRun != 44:
+              raise SystemExit("HICP_REVISION_RESEARCH_OFFLINE_GATE_BLOCKED")
+          print("ISL_HICP_FPD_REVISION_OFFLINE_PASS tests="+str(result.testsRun))
+          print("ISL_HICP_EQUITY_BOND_GOLD_TR_QUALIFIED=0")
+          PY
+
+  revision-macos:
+    runs-on: macos-15
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Socket-blocked offline revisions, latest HICP, FPD schema tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import socket
+          import unittest
+          def blocked(*args, **kwargs):
+              raise AssertionError("Offline HICP revision test attempted network")
+          socket.socket.connect = blocked
+          socket.socket.connect_ex = blocked
+          socket.create_connection = blocked
+          tests = unittest.defaultTestLoader.loadTestsFromNames([
+              "tests.test_eurostat_hicp_fpd_revision_research_v01",
+              "tests.test_eurostat_hicp_fpd_schema_probe_v01",
+              "tests.test_eurostat_hicp_macro_context_v01",
+          ])
+          result = unittest.TextTestRunner(verbosity=2).run(tests)
+          if not result.wasSuccessful() or result.skipped or result.testsRun != 44:
+              raise SystemExit("HICP_REVISION_RESEARCH_OFFLINE_GATE_BLOCKED")
+          print("ISL_HICP_FPD_REVISION_OFFLINE_PASS tests="+str(result.testsRun))
+          print("ISL_HICP_EQUITY_BOND_GOLD_TR_QUALIFIED=0")
+          PY
+
+  official-pair-smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Two bounded read-only Eurostat public GETs; no source levels in logs
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m scripts.eurostat_hicp_fpd_revision_research_v01 \
+            --fetch-official --since 2026-07 --until 2026-09 |
+          python -c '
+          import sys,json
+          prefix="ISL_HICP_FPD_REVISION_RESEARCH="
+          raw=sys.stdin.read().strip()
+          if not raw.startswith(prefix):
+              raise SystemExit("MISSING_OFFICIAL_PAIR_REVISION_RECEIPT")
+          r=json.loads(raw[len(prefix):])
+          if (r["status"]!="REVISION_COMPARISON_RESEARCH_ONLY"
+              or r["month_count"]!=3
+              or r["comparable_month_count"]!=3
+              or r["missing_months"]
+              or r["exception_months"]
+              or r["qualified_model_series"]!=[]
+              or r["historical_point_in_time_certified"]
+              or r["model_state"]!="HOLD_CASH"
+              or r["orders_sent"]!=0
+              or r["financial_operations"]!=0):
+              raise SystemExit("HICP_REAL_SOURCE_REVISION_COMPARISON_INCOMPLETE")
+          print("ISL_HICP_FPD_OFFICIAL_REVISION_PAIR_PASS months="+str(r["comparable_month_count"]))
+          print("ISL_HICP_FPD_NONZERO_REVISION_MONTHS="+str(r["nonzero_revision_months"]))
+          print("ISL_HICP_FPD_MAX_ABS_REVISION_POINTS="+r["max_absolute_revision_index_points"])
+          print("ISL_HICP_FPD_FIRST_FINAL_SHA="+r["fpd_canonical_sha256"])
+          print("ISL_HICP_LATEST_SHA="+r["latest_canonical_sha256"])
+          print("ISL_HICP_REVISION_RECEIPT_SHA="+r["receipt_sha256"])
+          print("ISL_HICP_MACRO_ONLY_HISTORIC_PIT_NOT_CERTIFIED")
+          '
