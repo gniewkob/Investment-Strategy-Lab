@@ -22,7 +22,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Eight synthetic formula-dependency tests
+      - name: Ten synthetic formula-dependency and constant-inventory tests
         run: |
           set -euo pipefail
           python -m unittest tests.test_swinkels_multicountry_formula_dependencies_v01 -v
