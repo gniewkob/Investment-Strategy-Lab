@@ -198,18 +198,23 @@ class FPDFinalRevisionResearchTests(unittest.TestCase):
         with self.assertRaisesRegex(HICPRevisionError, "status key/flag"):
             run(d)
 
-    def test_january_2026_restoration_exception_requires_review(self):
+    def test_january_2026_euro_area_notice_must_not_exclude_poland(self):
         first = fpd()
         first["dimension"]["time"]["category"]["index"] = {
             "2026-01": 0, "2026-02": 1, "2026-03": 2,
         }
         latest = current_fixture(months=("2026-01", "2026-02", "2026-03"))
         result = run(first, latest, since="2026-01", until="2026-03")
-        self.assertEqual(result["status"],
-                         "REVIEW_REQUIRED_KNOWN_JAN_2026_FPD_EXCEPTION")
-        self.assertEqual(result["exception_months"], ["2026-01"])
-        self.assertFalse(result["rows"][0]["included_in_revision_summary"])
-        self.assertEqual(result["comparable_month_count"], 2)
+        self.assertEqual(result["status"], "REVISION_COMPARISON_RESEARCH_ONLY")
+        self.assertEqual(result["exception_months"], [])
+        self.assertEqual(result["euro_area_archive_notice_months_context_only"],
+                         ["2026-01"])
+        self.assertEqual(result["euro_area_archive_restoration_notice_scope"],
+                         "EURO_AREA_AGGREGATES_NOT_PL")
+        self.assertFalse(result["notice_is_independent_evidence_of_poland_revision"])
+        self.assertTrue(result["rows"][0]["included_in_revision_summary"])
+        self.assertTrue(result["rows"][0]["euro_area_archive_notice_context_only"])
+        self.assertEqual(result["comparable_month_count"], 3)
         self.assert_safe(result)
 
     def test_out_of_scope_months_and_timestamp_rejected(self):
