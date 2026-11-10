@@ -20,7 +20,7 @@ README_FILE_ID = 512631
 EXPECTED_PDF_SIZE = 127043
 MAX_PDF_BYTES = 500000
 MAX_TEXT_BYTES = 400000
-KEYWORDS = re.compile(r"return\\s*m|percentage|percent|decimal|coupon|reinvest|unit|formula|yield", re.I)
+KEYWORDS = re.compile(r"return\s*m|percentage|percent|decimal|coupon|reinvest|unit|formula|yield", re.I)
 
 
 def main():
@@ -40,8 +40,8 @@ def main():
     relevant = []
     for line in lines:
         if KEYWORDS.search(line):
-            clean = re.sub(r"\\b\\d+(?:[.,]\\d+)?\\b", "[number]", line.strip())
-            clean = re.sub(r"\\s+", " ", clean)
+            clean = re.sub(r"\b\d+(?:[.,]\d+)?\b", "[number]", line.strip())
+            clean = re.sub(r"\s+", " ", clean)
             if clean:
                 relevant.append(clean[:170])
     print("OFFICIAL_README_SOURCE=DataverseNL")
