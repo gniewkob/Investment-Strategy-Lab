@@ -42,3 +42,20 @@ Pierwszy odczyt pliku ODS został **celowo zablokowany przez kontrolę przekiero
 Dalsza kontrola dopuszcza **jedynie przekierowanie z `dataverse.nl` do `objectstore.surf.nl`, po HTTPS**. Przekierowania do innych domen pozostają odrzucane. Nie dopuszcza to użycia prywatnego klucza API, podpisywania własnych adresów ani kopiowania danych od nieautoryzowanych mirrorów.
 
 **Status:** `ORIGINAL_PUBLISHER_FILE_IDENTIFIERS_VERIFIED`, `SIGNED_STORAGE_REDIRECT_TRUST_ANCHORED`; *SHA-256 oryginalnych bajtów i rzeczywista struktura arkuszy wymagają odrębnego zielonego odczytu*.
+
+
+## Rzeczywisty oryginalny plik i wyniki pokrycia — 10.11.2026
+
+**Korekta wcześniejszego stanu oczekującego:** oryginalny plik udało się uzyskać w [GitHub Actions — oficjalny DataverseNL original ODS run #42839960613](https://github.com/gniewkob/Investment-Strategy-Lab/actions/runs/42839960613). To jest wynik rzeczywistego odczytu, a nie przykładowa fixtura.
+
+- DOI DataverseNL: `10.34894/YWT2IX`, datafile ID **512630**.
+- Oryginalny plik: `International Monthly Government Bond Returns.ods`.
+- Bajty: **913425**; SHA-256 **`90a634328d14dec82bfcbbac83625105c49ff93e9ea2771762c2294d42435847`**.
+- ODS: prawidłowy ZIP i `content.xml`, 11 arkuszy badawczych (w tym `Data_Sources` oraz dwa warianty USA), 9 arkuszy wykresów.
+- Dziewięć państw według oryginalnych arkuszy: Stany Zjednoczone, Niemcy, Japonia, Francja, Wielka Brytania, Australia, Kanada, Norwegia i Szwecja. Arkusze zawierają `observation_date`, `Yield 10Y` oraz `Return M`; USA mają wariant oryginalny i poprawiony.
+- **Sprawdzone oryginalne wartości, bez ich publikacji:** każde z **10** krajowych zestawów `Return M` ma **36/36 unikalnych, skończonych, numerycznych miesięcy od 2020-01 do 2022-12**. Brakujących miesięcy **0**, powtórzeń **0**, nienumerycznych `Return M` **0**. Wniosek dotyczy wyłącznie **kompletności oraz typu pól**, nie ich jednostek, wiarygodności historycznego PIT ani skuteczności strategii.
+- Bajty pozostawały tylko w pamięci krótkiego procesu CI. Do GitHub nie zapisano tabel zwrotów, CSV, arkusza ani wykonywalnego modelu inwestycyjnego.
+
+**Nadal nieodebrane:** z dokumentacji `Readme.pdf` i źródłowego opisu metodologii trzeba osobno potwierdzić, czy `Return M` jest zakodowany jako *udział/decimal* czy *procent*, jaki jest model wypłat kuponów, co dokładnie oznaczają `Original_US_1962` i `Improved_US_1947`, jakie są reguły oszacowań i rewind historycznych korekt. **Bez tej kontroli nie liczyć i nie publikować wyników złożonych ani skali zwrotu.** Brak Polski i zakończenie historii na grudniu 2022 r. pozostają niezmiennymi ograniczeniami.
+
+**Stan:** `ORIGINAL_OFFICIAL_FILE_SHA_VERIFIED / TEN_MONTHLY_BOND_RETURN_COLUMNS_36_OF_36_COVERAGE_PASS / RETURN_UNITS_NOT_YET_CERTIFIED / HISTORICAL_PIT_UNVERIFIED / M1_M2_M3_HOLD_CASH`.
