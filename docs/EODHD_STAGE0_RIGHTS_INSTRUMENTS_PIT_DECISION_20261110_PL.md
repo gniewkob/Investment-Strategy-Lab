@@ -59,3 +59,28 @@ Dopóki G1–G5 nie są spełnione w jasno określonym, prywatnym badawczym zakr
 5. Wszystkie obecne dane i hashe oryginalnych dostawców trzymać poza publicznym repozytorium i workflow. I4, I5, I6, I7 i G1 pozostają bez zmian, a `main` i aktywa nie są dotykane.
 
 **Decyzja końcowa Stage 0:** `RESEARCH_SOURCE_CANDIDATE_ONLY; NO_PROVIDER_INGEST; NO_HISTORICAL_PIT; QUALIFIED_MODEL_SERIES=0; HOLD_CASH`.
+
+
+## 6. Stage 1 — weryfikacja publicznego katalogu dostawcy (10.11.2026)
+
+**Stan faktyczny:** publiczna dokumentacja EODHD opisuje wyszukiwanie po ISIN, lecz nie przedstawia pełnego zweryfikowanego przypisania naszych trzech ISIN do identyfikatorów dostawcy. Oficjalne [Search API](https://eodhd.com/financial-apis/search-api-for-stocks-etfs-mutual-funds) wymaga osobistego `api_token`, **nie działa z tokenem demonstracyjnym**, i zwraca tylko aktywne instrumenty; [Exchanges API](https://eodhd.com/financial-apis/exchanges-api-list-of-tickers-and-trading-hours) także wymaga tokena. Nie został wykonany ani jeden request API; **nie ma dowodu, że EODHD udostępnia te trzy konkretne szeregi**.
+
+**Nie należy utożsamiać trzech różnych identyfikatorów:** (1) ISIN klasy instrumentu, (2) ticker + konkretna giełda i waluta z dokumentu emitenta, (3) kod `SYMBOL.EXCHANGE` używany przez EODHD. Wspólny ISIN może mieć notowania na różnych rynkach i w różnych walutach.
+
+| ISIN emitenta | Potwierdzony wariant giełdowy, bez roszczenia wobec EODHD | Tożsamość instrumentu | Symbol i historia EODHD |
+|---|---|---|---|
+| `IE00BK5BQT80` | Vanguard `VWRA` — London Stock Exchange, USD; `VWCE` — Deutsche Börse, EUR. [Warianty notowania na stronie emitenta](https://www.pl.vanguard/inwestorzy-indywidualni/produkt/etf/akcje/9679/ftse-all-world-ucits-etf-usd-accumulating). | `ISSUER_CONFIRMED` | `UNVERIFIED` |
+| `PLBTBSP00012` | BETA ETF TBSP `ETFBTBSP` — GPW, PLN. [Lista emitenta](https://betaetf.pl/nasze-fundusze). | `ISSUER_CONFIRMED` | `UNVERIFIED` |
+| `IE00B579F325` | Invesco Physical Gold ETC `SGLD` — London Stock Exchange, USD. [Emitent](https://www.invesco.com/uk/en/financial-products/etfs/invesco-physical-gold-etc.html), [oficjalny opis rynków notowania](https://www.invesco.com/content/dam/invesco/emea/en/pdf/Invesco_Physical_Gold_ETC_Brochure_EN.pdf). | `ISSUER_CONFIRMED` | `UNVERIFIED` |
+
+**Minimalny dowód od dostawcy, dopiero po niezależnie dopuszczonym dostępie:** z [Search API](https://eodhd.com/financial-apis/search-api-for-stocks-etfs-mutual-funds) uzyskać parę `Code`, `Exchange`, `Currency`, `ISIN`, `Type`, `isPrimary`; powiązać każdą parę z potwierdzonym ISIN emitenta. Gdy `ISIN` jest pusty, nie wystarczy podobna nazwa — potrzebne dodatkowe niezależne potwierdzenie. Następnie osobno sprawdzić, że wariant notowania ma 36–72 kompletne miesiące, właściwe dane o dywidendach/splitach i brak niewyjaśnionych luk; brak lub niezgodność mapowania oznacza `BLOCKED`.
+
+Z [Exchanges API](https://eodhd.com/financial-apis/exchanges-api-list-of-tickers-and-trading-hours) wynika dodatkowo, że zapytanie po symbolach może pominąć nierozpoznany symbol bez błędu (HTTP 200); wymagane jest **jawne porównanie zbioru oczekiwanych i zwróconych identyfikatorów**. Sam status HTTP 200, brak błędu lub ticker podobny do zapisu giełdowego nie jest dowodem pokrycia. `Search API` zwraca tylko instrumenty aktywne, dlatego historyczne analizy muszą osobno rozważyć serie delistowane i zmiany symbolu.
+
+### Warunki prawne i architektoniczne, potwierdzone w oficjalnym FAQ
+
+[Warunki EODHD — PERSONAL AND COMMERCIAL USE OF INFORMATION](https://eodhd.com/financial-apis/terms-conditions) i [FAQ Personal Use](https://eodhd.com/help/personal-use) ograniczają niekomercyjną licencję do właściwego użytkownika indywidualnego działającego dla siebie. [FAQ AI/Cloud](https://eodhd.com/help/ai-tools) wyjaśnia, że prywatne AI lub VPS i publikacja **samego kodu** są dopuszczone w określonym zakresie, lecz nie wolno wystawiać pobranych danych, tokenów ani raportów zawierających te dane innym osobom. [FAQ Storage](https://eodhd.com/help/storage) potwierdza możliwość przechowania pobranych danych do dozwolonego prywatnego użytku; to **nie** daje prawa do umieszczenia ich w publicznym repozytorium. Sam profil użytkownika, publiczna strona FAQ ani wcześniejsza zgoda na badania nie stanowią dowodu uprawnienia do usługi.
+
+**Wykonalność zakresu:** [FAQ Plans](https://eodhd.com/help/plans) potwierdza dla Free tylko 12 miesięcy EOD; archiwum 36–72 miesięcy wymagałoby innego *dopuszczonego* zakresu i sprawdzenia każdej serii — bez założenia, że plan gwarantuje dostępność wszystkich instrumentów. Na tym etapie **nie uruchamiamy konta, rejestracji, subskrypcji, zakupów, API ani integracji**.
+
+**Wniosek Stage 1:** `ISSUER_LISTINGS=3_CONFIRMED; EODHD_IDENTIFIERS=0_VERIFIED; AUTHORIZED_DATA_ACCESS=UNVERIFIED; HISTORICAL_MONTHLY_COVERAGE=UNVERIFIED; HISTORICAL_PIT=NOT_CERTIFIED; GO=DOCUMENTATION_ONLY; INGEST=NO_GO`. Nie budować pobierania cen, adaptera notowań ani pełnego backtestu na niezweryfikowanych nazwach.
