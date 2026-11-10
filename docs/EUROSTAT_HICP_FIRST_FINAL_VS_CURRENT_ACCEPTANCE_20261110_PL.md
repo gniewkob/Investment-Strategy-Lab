@@ -56,3 +56,13 @@ Ten drugi tryb wykonuje **dokładnie dwa** ograniczone, anonimowe GET do publicz
 - **Granica historyczna:** archiwalna wartość FIN z Eurostat jest dowodem statystycznej **deklaracji pierwszej publikacji**, nie podpisanym \`first_available_at\` każdej obserwacji. Nie udowadnia niezmienności całego zestawu historycznych wersji, ani skuteczności strategii inwestycyjnych.
 
 **Wynik:** \`EUROSTAT_REAL_INFLATION_REVISIONS_RESEARCH_ONLY\`; \`GLOBAL_EQUITY_TR_PLN, PL_BONDS_TR_PLN, GOLD_TR_PLN\` wciąż nie mają kwalifikowanych realnych szeregów \`PIT\`. Żadne źródło inflacyjne nie jest instrumentem finansowym.
+
+## Korekta zakresu incydentu i dodatkowy odczyt — 10.11.2026
+
+**Fakt ze źródła:** w [oficjalnej tabeli rewizji Eurostat, sekcja Data revisions](https://ec.europa.eu/eurostat/web/hicp/information-data) poprawka z 3 marca 2026 r. oraz przywrócenie archiwum *first released* 24 kwietnia 2026 r. mają jawnie określony zasięg **Euro area**, czyli agregat strefy euro. Jest to inny zakres geograficzny niż `geo=PL`. Nie ma wystarczającej podstawy, by na tej podstawie twierdzić, że pierwsza krajowa publikacja HICP Polski za styczeń 2026 była nieprawidłowa.
+
+**Zmiana metodologii w kodzie:** usunięto automatyczne wyłączenie polskiego stycznia 2026 z agregatów rewizji. Raport nadal wyświetla pole `euro_area_archive_notice_months_context_only` oraz jawne `euro_area_archive_restoration_notice_scope=EURO_AREA_AGGREGATES_NOT_PL`. Test regresji weryfikuje, że komunikat o agregacie nie powoduje fałszywej blokady narodowego szeregu `PL`. Późniejszy niezależny dowód problemu w danych Polski wymaga osobnego przeglądu.
+
+**Dodatkowy test oficjalnych danych:** osobny jednorazowy job `official-pl-january-2026` wykonuje dwa ograniczone odczyty publicznego API Eurostat (`prc_hicp_fpd` z `release=FIN` oraz `prc_hicp_minr`) dla `2026-01`, `geo=PL`, `M`, `TOTAL`, `I25` (2025=100). Weryfikuje kompletność 1/1, że nie ma fałszywego wyłączenia z powodu incydentu strefy euro i raportuje jedynie liczbę rewizji, maksymalną bezwzględną różnicę punktową oraz skróty SHA-256. Nie wypisuje oryginalnych poziomów indeksu. To **test obserwacji retrospektywnej**, a nie niezależna certyfikacja czasu historycznej dostępności ani dowód, że w innym czasie nie było żadnych korekt.
+
+Odbiór wymaga zielonego testu stycznia, poprzednich 44 testów offline na obu systemach, regresji A2–C2 i G1 na dokładnym końcowym SHA. Wyniki syntetyczne nie zastępują oficjalnego odczytu stycznia.
