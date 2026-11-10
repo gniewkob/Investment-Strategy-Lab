@@ -52,10 +52,10 @@ class TestSwinkelsMultiCountryFormulaDeps(unittest.TestCase):
         self.assertEqual(census["known_constant_counts"]["hundredth"], 2)
         self.assertEqual(census["other_numeric_literal_count"], 0)
 
-    def test_unknown_constant_is_not_exported(self):
+    def test_static_unknown_constant_is_bounded_for_review(self):
         census = formula_numeric_constant_classes("of:=[.B20]+987654321")
         self.assertEqual(census["other_numeric_literal_count"], 1)
-        self.assertNotIn("987654321", str(census))
+        self.assertEqual(census["other_formula_literals_for_review"], ["987654321"])
 
     def test_no_formula_exposure(self):
         formula = "of:=([.B20]+[.C19])/[.D20]"
