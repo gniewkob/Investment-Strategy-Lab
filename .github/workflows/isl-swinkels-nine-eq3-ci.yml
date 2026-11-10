@@ -1,0 +1,55 @@
+name: ISL Swinkels nine-variant independent Eq3 diagnostic (one-shot)
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/swinkels_nine_equation3_diagnostic_v01.py'
+      - 'tests/test_swinkels_nine_equation3_diagnostic_v01.py'
+      - '.github/workflows/isl-swinkels-nine-eq3-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  synthetic-independent-math:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Seven synthetic-only independent Eq3 tests
+        run: |
+          set -euo pipefail
+          python -m unittest tests.test_swinkels_nine_equation3_diagnostic_v01 -v
+
+  original-nine-variant-diagnostic:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Original publisher ODS aggregate-only nine-variant comparison
+        run: |
+          set -euo pipefail
+          python -m scripts.swinkels_nine_equation3_diagnostic_v01
+      - name: Preserve unqualified model state
+        if: always()
+        run: |
+          echo "EQUATION3_RESULT=RESEARCH_DIAGNOSTIC_ONLY"
+          echo "QUALIFIED_MODEL_SERIES=[]"
+          echo "HISTORICAL_PIT_CERTIFIED=false"
+          echo "M1_M2_M3=HOLD_CASH"
+          echo "FINANCIAL_OPERATIONS=0"
