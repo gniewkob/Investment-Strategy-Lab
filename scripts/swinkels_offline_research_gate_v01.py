@@ -32,11 +32,17 @@ def _decimal(value):
 def validate_monthly_series(*, country, observations, source_sha256,
                             return_unit=None, unit_evidence=None,
                             methodology_evidence=None):
-    """Return decimals only if unit/method evidence is explicitly supplied.
+    """Production research admission is blocked until publisher units are verified.
 
-    Evidence identifiers must be traceable human-reviewed references. Merely
-    passing an arbitrary string is *not* independent evidence certification.
+    A free-text evidence string cannot qualify source units or methodology.
     """
+    raise ResearchGateBlocked("SOURCE_UNITS_NOT_CERTIFIED")
+
+
+def _validate_synthetic_monthly_series(*, country, observations, source_sha256,
+                                       return_unit=None, unit_evidence=None,
+                                       methodology_evidence=None):
+    """Test-only math validation for artificial series; not source approval."""
     if source_sha256 != SOURCE_SHA256:
         raise ResearchGateBlocked("SOURCE_HASH_MISMATCH")
     if country not in COUNTRIES:
