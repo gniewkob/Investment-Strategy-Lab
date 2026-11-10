@@ -10,6 +10,8 @@ No spreadsheet data values, return numbers or full sheet names are uploaded.
 from __future__ import annotations
 
 import hashlib
+from datetime import datetime
+from decimal import Decimal, InvalidOperation
 import io
 import json
 import re
@@ -131,6 +133,109 @@ def discover_files():
     raise SourceUnavailable("Dataverse original file list unavailable; " + "; ".join(errors))
 
 
+def _column_cells(row, ns_table):
+    cells = []
+    for child in row:
+        if child.tag not in (ns_table + "table-cell",
+                             ns_table + "covered-table-cell"):
+            continue
+        repeat = child.get(ns_table + "number-columns-repeated", "1")
+        if not repeat.isdigit() or not 1 <= int(repeat) <= 100:
+            raise SourceUnavailable("unsafe ODS repeated column count")
+        cells.extend([child] * int(repeat))
+        if len(cells) > 200:
+            raise SourceUnavailable("original workbook has oversized row width")
+    return cells
+
+
+def _cell_label(cell, ns_text):
+    if cell is None:
+        return ""
+    return " ".join(
+        "".join(p.itertext()).strip()
+        for p in cell.findall(".//" + ns_text + "p")
+    ).strip()
+
+
+def _country_window_coverage(rows, ns_table, ns_office, ns_text):
+    """Only coverage counts for original country Return M, never returns."""
+    columns = None
+    header_idx = -1
+    for idx, row in enumerate(rows[:25]):
+        cols = _column_cells(row, ns_table)
+        labels = [_cell_label(cell, ns_text) for cell in cols]
+        if "observation_date" in labels and "Return M" in labels:
+            columns = (labels.index("observation_date"), labels.index("Return M"))
+            header_idx = idx
+            break
+    if columns is None:
+        return {"state": "NO_COUNTRY_RETURN_M_HEADER", "months_found": 0}
+    dates = {}
+    invalid_rows = 0
+    duplicate_months = 0
+    for row in rows[header_idx + 1:]:
+        cols = _column_cells(row, ns_table)
+        if max(columns) >= len(cols):
+            continue
+        date_cell, ret_cell = cols[columns[0]], cols[columns[1]]
+        stamp = date_cell.get(ns_office + "date-value")
+        if not stamp:
+            stamp = _cell_label(date_cell, ns_text)
+        if not stamp:
+            continue
+        parsed = None
+        for fmt in ("%Y-%m-%d", "%Y-%m-%dT%H:%M:%S",
+                    "%d-%b-%Y", "%d-%B-%Y"):
+            try:
+                parsed = datetime.strptime(stamp[:19], fmt)
+                break
+            except ValueError:
+                continue
+        if parsed is None:
+            continue
+        month = f"{parsed.year:04d}-{parsed.month:02d}"
+        if not "2020-01" <= month <= "2022-12":
+            continue
+        if month in dates:
+            duplicate_months += 1
+            continue
+        value_type = ret_cell.get(ns_office + "value-type")
+        raw_value = ret_cell.get(ns_office + "value")
+        if value_type not in ("float", "currency", "percentage") or not raw_value:
+            dates[month] = False
+            invalid_rows += 1
+            continue
+        try:
+            number = Decimal(raw_value)
+            valid = number.is_finite()
+        except InvalidOperation:
+            valid = False
+        dates[month] = valid
+        if not valid:
+            invalid_rows += 1
+    target = [f"{year}-{month:02d}" for year in range(2020, 2023)
+              for month in range(1, 13)]
+    missing_months = [month for month in target if month not in dates]
+    nonnumeric_months = [month for month in target
+                         if month in dates and not dates[month]]
+    status = ("COMPLETE_36_SOURCE_RETURN_M_OBSERVATIONS"
+              if not missing_months and not nonnumeric_months
+              and not duplicate_months and not invalid_rows
+              else "INCOMPLETE_OR_AMBIGUOUS_SOURCE_MONTHLY_OBSERVATIONS")
+    return {
+        "state": status,
+        "source_months_found": len(dates),
+        "numeric_months": sum(bool(x) for x in dates.values()),
+        "missing_months": missing_months,
+        "nonnumeric_months": nonnumeric_months,
+        "duplicate_months": duplicate_months,
+        "unparseable_or_empty_return_rows_in_window": invalid_rows,
+        "window": "2020-01..2022-12",
+        "return_unit_certified_from_original_methodology": False,
+        "historical_point_in_time_certified": False,
+    }
+
+
 def ods_shape(raw):
     """Examine archive format/sheet counts only, not actual market return values."""
     try:
@@ -199,6 +304,8 @@ def ods_shape(raw):
             "early_textual_labels_not_observations": labels,
             "number_of_column_definitions": len(
                 list(table.iter(ns_table + "table-column"))),
+            "return_m_2020_2022_coverage": _country_window_coverage(
+                rows, ns_table, ns_office, ns_text),
         })
     if not sheets:
         raise SourceUnavailable("original ODS has no spreadsheet table nodes")
