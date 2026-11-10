@@ -1,0 +1,55 @@
+name: ISL Swinkels common OpenFormula source replay (one-shot)
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/swinkels_common_openformula_exact_reconcile_v01.py'
+      - 'tests/test_swinkels_common_openformula_exact_reconcile_v01.py'
+      - '.github/workflows/isl-swinkels-common-openformula-reconcile-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  synthetic-safe-formula-tests:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Twelve safe formula replay tests
+        run: |
+          set -euo pipefail
+          python -m unittest tests.test_swinkels_common_openformula_exact_reconcile_v01 -v
+
+  original-source-expression-reconciliation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: SHA-pinned DataverseNL workbook cache vs safe symbolic expression
+        run: |
+          set -euo pipefail
+          python -m scripts.swinkels_common_openformula_exact_reconcile_v01
+      - name: Keep source mathematical checks separate from model qualification
+        if: always()
+        run: |
+          echo "SOURCE_REPLAY_IS_NOT_ECONOMIC_INDEPENDENCE"
+          echo "QUALIFIED_MODEL_SERIES=[]"
+          echo "PIT_CERTIFIED=false"
+          echo "M1_M2_M3=HOLD_CASH"
+          echo "FINANCIAL_OPERATIONS=0"
