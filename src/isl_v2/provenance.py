@@ -91,6 +91,7 @@ def select_asof(rows: list[dict], as_of: str) -> list[dict]:
             selected[key] = r
     return [{"instrument_code": r["instrument_code"],
              "source_code": r["source_code"], "observed_for": r["observed_for"],
+             "value_concept": r["value_concept"],
              "interval_code": r["interval_code"], "revision_no": r["revision_no"],
              "price_value": str(r["_price"]),
              "available_at": r["_available"].isoformat(),
