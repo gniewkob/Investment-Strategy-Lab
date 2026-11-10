@@ -46,6 +46,11 @@ def formula_numeric_constant_classes(formula: str) -> dict:
         "other_numeric_literal_count": sum(
             count for value, count in counts.items() if value not in PUBLIC_CONSTANTS
         ),
+        "other_formula_literals_for_review": sorted(
+            value for value in counts if value not in PUBLIC_CONSTANTS
+            and len(value) <= 24
+            and re.fullmatch(r"[0-9]+(?:\\.[0-9]+)?(?:[Ee][+-]?[0-9]+)?", value)
+        )[:8],
     }
 
 
