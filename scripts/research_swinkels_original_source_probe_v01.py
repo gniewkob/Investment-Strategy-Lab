@@ -38,12 +38,18 @@ class SourceUnavailable(RuntimeError):
 class RestrictedRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         target = urllib.parse.urlparse(newurl)
-        if target.scheme != "https" or target.hostname != "dataverse.nl":
-            # Print ONLY the hostname, never a signed URL or access tokens.
+        origin = urllib.parse.urlparse(req.full_url)
+        allowed = (target.scheme == "https" and (
+            target.hostname == "dataverse.nl"
+            or (origin.hostname == "dataverse.nl"
+                and target.hostname == "objectstore.surf.nl")
+        ))
+        if not allowed:
+            # Never print presigned URLs, which may contain sensitive signatures.
             host = target.hostname or "MISSING_HOST"
             if len(host) > 160 or not re.fullmatch(r"[A-Za-z0-9.-]+", host):
                 host = "UNSAFE_HOSTNAME"
-            raise SourceUnavailable("original Dataverse file redirects to storage hostname=" + host)
+            raise SourceUnavailable("original publisher redirect rejected; destination_host=" + host)
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
@@ -61,7 +67,8 @@ def fetch(path, cap):
             if response.status != 200:
                 raise SourceUnavailable("publisher HTTP status is not 200")
             final = urllib.parse.urlparse(response.geturl())
-            if final.scheme != "https" or final.hostname != "dataverse.nl":
+            if final.scheme != "https" or final.hostname not in (
+                    "dataverse.nl", "objectstore.surf.nl"):
                 raise SourceUnavailable("unexpected final download host")
             data = response.read(cap + 1)
     except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError,
