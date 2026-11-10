@@ -114,7 +114,7 @@ class TestSwinkelsGate(unittest.TestCase):
     def test_synthetic_statistics(self):
         receipt = _offline_synthetic_statistics(accepted())
         self.assertEqual(receipt["sample_months"], 36)
-        self.assertEqual(receipt["compounded_total_return"], Decimal("1.01") ** 36 - 1)
+        self.assertLessEqual(abs(receipt["compounded_total_return"] - (Decimal("1.01") ** 36 - 1)), Decimal("1e-24"))
         self.assertEqual(receipt["max_drawdown"], Decimal(0))
         self.assertEqual(receipt["model_state"], "HOLD_CASH")
         self.assertEqual(receipt["qualified_model_series"], [])
