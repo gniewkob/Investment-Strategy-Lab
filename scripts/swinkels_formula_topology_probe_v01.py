@@ -29,6 +29,20 @@ REF_RE = re.compile(r"\[[^\]]{1,100}\]")
 EXPECTED_SHEETS = 10
 
 
+def _formula_shape_digest(formula: str) -> str:
+    """Anonymized structural signature; never return formula or observations."""
+    if not isinstance(formula, str) or not formula.startswith("of:=") or len(formula) > FORMULA_CAP:
+        raise SourceUnavailable("invalid formula for structural fingerprint")
+    references = REF_RE.findall(formula)
+    if not references:
+        raise SourceUnavailable("formula contains no cell reference")
+    stripped = REF_RE.sub("[CELL]", formula)
+    # Suppress literal numeric values and row coordinates in structural output.
+    stripped = re.sub(r"(?<![A-Za-z_])(?:\\d+(?:\\.\\d+)?(?:[Ee][+-]?\\d+)?)", "#", stripped)
+    stripped = re.sub(r"\\s+", "", stripped)
+    return hashlib.sha256(stripped.encode("utf-8")).hexdigest()
+
+
 def inspect_formulas(raw: bytes) -> dict:
     if len(raw) != SOURCE_BYTES or hashlib.sha256(raw).hexdigest() != SOURCE_SHA:
         raise SourceUnavailable("original source ODS size or SHA mismatch")
@@ -60,6 +74,7 @@ def inspect_formulas(raw: bytes) -> dict:
         if idx is None:
             continue
         counts = Counter()
+        shapes = Counter()
         for row in rows[header + 1:]:
             cols = _column_cells(row, T)
             if idx >= len(cols):
@@ -79,6 +94,7 @@ def inspect_formulas(raw: bytes) -> dict:
             if cell.get(O + "value-type") != "percentage":
                 raise SourceUnavailable("Return M cell has unexpected value type")
             counts[len(references)] += 1
+            shapes[_formula_shape_digest(formula)] += 1
         if not counts:
             raise SourceUnavailable("no source Return M formulas found")
         audit.append({
@@ -89,6 +105,8 @@ def inspect_formulas(raw: bytes) -> dict:
                 for count, frequency in sorted(counts.items())
             ],
             "all_formula_cells_are_percentage_type": True,
+            "distinct_anonymized_formula_shapes": len(shapes),
+            "largest_shape_cell_count": max(shapes.values()),
         })
     if len(audit) != EXPECTED_SHEETS:
         raise SourceUnavailable("country sheet count does not match expected original")
