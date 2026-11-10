@@ -64,6 +64,36 @@ def equation3(y_previous: float, y_current: float, duration: float, convexity: f
     return (1 + y_previous) ** (1 / 12) - 1 - duration * delta + 0.5 * convexity * delta**2
 
 
+
+def summarize_monthly_returns(monthly_returns: list[float]) -> dict:
+    """Aggregate gross historical research statistics; never expose individual returns."""
+    if len(monthly_returns) != len(MONTHS) or any(
+            not math.isfinite(r) or r <= -1 for r in monthly_returns):
+        raise SourceUnavailable("invalid statistical research input")
+    wealth = 1.0
+    peak = 1.0
+    min_drawdown = 0.0
+    for monthly in monthly_returns:
+        wealth *= 1.0 + monthly
+        peak = max(peak, wealth)
+        min_drawdown = min(min_drawdown, wealth / peak - 1.0)
+    mean = sum(monthly_returns) / len(monthly_returns)
+    sample_volatility = math.sqrt(
+        sum((x - mean) ** 2 for x in monthly_returns) / (len(monthly_returns) - 1)
+    )
+    return {
+        "observations": len(monthly_returns),
+        "compounded_total_return_pct": f"{100 * (wealth - 1):.3f}",
+        "mean_monthly_return_pct": f"{100 * mean:.3f}",
+        "monthly_sample_volatility_pct": f"{100 * sample_volatility:.3f}",
+        "max_drawdown_pct": f"{100 * min_drawdown:.3f}",
+        "costs_taxes_currency_translation_included": False,
+        "data_window": "2020-01..2022-12",
+        "research_only": True,
+        "historical_pit_certified": False,
+    }
+
+
 def _finite_cell(cell, field: str) -> float:
     value = cell.get(O + "value")
     if not isinstance(value, str) or len(value) > 64:
@@ -148,12 +178,14 @@ def extract_original_us(raw: bytes) -> dict:
 def reconcile(records: dict) -> dict:
     if set(records) != set(ALL_MONTHS):
         raise SourceUnavailable("reconciliation window mismatch")
+    monthly_returns = []
     cached_diffs = []
     model_diffs = []
     duration_diffs = []
     convexity_diffs = []
     for i, month in enumerate(MONTHS):
         current = records[month]
+        monthly_returns.append(current["return"])
         previous = records[ALL_MONTHS[i]]
         y_prev, y_now = previous["yield"], current["yield"]
         # ODF percentage-valued cells already hold the decimal fraction.
@@ -168,10 +200,17 @@ def reconcile(records: dict) -> dict:
     if any(not math.isfinite(x) for xs in (
             cached_diffs, model_diffs, duration_diffs, convexity_diffs) for x in xs):
         raise SourceUnavailable("non-finite independent reconciliation")
-    # Diagnostic only: absence of a predefined, published numerical tolerance
+    # Explicit research tolerances for floating-point reconciliation only,
+    # NOT policy qualification, investment suitability, or historical PIT.
+    if (max(model_diffs) > 1e-10 or max(cached_diffs) > 1e-10
+            or max(duration_diffs) > 1e-8 or max(convexity_diffs) > 1e-7):
+        raise SourceUnavailable("independent economic reconciliation exceeded numerical tolerances")
+    # Aggregate educational results only after all comparisons pass.
     # prevents promoting this to an accepted historical economic backtest.
     return {
         "source_sha_verified": True,
+        "independent_equation3_reconciliation_passed": True,
+        "historical_research_statistics": summarize_monthly_returns(monthly_returns),
         "variant": SHEET_NAME,
         "months_reconciled": len(MONTHS),
         "window": "2020-01..2022-12",
