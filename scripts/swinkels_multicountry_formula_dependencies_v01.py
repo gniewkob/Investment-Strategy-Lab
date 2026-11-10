@@ -28,6 +28,25 @@ OPERATORS = "+-*/^"
 MONTHS = frozenset(f"{y:04d}-{m:02d}" for y in range(2020, 2023) for m in range(1, 13))
 EXPECTED_VARIANTS = 10
 MAX_REF_COUNT = 24
+NUMERIC_LITERAL = re.compile(r"(?<![A-Za-z_])\d+(?:\.\d+)?(?:[Ee][+-]?\d+)?")
+PUBLIC_CONSTANTS = {"1": "one", "2": "two", "10": "ten_years", "12": "months_per_year", "100": "percent_point_base", "0.5": "half"}
+
+
+def formula_numeric_constant_classes(formula: str) -> dict:
+    """Count only whitelisted mathematical constants, never source data."""
+    if not isinstance(formula, str) or not formula.startswith("of:=") or len(formula) > 4096:
+        raise SourceUnavailable("invalid formula constant inventory input")
+    scrubbed = ANY_REF.sub("@", formula)
+    counts = Counter(NUMERIC_LITERAL.findall(scrubbed))
+    return {
+        "known_constant_counts": {
+            role: counts[value] for value, role in PUBLIC_CONSTANTS.items()
+            if counts[value]
+        },
+        "other_numeric_literal_count": sum(
+            count for value, count in counts.items() if value not in PUBLIC_CONSTANTS
+        ),
+    }
 
 
 def _column_number(letters: str) -> int:
@@ -61,6 +80,7 @@ def classify_formula(formula: str, sheet_row_number: int) -> dict:
         "reference_geometry": tuple(layout),
         "operator_counts": tuple((op, operators[op]) for op in OPERATORS if operators[op]),
         "shape": _formula_shape_digest(formula),
+        "numeric_constant_classes": formula_numeric_constant_classes(formula),
     }
 
 
@@ -117,7 +137,8 @@ def inspect(raw: bytes) -> dict:
         signatures = {v["shape"] for v in found.values()}
         geometries = {v["reference_geometry"] for v in found.values()}
         op_patterns = {v["operator_counts"] for v in found.values()}
-        if len(signatures) != 1 or len(geometries) != 1 or len(op_patterns) != 1:
+        literal_patterns = {json.dumps(v["numeric_constant_classes"], sort_keys=True) for v in found.values()}
+        if len(signatures) != 1 or len(geometries) != 1 or len(op_patterns) != 1 or len(literal_patterns) != 1:
             raise SourceUnavailable("formula shape drift across 36 months")
         first = found[min(MONTHS)]
         variants.append({
@@ -128,6 +149,7 @@ def inspect(raw: bytes) -> dict:
                 for col, offset in first["reference_geometry"]
             ],
             "operator_counts": dict(first["operator_counts"]),
+            "numeric_constant_classes": first["numeric_constant_classes"],
             "stable_shape_across_36_months": True,
             "independent_economic_reproduction": "NOT_VERIFIED",
         })
