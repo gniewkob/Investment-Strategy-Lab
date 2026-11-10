@@ -66,3 +66,16 @@ Ten drugi tryb wykonuje **dokładnie dwa** ograniczone, anonimowe GET do publicz
 **Dodatkowy test oficjalnych danych:** osobny jednorazowy job `official-pl-january-2026` wykonuje dwa ograniczone odczyty publicznego API Eurostat (`prc_hicp_fpd` z `release=FIN` oraz `prc_hicp_minr`) dla `2026-01`, `geo=PL`, `M`, `TOTAL`, `I25` (2025=100). Weryfikuje kompletność 1/1, że nie ma fałszywego wyłączenia z powodu incydentu strefy euro i raportuje jedynie liczbę rewizji, maksymalną bezwzględną różnicę punktową oraz skróty SHA-256. Nie wypisuje oryginalnych poziomów indeksu. To **test obserwacji retrospektywnej**, a nie niezależna certyfikacja czasu historycznej dostępności ani dowód, że w innym czasie nie było żadnych korekt.
 
 Odbiór wymaga zielonego testu stycznia, poprzednich 44 testów offline na obu systemach, regresji A2–C2 i G1 na dokładnym końcowym SHA. Wyniki syntetyczne nie zastępują oficjalnego odczytu stycznia.
+
+
+## Rozszerzony odczyt — styczeń–wrzesień 2026 (10.11.2026)
+
+**Cel:** przejść od potwierdzonej zgodności pojedynczego miesiąca `2026-01` i trzech miesięcy `2026-07..09` do **pełnego, spójnego zakresu dziewięciu miesięcy**. Nie wnioskować o stabilności danych wyłącznie na podstawie dotychczasowych czterech sprawdzeń; luty–czerwiec były niezweryfikowane w poprzednim odbiorze.
+
+- Jednorazowy job `official-pl-2026-nine-months` wykonuje dwa anonimowe, ograniczone GET do oficjalnych danych Eurostat, bez konta, płatnych licencji, plików, harmonogramu, dostępu do portfeli lub bazy. `prc_hicp_fpd / release FIN` i `prc_hicp_minr` muszą mieć te same `PL/M/TOTAL/I25` i dokładne miesiące od `2026-01` do `2026-09`.
+- Wymagane: **9/9 miesięcy**, bez braków i nieuprawnionej interpolacji, styczeń nie jest wyłączany na podstawie incydentu dotyczącego agregatów strefy euro, a suma rekordów z niezerową różnicą dokładnie równa się wykazowi takich miesięcy.
+- Do publicznego logu trafiają **jedynie różnice w punktach indeksowych**, lista miesięcy z ewentualnymi zmianami, maksymalna różnica bezwzględna i hashe obu oficjalnych odpowiedzi. Oryginalne poziomy inflacji nie są wypisywane.
+- Dodatkowy test na **9 syntetycznych miesiącach** wymusza rozpoznanie dodatniej i ujemnej rewizji (m.in. +0,2 i −0,1 punktu indeksowego), pominięcie `FLS/Flash`, uwzględnienie polskiego stycznia i obowiązkowy status `HOLD_CASH`. To test zdolności diagnostycznej, nie twierdzenie o rzeczywistych korektach HICP.
+- **Odbiór:** 45 testów syntetycznych na Ubuntu i macOS, rzeczywisty odczyt 9/9 na dokładnym końcowym SHA, zachowane uprzednie testy oddzielnego stycznia i lipca–września oraz G1/A2–C2. Dopóki CI nie potwierdzi wyników, nie ma prawa wpisywać wartości rewizji do raportu jako faktów.
+
+**Granica interpretacji:** `FIN - latest` to porównanie bieżącego archiwum pierwszej publikacji finalnej z bieżącą wersją; żadna taka różnica nie certyfikuje kompletnego kalendarza historycznej dostępności ani wielkości błędu w każdej przejściowej wersji. Reguły metodologiczne ECOICOP v2 i I25 (2025=100) pozostają bez zmian. <https://ec.europa.eu/eurostat/web/hicp/information-data> oraz <https://ec.europa.eu/eurostat/cache/metadata/en/prc_hicp_esms.htm>.
