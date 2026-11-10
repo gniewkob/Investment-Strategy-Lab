@@ -26,6 +26,7 @@ MAX_METADATA_BYTES = 2_000_000
 MAX_SOURCE_BYTES = 5_000_000
 MAX_UNCOMPRESSED_BYTES = 32_000_000
 MAX_ZIP_ENTRIES = 160
+SAFE_LABEL = re.compile(r"^[^\\x00-\\x1f]{0,120}$")
 SAFE_FILENAME = re.compile(r"^[A-Za-z0-9_(). -]{1,160}$")
 OFFICIAL_METADATA = API_ROOT + "/?persistentId=doi%3A" + urllib.parse.quote(DOI, safe="")
 OFFICIAL_FILE_LIST = API_ROOT + "/versions/:latest/files?persistentId=doi%3A" + urllib.parse.quote(DOI, safe="")
@@ -153,12 +154,49 @@ def ods_shape(raw):
     except ET.ParseError as exc:
         raise SourceUnavailable("original ODS content.xml cannot be parsed") from exc
     ns_table = "{urn:oasis:names:tc:opendocument:xmlns:table:1.0}"
+    ns_office = "{urn:oasis:names:tc:opendocument:xmlns:office:1.0}"
+    ns_text = "{urn:oasis:names:tc:opendocument:xmlns:text:1.0}"
     sheets = []
     for table in root.iter(ns_table + "table"):
         rows = list(table.iter(ns_table + "table-row"))
+        name = table.attrib.get(ns_table + "name", "")
+        if len(name) > 120 or not SAFE_LABEL.fullmatch(name):
+            name = "INVALID_NAME"
+        labels = []
+        date_values = []
+        numeric_cells = 0
+        for row_no, row in enumerate(rows):
+            for cell in row.iter():
+                if cell.tag not in (ns_table + "table-cell",
+                                    ns_table + "covered-table-cell"):
+                    continue
+                if cell.get(ns_office + "value-type") in ("float", "currency", "percentage"):
+                    numeric_cells += 1
+                date_value = cell.get(ns_office + "date-value")
+                if date_value and len(date_value) < 40 and re.match(
+                        r"^\\d{4}-\\d{2}-\\d{2}", date_value):
+                    date_values.append(date_value[:10])
+                if row_no >= 10 or len(labels) >= 14:
+                    continue
+                for paragraph in cell.findall(".//" + ns_text + "p"):
+                    label = "".join(paragraph.itertext()).strip()
+                    # Human-readable *labels only*. Numeric return values
+                    # from the original public workbook must not enter CI logs.
+                    if (0 < len(label) <= 70
+                            and SAFE_LABEL.fullmatch(label)
+                            and re.search("[A-Za-z]", label)
+                            and label not in labels):
+                        labels.append(label)
+                        break
         sheets.append({
             "ordinal": len(sheets) + 1,
+            "sheet_name": name,
             "xml_row_nodes": len(rows),
+            "numeric_cell_count_without_values": numeric_cells,
+            "iso_date_cells": len(date_values),
+            "iso_date_min": min(date_values, default=None),
+            "iso_date_max": max(date_values, default=None),
+            "early_textual_labels_not_observations": labels,
             "number_of_column_definitions": len(
                 list(table.iter(ns_table + "table-column"))),
         })
