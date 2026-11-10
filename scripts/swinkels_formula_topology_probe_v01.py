@@ -38,8 +38,8 @@ def _formula_shape_digest(formula: str) -> str:
         raise SourceUnavailable("formula contains no cell reference")
     stripped = REF_RE.sub("[CELL]", formula)
     # Suppress literal numeric values and row coordinates in structural output.
-    stripped = re.sub(r"(?<![A-Za-z_])(?:\\d+(?:\\.\\d+)?(?:[Ee][+-]?\\d+)?)", "#", stripped)
-    stripped = re.sub(r"\\s+", "", stripped)
+    stripped = re.sub(r"(?<![A-Za-z_])(?:\d+(?:\.\d+)?(?:[Ee][+-]?\d+)?)", "#", stripped)
+    stripped = re.sub(r"\s+", "", stripped)
     return hashlib.sha256(stripped.encode("utf-8")).hexdigest()
 
 
