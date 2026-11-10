@@ -145,3 +145,60 @@ Z [Exchanges API](https://eodhd.com/financial-apis/exchanges-api-list-of-tickers
 - **HARD BLOCK:** seria \`SHARE_PRICE\` może być tylko \`MACRO_CONTEXT_REFERENCE\`; zakaz aliasu do \`GLOBAL_EQUITY_TR_PLN\`, \`PL_BONDS_TR_PLN\`, \`GOLD_TR_PLN\`, zakaz papierowych kandydatów i realnych operacji. Wpływ na A1/C1: **żaden**. \`INSUFFICIENT_DATA/HOLD_CASH\` bez zmian.
 
 **Stage 3 decision:** \`EXACT_CANDIDATE_METADATA_IDENTIFIED; DIRECT_OECD_SDMX_RESPONSE_UNCONFIRMED; PER_SERIES_THIRD_PARTY_RIGHTS_UNCONFIRMED; NO_AUTOMATED_INGEST; MACRO_REFERENCE_ONLY; QUALIFIED_TR_SERIES=0\`.
+
+
+## 9. Stage 4 — rozbieżność OECD/GUS co do semantyki polskiego indeksu (10.11.2026)
+
+**Wniosek krytyczny:** identyfikacja kodu \`POL.M.SHARE.IX._Z._Z._Z._Z.N\` nie wystarcza do przypisania mu metodyki *price-only*. Pojawia się konkretna rozbieżność między ogólną definicją OECD a oficjalnymi, potencjalnymi indeksami źródłowymi z GPW. **Nie ustalono, jaki indeks był faktycznie użyty przez OECD**, dlatego zakaz aliasowania tej serii do WIG, WIG20 i dowolnego \`*_TR_PLN\` pozostaje w mocy.
+
+### Fakty rozdzielone od hipotez
+
+| Fakt | Pierwotne źródło | Wniosek, który rzeczywiście wynika |
+|---|---|---|
+| OECD \`Share prices\` to co do zasady **indeks cen**, w przeciwieństwie do indeksu return z dywidendami; średnia miesięczna z obserwacji dziennych | [OECD — Share prices, Definition](https://www.oecd.org/en/data/indicators/share-prices.html) | Etykieta i definicja standardowa OECD są \`PRICE_INDEX\`, **ale nie wskazują**, która polska seria giełdowa stoi pod konkretnym kodem \`POL\` |
+| WIG uwzględnia dywidendy i prawa poboru, tj. jest **indeksem dochodowym**; był obliczany od pierwszej sesji z 16.04.1991 | [GUS — Warszawski Indeks Giełdowy WIG, definicja statystyki publicznej](https://stat.gov.pl/en/metainformation/glossary/terms-used-in-official-statistics/559%2Cterm.html) | WIG **nie jest** \`PRICE_ONLY\` według GUS; sam fakt jego istnienia nie oznacza, że OECD wykorzystywał WIG |
+| WIG20 to **indeks cenowy**, którego data bazowa to 16.04.1994 | [GUS — WIG20, definicja](https://stat.gov.pl/en/metainformation/glossary/terms-used-in-official-statistics/934%2Cterm.html) | OECD miesięczna seria obejmująca 1991 r. nie może być *bezpośrednio, bez dodatkowych rekonstrukcji* historycznym szeregiem WIG20 od 1991 r. |
+| OECD \`POL / M / SHARE / IX\` jest przedstawiony jako miesięczny indeks 2015=100 z historią od maja 1991 | [FRED — \`SPASTT01PLM661N\`, Notes i range](https://fred.stlouisfed.org/series/SPASTT01PLM661N); FRED służy tu tylko do wtórnego potwierdzenia metadanych OECD, **nie** jako kanał ich automatycznego pobierania | Początek historii jest zgodny z okresem działania WIG, ale **nie potwierdza** pierwotnego indeksu, praw/licencji ani metodyki OECD \`SHARE\` dla Polski |
+| OECD Data Explorer publikuje \`OECD.SDD.STES,DSD_STES@DF_FINMARK,4.0\` i kontakt dla danych | [OECD Financial market Data Explorer](https://data-explorer.oecd.org/vis?df%5Bag%5D=OECD.SDD.STES&df%5Bid%5D=DSD_STES%40DF_FINMARK&df%5Bvs%5D=4.0) | Dokładna struktura i \`SOURCE\` dla polskiej serii nie zostały niezależnie odczytane na poziomie obserwacji w obecnym środowisku |
+
+**Hipotezy do zweryfikowania, nie fakty:** \`H1=OECD uses rebased WIG\` (wtedy ogólna etykieta *share prices* potencjalnie nie oddaje całej semantyki); \`H2=OECD uses separate true price-only proxy\`; \`H3=OECD splices sources or methodology across years\`. Wszystkie trzy hipotezy wymagają **oryginalnej odpowiedzi dokumentacyjnej OECD** z rozróżnieniem dat wejścia i zmian metodologii. Nie przypisywać żadnej z nich statusu \`VERIFIED\`.
+
+### Stan bezpośredniej weryfikacji OECD SDMX
+
+Próba odczytu *samej struktury* pod adresem
+
+\`https://sdmx.oecd.org/public/rest/dataflow/OECD.SDD.STES/DSD_STES@DF_FINMARK/4.0?references=all\`
+
+oraz próba odczytu krótkiego zakresu kandydata \`POL.M.SHARE.IX._Z._Z._Z._Z.N\` **nie zostały obsłużone przez dostępne tu narzędzie przeglądania stron** (\`not accessible via this tool\`). **Nie jest to dowód błędu ani nieistnienia serii w OECD SDMX**; odpowiedź API, kolejność wymiarów i konkretna atrybucja \`SOURCE\` nadal mają status \`NOT_INDEPENDENTLY_FETCH_VERIFIED\`. Nie można na tej podstawie twierdzić, że pobrano oryginalne dane.
+
+### P0 — gotowy szkic zapytania do OECD (DO WYSŁANIA PO ODRĘBNEJ DECYZJI; nie wysłano)
+
+**Adres kontaktowy podany w OECD Data Explorer:** \`stat.contact@oecd.org\`
+
+**Subject:** Clarification request: Poland monthly share-price index, OECD DSD_STES@DF_FINMARK, source, methodology and reuse rights
+
+> Dear OECD Statistics and Data Directorate,
+>
+> We are evaluating one Polish monthly financial-market indicator for private, non-commercial, AI-assisted research, not for trading. The dataflow is \`OECD.SDD.STES,DSD_STES@DF_FINMARK,4.0\`; the proposed dimension key is \`POL.M.SHARE.IX._Z._Z._Z._Z.N\` (secondary reference: FRED \`SPASTT01PLM661N\`, for identification only).
+>
+> Could you please confirm (1) the original index name, producer, precise source/rights holder, and whether the Polish series is a *price-only* or *total-return* measure; (2) whether any underlying index, definitions, methodology or compiler changed during the available history (the secondary reference starts in May 1991); (3) where the series-level \`SOURCE\`, licence/third-party reuse notice, publication and revision history, and exact SDMX series key can be independently inspected; and (4) whether storing and analysing this specific series in a private, one-user automated/AI research application, without redistribution, is permitted or requires authorisation from the underlying rights holder?
+>
+> Our concern is that OECD's general Share prices definition is price-only, whereas Statistics Poland defines WIG, calculated from 1991, as a total-return index, and WIG20 as a price index beginning in 1994. We do not assume your series is either instrument.
+>
+> Thank you for confirming the source and appropriate contact for any further rights clearance.
+>
+> Kind regards,
+> Investment Strategy Lab — research inquiry
+
+**Nie wysyłano korespondencji.** Powyższy tekst jest wyłącznie gotowym zapytaniem i w żaden sposób nie ujawnia danych finansowych ani tajnych kluczy. Jeśli odpowiedź OECD nie ustali właściciela lub ujawni ograniczenia praw stron trzecich, nie wdrażać żadnego kolektora. Nie próbować obchodzić tych ograniczeń przez FRED, rehosted CSV lub scraping.
+
+### GO/NO-GO po Stage 4
+
+- \`SERIES_IDENTIFIER = CANDIDATE\` (nie testowany bezpośrednio endpoint).
+- \`UNDERLYING_POLISH_INDEX_IDENTITY = UNVERIFIED\`.
+- \`PRICE_VS_TOTAL_RETURN_SEMANTICS = NOT_CLEARED_FOR_POLISH_OBSERVATIONS\` (wcześniejszy ogólny opis OECD nie jest wystarczającą kontrolą).
+- \`ORIGINAL_RIGHTS_HOLDER_AND_REUSE = UNVERIFIED\`.
+- \`HISTORICAL_VINTAGE_AND_RELEASE_TIMESTAMPS = UNVERIFIED\`.
+- \`AUTOMATED_INGEST = BLOCKED\`; \`MACRO_CONTEXT_RESEARCH = DOCUMENTATION_ONLY\`; \`QUALIFIED_TR_SERIES = 0\`; \`M1_M2_M3 = INSUFFICIENT_DATA/HOLD_CASH\`.
+
+**Decyzja:** zamiast rozbudowy adaptera trzeba uzyskać niezależną identyfikację oryginalnej serii i zakres praw. Dopiero to uzasadni test bezpośredniego, ograniczonego SDMX odczytu oraz weryfikację braków/rewizji na prawidłowo oznaczonych danych.
