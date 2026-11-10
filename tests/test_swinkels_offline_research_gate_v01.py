@@ -4,7 +4,7 @@ from decimal import Decimal
 
 from scripts.swinkels_offline_research_gate_v01 import (
     EXPECTED_MONTHS, SOURCE_SHA256, ResearchGateBlocked,
-    validate_monthly_series, offline_statistics,
+    validate_monthly_series, _validate_synthetic_monthly_series, offline_statistics,
 )
 
 
@@ -22,13 +22,22 @@ def accepted(**overrides):
         methodology_evidence="Swinkels 2019 sections 2-3",
     )
     args.update(overrides)
-    return validate_monthly_series(**args)
+    return _validate_synthetic_monthly_series(**args)
 
 
 class TestSwinkelsGate(unittest.TestCase):
     def assert_blocked(self, expected, **kwargs):
         with self.assertRaisesRegex(ResearchGateBlocked, expected):
             accepted(**kwargs)
+
+    def test_real_source_fail_closed_even_with_fake_evidence(self):
+        with self.assertRaisesRegex(ResearchGateBlocked, "SOURCE_UNITS_NOT_CERTIFIED"):
+            validate_monthly_series(
+                country="DE", observations=example_rows(),
+                source_sha256=SOURCE_SHA256, return_unit="decimal",
+                unit_evidence="I claim it is verified",
+                methodology_evidence="I claim the method is verified",
+            )
 
     def test_complete_decimal(self):
         self.assertEqual(accepted(), (Decimal("0.01"),) * 36)
