@@ -123,10 +123,19 @@ def extract_original_us(raw: bytes) -> dict:
             raise SourceUnavailable("duplicate original US source month")
         yield_cell = cols[positions["DGS10"]]
         ret_cell = cols[positions["Return M"]]
-        if yield_cell.get(O + "value-type") != "percentage" or ret_cell.get(O + "value-type") != "percentage":
-            raise SourceUnavailable("US source yield or return cell not ODF percentage type")
+        yield_type = yield_cell.get(O + "value-type")
+        if yield_type not in ("float", "percentage"):
+            raise SourceUnavailable("DGS10 has unsupported ODF numeric storage type")
+        if ret_cell.get(O + "value-type") != "percentage":
+            raise SourceUnavailable("Return M has unsupported ODF percentage storage type")
+        # Source FRED DGS10 is quoted in percent points (e.g. 3 means 3%);
+        # ODF percentage cells instead persist fractional value (0.03 means 3%).
+        # This is an explicit source/field convention, never a value heuristic.
+        annual_yield = _finite_cell(yield_cell, "DGS10")
+        if yield_type == "float":
+            annual_yield /= 100
         records[month] = {
-            "yield": _finite_cell(yield_cell, "DGS10"),
+            "yield": annual_yield,
             "duration": _finite_cell(cols[positions["Mod Dur"]], "Mod Dur"),
             "convexity": _finite_cell(cols[positions["Convexity"]], "Convexity"),
             "return": _finite_cell(ret_cell, "Return M"),
@@ -168,7 +177,7 @@ def reconcile(records: dict) -> dict:
         "window": "2020-01..2022-12",
         "calculation_reference": "Swinkels 2019 Eq. 3",
         "independent_sensitivities": "discounted semiannual par-coupon cashflows",
-        "yield_input_storage": "ODF_percentage_fraction",
+        "yield_input_storage": "DGS10_FRED_percent_points_if_float_else_ODF_fraction",
         "max_abs_return_gap_using_stored_duration_convexity": f"{max(cached_diffs):.3e}",
         "max_abs_return_gap_using_independent_duration_convexity": f"{max(model_diffs):.3e}",
         "max_abs_duration_gap": f"{max(duration_diffs):.3e}",
