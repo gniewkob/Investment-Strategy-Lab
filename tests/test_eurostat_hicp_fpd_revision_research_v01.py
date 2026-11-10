@@ -31,10 +31,15 @@ def fpd():
     return d
 
 
+def latest_fixture(*, values=(99.3, 100.2, 101.4)):
+    return current_fixture(months=("2026-07", "2026-08", "2026-09"),
+                           values=values)
+
+
 def run(early=None, current=None, since="2026-07", until="2026-09"):
     return compare_revisions(
         fpd() if early is None else early,
-        current_fixture() if current is None else current,
+        latest_fixture() if current is None else current,
         since=since, until=until, observed_at_utc="2026-11-10T12:00:00Z")
 
 
@@ -94,7 +99,7 @@ class FPDFinalRevisionResearchTests(unittest.TestCase):
         self.assertEqual(out["missing_months"], ["2026-08"])
         self.assertEqual(out["comparable_month_count"], 2)
         self.assert_safe(out)
-        latest = current_fixture(values=(99.3, None, 101.4))
+        latest = latest_fixture(values=(99.3, None, 101.4))
         other = run(current=latest)
         self.assertEqual(other["missing_months"], ["2026-08"])
         self.assert_safe(other)
@@ -155,7 +160,7 @@ class FPDFinalRevisionResearchTests(unittest.TestCase):
             run(until="2026-10")
 
     def test_mismatched_minr_units_and_months_rejected(self):
-        c = current_fixture()
+        c = latest_fixture()
         c["dimension"]["unit"]["category"]["index"] = {"I15": 0}
         with self.assertRaisesRegex(HICPRevisionError, "latest-vintage"):
             run(current=c)
@@ -215,12 +220,12 @@ class FPDFinalRevisionResearchTests(unittest.TestCase):
         for instant in ("2026-11-10T12:00:00", "2026-11-10T13:00:00+01:00",
                         "not-time", None):
             with self.subTest(instant=instant), self.assertRaises(HICPRevisionError):
-                compare_revisions(fpd(), current_fixture(), since="2026-07",
+                compare_revisions(fpd(), latest_fixture(), since="2026-07",
                                   until="2026-09", observed_at_utc=instant)
 
     def test_cannot_promote_forged_market_metadata_in_input(self):
         first = fpd()
-        latest = current_fixture()
+        latest = latest_fixture()
         first["historical_pit_certified"] = True
         first["orders_sent"] = 5
         latest["qualified_model_series"] = ["GLOBAL_EQUITY_TR_PLN"]
@@ -229,12 +234,12 @@ class FPDFinalRevisionResearchTests(unittest.TestCase):
         self.assertNotIn("GLOBAL_EQUITY_TR_PLN", json.dumps(result))
 
     def test_receipt_deterministic_immutable_and_no_original_levels_emitted(self):
-        early, later = fpd(), current_fixture()
+        early, later = fpd(), latest_fixture()
         a = run(early, later)
         b = run(deepcopy(early), deepcopy(later))
         self.assertEqual(a, b)
         self.assertEqual(early, fpd())
-        self.assertEqual(later, current_fixture())
+        self.assertEqual(later, latest_fixture())
         rendered = json.dumps(a)
         self.assertNotIn("99.3", rendered)
         self.assertNotIn("100.2", rendered)
