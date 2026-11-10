@@ -47,6 +47,11 @@ class TestSwinkelsMultiCountryFormulaDeps(unittest.TestCase):
         self.assertEqual(census["known_constant_counts"]["months_per_year"], 1)
         self.assertEqual(census["other_numeric_literal_count"], 0)
 
+    def test_hundredth_unit_constant_is_classified(self):
+        census = formula_numeric_constant_classes("of:=[.B20]*0.01+[.C20]*0.01")
+        self.assertEqual(census["known_constant_counts"]["hundredth"], 2)
+        self.assertEqual(census["other_numeric_literal_count"], 0)
+
     def test_unknown_constant_is_not_exported(self):
         census = formula_numeric_constant_classes("of:=[.B20]+987654321")
         self.assertEqual(census["other_numeric_literal_count"], 1)
