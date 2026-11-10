@@ -4,7 +4,7 @@ import unittest
 
 from scripts.swinkels_original_us_equation3_audit_v01 import (
     ALL_MONTHS, MONTHS, SourceUnavailable,
-    par_bond_sensitivities, equation3, reconcile,
+    par_bond_sensitivities, equation3, reconcile, summarize_monthly_returns,
 )
 
 
@@ -49,6 +49,24 @@ class IndependentBondMathTests(unittest.TestCase):
         self.assertEqual(result["qualified_model_series"], [])
         self.assertEqual(result["financial_operations"], 0)
         self.assertEqual(result["model_state"], "HOLD_CASH")
+
+    def test_synthetic_aggregate_statistics(self):
+        result = summarize_monthly_returns([0.01] * 36)
+        self.assertEqual(result["observations"], 36)
+        self.assertAlmostEqual(
+            float(result["compounded_total_return_pct"]),
+            100 * ((1.01 ** 36) - 1), places=3)
+        self.assertEqual(float(result["max_drawdown_pct"]), 0)
+        self.assertEqual(result["research_only"], True)
+        self.assertEqual(result["historical_pit_certified"], False)
+
+    def test_synthetic_drawdown_statistic(self):
+        result = summarize_monthly_returns([-0.10] + [0.0] * 35)
+        self.assertAlmostEqual(float(result["max_drawdown_pct"]), -10, places=6)
+
+    def test_statistic_rejects_missing_observation(self):
+        with self.assertRaisesRegex(SourceUnavailable, "invalid statistical"):
+            summarize_monthly_returns([0.0] * 35)
 
     def test_missing_month_blocks_reconciliation(self):
         with self.assertRaisesRegex(SourceUnavailable, "window mismatch"):
