@@ -113,3 +113,35 @@ Z [Exchanges API](https://eodhd.com/financial-apis/exchanges-api-list-of-tickers
 - **P1:** przed uruchomieniem adaptera danych kontekstowych określić próbę obserwacji, rewizje, atrybucję, zakres przechowywania i brak wejścia do systemu zleceń. Nie zlecać kolejnego syntetycznego parsera jako substytutu dowodu.
 
 **Stage 2 decision:** \`OFFICIAL_OPEN_MACRO_PATH_FEASIBLE_CONDITIONALLY; OPEN_GLOBAL_ETF_TOTAL_RETURN_NOT_IDENTIFIED; EODHD_NO_PROVIDER_INGEST; MODEL_SERIES_QUALIFIED=0; NO_REAL_FINANCIAL_ACTIONS\`.
+
+
+## 8. Stage 3 — pierwsza dokładna seria OECD, status praw/PIT (10.11.2026)
+
+**Wybrany, rzeczywisty identyfikator makroekonomicznego szeregu:** \`OECD Financial Market: Share Prices for Poland\`, nie inwestycyjny benchmark total return. Semantyka jest potwierdzona przez [OECD Share prices — Definition](https://www.oecd.org/en/data/indicators/share-prices.html) i publiczne metadane [OECD Financial market Data Explorer](https://data-explorer.oecd.org/vis?df%5Bag%5D=OECD.SDD.STES&df%5Bid%5D=DSD_STES%40DF_FINMARK&df%5Bvs%5D=4.0). Ten indeks **nie uwzględnia reinwestowanych dywidend**, jego miesięczne wartości zwykle stanowią średnią obserwacji cenowych, **nie** cenę zamknięcia z ostatniego dnia miesiąca i **nie** rynkową cenę wykonania zlecenia.
+
+### Identyfikacja serii i granice jej walidacji
+
+| Pole | Wartość i dowód | Poziom pewności |
+|---|---|---|
+| Agencja i struktura | \`OECD.SDD.STES\`, \`DSD_STES@DF_FINMARK\`, wersja \`4.0\` — oficjalny Data Explorer, „Financial market” | \`VERIFIED_DATAFLOW\` |
+| Wymiary | \`REF_AREA=POL\`, \`FREQ=M\`, \`MEASURE=SHARE\`, \`UNIT_MEASURE=IX\`, \`ACTIVITY=_Z\`, \`ADJUSTMENT=_Z\`, \`TRANSFORMATION=_Z\`, \`TIME_HORIZ=_Z\`, \`METHODOLOGY=N\` — metadane [FRED \`SPASTT01PLM661N\`](https://fred.stlouisfed.org/series/SPASTT01PLM661N) odwołujące się do OECD; definicja OECD weryfikuje semantykę \`SHARE\` | \`DIMENSIONS_SECONDARY_CROSSCHECK\` |
+| Kandydat na pełny klucz SDMX | \`POL.M.SHARE.IX._Z._Z._Z._Z.N\` złożony z powyższych dziewięciu wymiarów | \`CONSTRUCTED_NOT_HTTP_VERIFIED\` — bezpośrednie wywołanie OECD SDMX nie zostało potwierdzone; nie oznaczać jako ukończonego adaptera |
+| Jednostka | \`Index 2015=100\`, ceny akcji, bez korekty sezonowej, częstotliwość miesięczna | \`METADATA_CONFIRMED\` |
+| Właściciel praw do oryginalnego indeksu | Na podstawie samej definicji OECD i publicznych filtrów **nie ustalono jednoznacznie praw oryginalnego indeksu** dla tego konkretnego szeregu. Danych FRED nie wolno traktować jako dowodu zgody pierwotnego właściciela. | \`ORIGINAL_DATA_OWNER_UNVERIFIED\` |
+| Rewizje i historyczne PIT | FRED opisuje możliwość rewizji serii; dzisiejszy Data Explorer nie dostarczył w tym audycie niezależnej historii \`first_available_at\` dla każdej obserwacji. | \`VINTAGES_NOT_VERIFIED\` |
+
+**Źródła i precyzyjne ograniczenia licencji:**
+
+1. [OECD Terms & Conditions, §3 „Data”, „Permitted Use”](https://www.oecd.org/en/about/terms-conditions.html): OECD dopuszcza szerokie wykorzystanie własnych danych i wymaga atrybucji, ale **wyraźnie wyłącza domniemaną zgodę na wykorzystanie danych, do których prawa mają osoby trzecie**. Przy serii cen akcji, którą OECD może otrzymywać od innych podmiotów, weryfikacja zakładki \`Source\` i konkretnego właściciela jest obowiązkową **kontrolą projektową** przed ingestem; nie ma dziś potwierdzenia własności całej serii przez OECD.
+2. [FRED: Financial Market: Share Prices for Poland](https://fred.stlouisfed.org/series/SPASTT01PLM661N), \`Notes\`: pokazuje wymienione wymiary OECD i etykietę **\`Copyrighted: Citation Required\`**; jest to tylko dodatkowa weryfikacja metadanych. [FRED Terms, §II Prohibited Use oraz Additional Terms for API §(k)–(l)](https://fred.stlouisfed.org/legal/terms/) ograniczają użycie usług/treści i API w związku z AI oraz przechowywaniem danych API. **Nie integrować FRED API/MCP z agentem lub repozytorium ISL jako obejścia praw do danych OECD**. FRED nie może przyznać praw do źródła zewnętrznego.
+3. [OECD Data Explorer — Financial market](https://data-explorer.oecd.org/vis?df%5Bag%5D=OECD.SDD.STES&df%5Bid%5D=DSD_STES%40DF_FINMARK&df%5Bvs%5D=4.0): właściwa preferowana domena do niezależnego potwierdzenia właściciela, wideo/metryk rewizji i docelowego kodu. **Zapytanie do oryginalnego endpointu SDMX nie zostało ukończone w obecnym odczycie**, dlatego nie twierdzić, że mamy aktywną serię produkcyjną, potwierdzoną datę publikacji czy kompletne lata danych.
+
+### Decision / action register
+
+- **PASS:** \`SOURCE_FAMILY=OECD_FINMARK\`, \`REFERENCE_AREA=POL\`, \`MEASURE=SHARE_PRICE\`, \`FREQ=M\`, \`UNIT=INDEX_2015_100\`; dokładna dziewięciowymiarowa specyfikacja do ręcznego sprawdzenia.
+- **BLOCKED:** \`DIRECT_OECD_RESPONSE_VERIFIED=false\`, \`SERIES_SOURCE_OWNER_CLEARED=false\`, \`THIRD_PARTY_USAGE_RIGHTS_CLEARED=false\`, \`HISTORICAL_VINTAGE_VERIFIED=false\`. Żadnego automatycznego pobrania pełnej serii bez tych dowodów.
+- **NEXT P0:** właściciel danych ma sprawdzić w Data Explorer widok \`Source\` i dokument opisujący własność danych; w razie braku jasności zgłosić do kontaktu OECD \`stat.contact@oecd.org\` wskazując cały \`dataflow\`, dziewięć wymiarów, cel prywatnych badań, zakres retencji/AI i pytanie o zgodę właściciela. Przed użyciem zweryfikować odpowiedź i ewentualne warunki stron trzecich.
+- **NEXT P1:** po dopuszczeniu konkretnej serii zarejestrować \`retrieved_at\`, źródło, obserwowany okres, rewizję, luki, cytowanie; **bez wartości indeksowych w publicznym GitHub ani w logach CI**, a \`first_observed_at\` nie zastępuje historycznego \`first_published_at\`.
+- **HARD BLOCK:** seria \`SHARE_PRICE\` może być tylko \`MACRO_CONTEXT_REFERENCE\`; zakaz aliasu do \`GLOBAL_EQUITY_TR_PLN\`, \`PL_BONDS_TR_PLN\`, \`GOLD_TR_PLN\`, zakaz papierowych kandydatów i realnych operacji. Wpływ na A1/C1: **żaden**. \`INSUFFICIENT_DATA/HOLD_CASH\` bez zmian.
+
+**Stage 3 decision:** \`EXACT_CANDIDATE_METADATA_IDENTIFIED; DIRECT_OECD_SDMS_RESPONSE_UNCONFIRMED; PER_SERIES_THIRD_PARTY_RIGHTS_UNCONFIRMED; NO_AUTOMATED_INGEST; MACRO_REFERENCE_ONLY; QUALIFIED_TR_SERIES=0\`.
