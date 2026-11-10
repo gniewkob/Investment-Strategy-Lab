@@ -29,7 +29,7 @@ MONTHS = frozenset(f"{y:04d}-{m:02d}" for y in range(2020, 2023) for m in range(
 EXPECTED_VARIANTS = 10
 MAX_REF_COUNT = 24
 NUMERIC_LITERAL = re.compile(r"(?<![A-Za-z_])\d+(?:\.\d+)?(?:[Ee][+-]?\d+)?")
-PUBLIC_CONSTANTS = {"1": "one", "2": "two", "10": "ten_years", "12": "months_per_year", "100": "percent_point_base", "0.5": "half"}
+PUBLIC_CONSTANTS = {"1": "one", "2": "two", "10": "ten_years", "12": "months_per_year", "100": "percent_point_base", "0.5": "half", "0.01": "hundredth", "100.0": "percent_point_base_float", "12.0": "months_per_year_float", "10.0": "ten_years_float"}
 
 
 def formula_numeric_constant_classes(formula: str) -> dict:
