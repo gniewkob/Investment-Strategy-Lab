@@ -19,7 +19,7 @@ from pathlib import Path
 import re
 
 from scripts.nbp_publication_lag_offline_v01 import (
-    NBPDateLagError, MAX_INPUT_BYTES as API_LIMIT, _read_local,
+    NBPDateLagError, _read_local,
     assess_nbp_publication_lag,
 )
 
@@ -59,8 +59,9 @@ def _archive_inventory(raw: bytes, *, year: int) -> dict[date, int]:
         text = raw.decode("ascii")
     except UnicodeDecodeError as exc:
         raise NBPDirectoryError("NBP archive names must be ASCII") from exc
-    lines = [line.strip() for line in text.splitlines()]
-    if not lines or len(lines) > MAX_DIRECTORY_ENTRIES or any(not line for line in lines):
+    lines = text.splitlines()
+    if (not lines or len(lines) > MAX_DIRECTORY_ENTRIES
+            or any(not line or line != line.strip() for line in lines)):
         raise NBPDirectoryError("empty, invalid or oversized archive inventory")
     seen_names = set()
     dates: dict[date, int] = {}
