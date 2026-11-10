@@ -1,0 +1,36 @@
+name: ISL Swinkels original publisher ODS source fingerprint (one-shot)
+
+# A source-evidence diagnostic, NOT licensed market-trading data collection.
+# No schedule, tokens, brokers, wallets, orders, databases or uploads.
+on:
+  pull_request:
+    paths:
+      - 'scripts/research_swinkels_original_source_probe_v01.py'
+      - 'docs/SWINKELS_ORIGINAL_PUBLISHER_FILE_EVIDENCE_20261110_PL.md'
+      - '.github/workflows/isl-swinkels-publisher-original-probe-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dataversenl-original-ods-evidence:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Official publisher metadata and original ODS, never export the file
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m scripts.research_swinkels_original_source_probe_v01
+      - name: Research qualification status
+        if: always()
+        run: |
+          echo 'SWINKELS_HISTORIC_BOND_SOURCE_DOES_NOT_QUALIFY_PL_BONDS_TR_PLN'
+          echo 'SOURCE_OFFERING_ORIGINAL_FILE_ONLY_M1_M2_M3_HOLD_CASH'
