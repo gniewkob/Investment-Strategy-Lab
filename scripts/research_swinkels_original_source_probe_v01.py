@@ -140,11 +140,15 @@ def _column_cells(row, ns_table):
                              ns_table + "covered-table-cell"):
             continue
         repeat = child.get(ns_table + "number-columns-repeated", "1")
-        if not repeat.isdigit() or not 1 <= int(repeat) <= 100:
-            raise SourceUnavailable("unsafe ODS repeated column count")
-        cells.extend([child] * int(repeat))
-        if len(cells) > 200:
-            raise SourceUnavailable("original workbook has oversized row width")
+        if not repeat.isdigit() or not 1 <= int(repeat) <= 1_000_000:
+            raise SourceUnavailable("invalid repeated column count")
+        # ODS commonly uses a single trailing empty cell repeated thousands of
+        # times. Clamp without allocating those cells; the 2020-2022 Return M
+        # source columns are within the first 200 cells.
+        room = max(0, 200 - len(cells))
+        if not room:
+            break
+        cells.extend([child] * min(int(repeat), room))
     return cells
 
 
