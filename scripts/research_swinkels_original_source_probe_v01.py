@@ -26,7 +26,7 @@ MAX_METADATA_BYTES = 2_000_000
 MAX_SOURCE_BYTES = 5_000_000
 MAX_UNCOMPRESSED_BYTES = 32_000_000
 MAX_ZIP_ENTRIES = 160
-SAFE_LABEL = re.compile(r"^[^\\x00-\\x1f]{0,120}$")
+SAFE_LABEL = re.compile(r"^[^\x00-\x1f]{0,120}$")
 SAFE_FILENAME = re.compile(r"^[A-Za-z0-9_(). -]{1,160}$")
 OFFICIAL_METADATA = API_ROOT + "/?persistentId=doi%3A" + urllib.parse.quote(DOI, safe="")
 OFFICIAL_FILE_LIST = API_ROOT + "/versions/:latest/files?persistentId=doi%3A" + urllib.parse.quote(DOI, safe="")
@@ -174,7 +174,7 @@ def ods_shape(raw):
                     numeric_cells += 1
                 date_value = cell.get(ns_office + "date-value")
                 if date_value and len(date_value) < 40 and re.match(
-                        r"^\\d{4}-\\d{2}-\\d{2}", date_value):
+                        r"^\d{4}-\d{2}-\d{2}", date_value):
                     date_values.append(date_value[:10])
                 if row_no >= 10 or len(labels) >= 14:
                     continue
