@@ -1,0 +1,96 @@
+name: ISL I7 NBP archive directory date/number offline consistency gate
+
+# Inspect two local records only. No NBP network download, no index data,
+# external DB, account, wallet, broker, orders or model qualification.
+on:
+  pull_request:
+    paths:
+      - 'scripts/nbp_archive_directory_reconcile_v01.py'
+      - 'tests/test_nbp_archive_directory_reconcile_v01.py'
+      - 'docs/I7_AUTHORITATIVE_SOURCE_EVIDENCE_AND_NBP_ARCHIVE_REVIEW_20261110_PL.md'
+      - '.github/workflows/isl-i7-nbp-archive-reconcile-offline-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  archive-ubuntu:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Offline source-directory consistency, PIT and rights nonpromotion
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import socket
+          import unittest
+
+          def deny_network(*_a, **_k):
+              raise AssertionError('I7 offline test attempted a network connection')
+          socket.socket.connect = deny_network
+          socket.socket.connect_ex = deny_network
+          socket.create_connection = deny_network
+
+          modules = [
+              'tests.test_nbp_archive_directory_reconcile_v01',
+              'tests.test_nbp_publication_lag_offline_v01',
+              'tests.test_source_evidence_dossier_v01',
+              'tests.test_a2_explicit_source_access_v01',
+          ]
+          tests = unittest.defaultTestLoader.loadTestsFromNames(modules)
+          result = unittest.TextTestRunner(verbosity=2).run(tests)
+          if not result.wasSuccessful() or result.skipped or result.testsRun != 60:
+              raise SystemExit('I7_NBP_ARCHIVE_INDEPENDENT_EVIDENCE_GATE_BLOCKED')
+          print('I7_NBP_ARCHIVE_DIRECTORY_OFFLINE_PASS tests=' + str(result.testsRun))
+          print('I7_NO_PIT_CERTIFICATION_NO_LICENCE_CLAIM_NO_REAL_MARKET_SOURCE')
+          PY
+      - name: Declare research-only limits
+        run: echo 'NO_NETWORK_NO_SOURCE_LICENSE_INFERENCE_NO_TRADING_NO_EXTERNAL_DB'
+
+  archive-macos:
+    runs-on: macos-15
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Offline source-directory consistency, PIT and rights nonpromotion
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import socket
+          import unittest
+
+          def deny_network(*_a, **_k):
+              raise AssertionError('I7 offline test attempted a network connection')
+          socket.socket.connect = deny_network
+          socket.socket.connect_ex = deny_network
+          socket.create_connection = deny_network
+
+          modules = [
+              'tests.test_nbp_archive_directory_reconcile_v01',
+              'tests.test_nbp_publication_lag_offline_v01',
+              'tests.test_source_evidence_dossier_v01',
+              'tests.test_a2_explicit_source_access_v01',
+          ]
+          tests = unittest.defaultTestLoader.loadTestsFromNames(modules)
+          result = unittest.TextTestRunner(verbosity=2).run(tests)
+          if not result.wasSuccessful() or result.skipped or result.testsRun != 60:
+              raise SystemExit('I7_NBP_ARCHIVE_INDEPENDENT_EVIDENCE_GATE_BLOCKED')
+          print('I7_NBP_ARCHIVE_DIRECTORY_OFFLINE_PASS tests=' + str(result.testsRun))
+          print('I7_NO_PIT_CERTIFICATION_NO_LICENCE_CLAIM_NO_REAL_MARKET_SOURCE')
+          PY
+      - name: Declare research-only limits
+        run: echo 'NO_NETWORK_NO_SOURCE_LICENSE_INFERENCE_NO_TRADING_NO_EXTERNAL_DB'
