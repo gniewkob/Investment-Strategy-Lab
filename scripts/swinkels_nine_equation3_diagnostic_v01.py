@@ -147,6 +147,11 @@ def compare_series(records):
                            / len(residuals_simple_carry))
     return {
         "months": len(MONTHS),
+        "economic_reconciliation_status": (
+            "AGREEMENT_WITHIN_NUMERICAL_TOLERANCE"
+            if max(map(abs, residuals)) <= 1e-10
+            else "RECONCILIATION_NOT_ACCEPTED"
+        ),
         "max_abs_gap_compound_carry": f"{max(map(abs, residuals)):.3e}",
         "rms_gap_compound_carry": f"{rms:.3e}",
         "max_abs_gap_simple_carry": f"{max(map(abs, residuals_simple_carry)):.3e}",
@@ -164,6 +169,7 @@ def diagnostic(groups):
         "window": "2020-01..2022-12",
         "country_variant_count": len(SHEETS),
         "series": [{"variant": name, **compare_series(groups[name])} for name in SHEETS],
+        "overall_economic_qualification": "NOT_ACCEPTED_WITHOUT_SOURCE_FORMULA_REPRODUCTION",
         "formula_economic_semantics_certified": False,
         "historical_pit_certified": False,
         "qualified_model_series": [],
