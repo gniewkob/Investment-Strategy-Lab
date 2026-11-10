@@ -28,8 +28,9 @@ from scripts.eurostat_hicp_macro_context_v01 import (
     _payload_values as latest_values, _month, _next_month,
 )
 from scripts.eurostat_hicp_fpd_schema_probe_v01 import (
-    API_ROOT as FPD_URL_ROOT, _canonical as canonical_fpd,
-    _category_index as category_index, _read_offline as read_fpd,
+    API_ROOT as FPD_URL_ROOT, FPDProbeError,
+    _canonical as canonical_fpd, _category_index as category_index,
+    _read_offline as read_fpd,
 )
 
 SCHEMA = "ISL_EUROSTAT_HICP_PL_FIRST_FINAL_REVISION_RESEARCH_V01"
@@ -81,7 +82,10 @@ def _positions(index):
 
 def _fpd_final_values(payload, since, until):
     """Parse verified FIN/Final dimension; never infer releases from time keys."""
-    _canonical(payload)
+    try:
+        _canonical(payload)
+    except FPDProbeError as exc:
+        raise HICPRevisionError("invalid bounded FPD input JSON") from exc
     if (not isinstance(payload, dict) or payload.get("class") != "dataset"
             or str(payload.get("version")) != "2.0"
             or payload.get("source") not in ("ESTAT", "Eurostat")):
@@ -100,7 +104,10 @@ def _fpd_final_values(payload, since, until):
         dim = dims.get(name)
         if not isinstance(dim, dict) or not isinstance(dim.get("category"), dict):
             raise HICPRevisionError("missing FPD dimension metadata")
-        position = _positions(dim["category"].get("index"))
+        try:
+            position = _positions(dim["category"].get("index"))
+        except FPDProbeError as exc:
+            raise HICPRevisionError("invalid FPD category index positions") from exc
         if len(position) != size:
             raise HICPRevisionError("FPD category cardinality mismatch")
         catalog[name] = position
