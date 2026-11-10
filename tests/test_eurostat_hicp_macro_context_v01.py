@@ -194,7 +194,7 @@ class EurostatHICPContextTests(unittest.TestCase):
 
     def test_out_of_bounds_and_future_query_rejected(self):
         for start, end in (
-            ("2020-01", "2026-03"),
+            ("2015-01", "2026-03"),
             ("2026-03", "2026-01"),
             ("2026-11", "2026-12"),
             ("2026-02-01", "2026-03"),
