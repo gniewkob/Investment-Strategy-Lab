@@ -16,6 +16,13 @@ from tests.test_eurostat_hicp_fpd_schema_probe_v01 import example as fpd_fixture
 
 def fpd():
     d = fpd_fixture()
+    # Use the *actual* official Eurostat FPD release codes established on
+    # Draft #121: FIN=Final, FLS=Flash. The probe's independent negative-test
+    # fixture intentionally used R1/R2 placeholder codes.
+    d["dimension"]["release"]["category"]["index"] = {"FIN": 0, "FLS": 1}
+    d["dimension"]["release"]["category"]["label"] = {
+        "FIN": "Final", "FLS": "Flash",
+    }
     d["value"] = {
         "0": 99.3, "1": 100.1, "2": 101.4,
         "3": 19.9, "4": 20.1, "5": 21.4,
