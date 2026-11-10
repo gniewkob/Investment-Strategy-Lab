@@ -1,0 +1,113 @@
+name: ISL Eurostat HICP Poland official public macro context (research only)
+
+# Strictly read-only. No provider credentials, scheduled collection, portfolio
+# source promotion, historical first-release assertion, brokerage or DB.
+on:
+  pull_request:
+    paths:
+      - 'scripts/eurostat_hicp_macro_context_v01.py'
+      - 'tests/test_eurostat_hicp_macro_context_v01.py'
+      - 'docs/EUROSTAT_HICP_MACRO_CONTEXT_ACCEPTANCE_20261110_PL.md'
+      - '.github/workflows/isl-eurostat-hicp-macro-context-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-ubuntu:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Offline JSON-stat schema, chronology, macro-only and failure tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import socket, unittest
+          def deny(*args, **kwargs):
+              raise AssertionError("Offline HICP tests attempted network")
+          socket.socket.connect = deny
+          socket.socket.connect_ex = deny
+          socket.create_connection = deny
+          suite = unittest.defaultTestLoader.loadTestsFromNames([
+              "tests.test_eurostat_hicp_macro_context_v01"
+          ])
+          r = unittest.TextTestRunner(verbosity=2).run(suite)
+          if not r.wasSuccessful() or r.skipped or r.testsRun != 18:
+              raise SystemExit("HICP_MACRO_RESEARCH_ACCEPTANCE_BLOCKED")
+          print("ISL_EUROSTAT_HICP_OFFLINE_PASS tests=" + str(r.testsRun))
+          print("ISL_HICP_CONTEXT_ONLY_QUALIFIED_TOTAL_RETURN_SERIES_ZERO")
+          PY
+
+  offline-macos:
+    runs-on: macos-15
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Offline JSON-stat schema, chronology, macro-only and failure tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import socket, unittest
+          def deny(*args, **kwargs):
+              raise AssertionError("Offline HICP tests attempted network")
+          socket.socket.connect = deny
+          socket.socket.connect_ex = deny
+          socket.create_connection = deny
+          suite = unittest.defaultTestLoader.loadTestsFromNames([
+              "tests.test_eurostat_hicp_macro_context_v01"
+          ])
+          r = unittest.TextTestRunner(verbosity=2).run(suite)
+          if not r.wasSuccessful() or r.skipped or r.testsRun != 18:
+              raise SystemExit("HICP_MACRO_RESEARCH_ACCEPTANCE_BLOCKED")
+          print("ISL_EUROSTAT_HICP_OFFLINE_PASS tests=" + str(r.testsRun))
+          print("ISL_HICP_CONTEXT_ONLY_QUALIFIED_TOTAL_RETURN_SERIES_ZERO")
+          PY
+
+  one-shot-official-smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: One bounded public Eurostat HTTPS GET (diagnostic only)
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m scripts.eurostat_hicp_macro_context_v01 \
+            --fetch-official --since 2026-07 --until 2026-09 |
+          python -c '
+          import sys, json
+          raw=sys.stdin.read().strip()
+          prefix="ISL_EUROSTAT_HICP_CONTEXT="
+          if not raw.startswith(prefix): raise SystemExit("MISSING_EUROSTAT_RECEIPT")
+          x=json.loads(raw[len(prefix):])
+          if (x["status"]!="AVAILABLE_CONTEXT_NOT_HISTORICAL_PIT"
+              or x["observed_month_count"]!=3
+              or x["qualified_model_series"]!=[]
+              or x["model_state"]!="HOLD_CASH"
+              or x["historical_point_in_time_certified"]
+              or x["financial_operations"]!=0):
+              raise SystemExit("HICP_OFFICIAL_SMOKE_NOT_QUALIFIED")
+          print("ISL_HICP_OFFICIAL_PUBLIC_READ_OK months="+str(x["available_month_count"]))
+          print("ISL_HICP_RESEARCH_ONLY_DATASET="+x["dataset"])
+          print("ISL_HICP_SOURCE_SHA="+x["source_payload_canonical_sha256"])
+          '
