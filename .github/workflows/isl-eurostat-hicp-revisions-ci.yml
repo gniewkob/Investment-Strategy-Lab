@@ -125,3 +125,51 @@ jobs:
           print("ISL_HICP_REVISION_RECEIPT_SHA="+r["receipt_sha256"])
           print("ISL_HICP_MACRO_ONLY_HISTORIC_PIT_NOT_CERTIFIED")
           '
+
+  official-pl-january-2026:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Read Poland January 2026 FIN and latest — euro-area notice context only
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m scripts.eurostat_hicp_fpd_revision_research_v01 \
+            --fetch-official --since 2026-01 --until 2026-01 |
+          python -c '
+          import sys, json
+          prefix="ISL_HICP_FPD_REVISION_RESEARCH="
+          raw=sys.stdin.read().strip()
+          if not raw.startswith(prefix):
+              raise SystemExit("JAN2026_NO_OFFICIAL_EUROSTAT_RECEIPT")
+          r=json.loads(raw[len(prefix):])
+          if (r["country"]!="PL" or r["month_count"]!=1
+              or r["comparable_month_count"]!=1
+              or r["requested_from"]!="2026-01"
+              or r["requested_to"]!="2026-01"
+              or r["status"]!="REVISION_COMPARISON_RESEARCH_ONLY"
+              or r["exception_months"]!=[]
+              or r["euro_area_archive_notice_months_context_only"]!=["2026-01"]
+              or r["euro_area_archive_restoration_notice_scope"]!="EURO_AREA_AGGREGATES_NOT_PL"
+              or r["notice_is_independent_evidence_of_poland_revision"]
+              or not r["rows"][0]["included_in_revision_summary"]
+              or r["qualified_model_series"]!=[]
+              or r["historical_point_in_time_certified"]
+              or r["market_execution_authorized"]
+              or r["financial_operations"]!=0):
+              raise SystemExit("JAN2026_POLAND_RESEARCH_SCOPE_OR_SOURCE_FAILED")
+          print("ISL_HICP_PL_JAN2026_OFFICIAL_PAIR_PASS months=1")
+          print("ISL_HICP_PL_JAN2026_NONZERO_REVISIONS="+str(r["nonzero_revision_months"]))
+          print("ISL_HICP_PL_JAN2026_MAX_ABS_REVISION_INDEX_POINTS="+r["max_absolute_revision_index_points"])
+          print("ISL_HICP_JAN2026_EURO_AREA_ONLY_NOTICE_NOT_PL_ASSUMPTION")
+          print("ISL_HICP_PL_JAN2026_FPD_SHA="+r["fpd_canonical_sha256"])
+          print("ISL_HICP_PL_JAN2026_LATEST_SHA="+r["latest_canonical_sha256"])
+          print("ISL_HICP_PL_JAN2026_RECEIPT_SHA="+r["receipt_sha256"])
+          print("ISL_HICP_PL_JAN2026_MACRO_ONLY_NO_MARKET_TRADING")
+          '
