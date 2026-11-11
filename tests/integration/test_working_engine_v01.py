@@ -633,5 +633,79 @@ class WorkingEngineAcceptance(unittest.TestCase):
             "SELECT count(*) FROM investment_lab.paper_events"), 3)
 
 
+    def test_v03_replay_and_health_stable_across_session_timezones(self):
+        # The same UTC cutoff and source rows must never generate new UUIDs,
+        # fingerprints or research rows in sessions using a different TimeZone.
+        self.conn.execute("SET TIME ZONE 'UTC'")
+        first = self.conn.execute(V03_SQL).fetchall()
+        self.assertEqual({row[11] for row in first}, {"NEW_RESEARCH_RUN"})
+        pinned = {row[0]: (row[3], row[4], row[17], row[19]) for row in first}
+        self.conn.execute("SET TIME ZONE 'Europe/Warsaw'")
+        replay = self.conn.execute(V03_SQL).fetchall()
+        self.assertEqual({row[11] for row in replay}, {"IDEMPOTENT_REPLAY"})
+        self.assertEqual({row[0]: (row[3], row[4], row[17], row[19])
+                          for row in replay}, pinned)
+        self.assertEqual({row[3] for row in self.conn.execute(
+            V03_HEALTH_SQL).fetchall()}, {"ENGINE_OK"})
+        self.conn.execute("SET TIME ZONE 'UTC'")
+        self.assertEqual({row[3] for row in self.conn.execute(
+            V03_HEALTH_SQL).fetchall()}, {"ENGINE_OK"})
+        self.assertEqual(self.scalar(
+            "SELECT count(*) FROM investment_lab.research_runs"), 3)
+        self.assertEqual(self.scalar(
+            "SELECT count(*) FROM investment_lab.paper_events"), 3)
+
+    def test_v03_health_rejects_missing_required_safety_fields(self):
+        self.conn.execute(V03_SQL)
+        self.conn.execute("""UPDATE investment_lab.research_runs
+          SET assumptions=assumptions - 'engine'
+          WHERE model_code='M1_GLOBAL_EQ'
+            AND assumptions->>'engine'='working-engine-v03'""")
+        self.conn.execute("""UPDATE investment_lab.research_runs
+          SET metrics=metrics - 'real_financial_operations'
+          WHERE model_code='M2_DIVERSIFIED'
+            AND assumptions->>'engine'='working-engine-v03'""")
+        self.conn.execute("""UPDATE investment_lab.research_runs
+          SET metrics=metrics - 'new_paper_events'
+          WHERE model_code='M3_TACTICAL'
+            AND assumptions->>'engine'='working-engine-v03'""")
+        status = {row[0]: row[3] for row in self.conn.execute(
+            V03_HEALTH_SQL).fetchall()}
+        self.assertEqual(status, {
+            "M1_GLOBAL_EQ": "CYCLE_INVALID",
+            "M2_DIVERSIFIED": "CYCLE_INVALID",
+            "M3_TACTICAL": "CYCLE_INVALID",
+        })
+        self.assertEqual(self.scalar(
+            "SELECT count(*) FROM investment_lab.paper_events"), 3)
+
+    def test_nbp_compiled_ingest_keeps_single_utc_observation_across_timezones(self):
+        from scripts.nbp_lab_ingest_sql import build_sql
+        from tests.test_nbp_lab_ingest_sql import receipt
+
+        # Disposable fixture only. Real LAB schema is never mutated.
+        self.conn.execute("""CREATE UNIQUE INDEX test_nbp_source_uniq
+          ON investment_lab.price_observations
+          (instrument_code,source_code,observed_for,interval_code)""")
+        sql = build_sql(receipt())
+        self.conn.execute("SET TIME ZONE 'Europe/Warsaw'")
+        initial = self.conn.execute(sql).fetchone()
+        self.assertEqual(initial[2], 3)
+        self.conn.execute("SET TIME ZONE 'UTC'")
+        replay = self.conn.execute(sql).fetchone()
+        self.assertEqual(replay[1:4], (0, 0, 0))
+        rows = self.conn.execute("""SELECT instrument_code,
+                   (observed_for AT TIME ZONE 'UTC')::date
+          FROM investment_lab.price_observations
+          WHERE source_code IN ('nbp_rates','nbp_gold')
+          ORDER BY instrument_code""").fetchall()
+        self.assertEqual(len(rows), 3)
+        self.assertEqual({str(row[1]) for row in rows}, {"2026-11-02"})
+        self.assertEqual(self.scalar("""SELECT count(*)
+          FROM investment_lab.audit_events WHERE kind='INGEST'"""), 1)
+        self.assertEqual(self.scalar(
+            "SELECT count(*) FROM investment_lab.paper_events"), 3)
+
+
 if __name__ == "__main__":
     unittest.main()
