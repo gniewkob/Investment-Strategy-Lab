@@ -1,0 +1,243 @@
+name: ISL Eurostat HICP FIN first-vs-latest public research revision audit
+
+# Sources: Eurostat only, public free statistical API. No secret, schedule,
+# real trading, wallet, external DB, licensed index prices or trading signal.
+on:
+  pull_request:
+    paths:
+      - 'scripts/eurostat_hicp_fpd_revision_research_v01.py'
+      - 'tests/test_eurostat_hicp_fpd_revision_research_v01.py'
+      - 'docs/EUROSTAT_HICP_FIRST_FINAL_VS_CURRENT_ACCEPTANCE_20261110_PL.md'
+      - '.github/workflows/isl-eurostat-hicp-revisions-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  revision-ubuntu:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Socket-blocked offline revisions, latest HICP, FPD schema tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import socket
+          import unittest
+          def blocked(*args, **kwargs):
+              raise AssertionError("Offline HICP revision test attempted network")
+          socket.socket.connect = blocked
+          socket.socket.connect_ex = blocked
+          socket.create_connection = blocked
+          tests = unittest.defaultTestLoader.loadTestsFromNames([
+              "tests.test_eurostat_hicp_fpd_revision_research_v01",
+              "tests.test_eurostat_hicp_fpd_schema_probe_v01",
+              "tests.test_eurostat_hicp_macro_context_v01",
+          ])
+          result = unittest.TextTestRunner(verbosity=2).run(tests)
+          if not result.wasSuccessful() or result.skipped or result.testsRun != 45:
+              raise SystemExit("HICP_REVISION_RESEARCH_OFFLINE_GATE_BLOCKED")
+          print("ISL_HICP_FPD_REVISION_OFFLINE_PASS tests="+str(result.testsRun))
+          print("ISL_HICP_EQUITY_BOND_GOLD_TR_QUALIFIED=0")
+          PY
+
+  revision-macos:
+    runs-on: macos-15
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Socket-blocked offline revisions, latest HICP, FPD schema tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import socket
+          import unittest
+          def blocked(*args, **kwargs):
+              raise AssertionError("Offline HICP revision test attempted network")
+          socket.socket.connect = blocked
+          socket.socket.connect_ex = blocked
+          socket.create_connection = blocked
+          tests = unittest.defaultTestLoader.loadTestsFromNames([
+              "tests.test_eurostat_hicp_fpd_revision_research_v01",
+              "tests.test_eurostat_hicp_fpd_schema_probe_v01",
+              "tests.test_eurostat_hicp_macro_context_v01",
+          ])
+          result = unittest.TextTestRunner(verbosity=2).run(tests)
+          if not result.wasSuccessful() or result.skipped or result.testsRun != 45:
+              raise SystemExit("HICP_REVISION_RESEARCH_OFFLINE_GATE_BLOCKED")
+          print("ISL_HICP_FPD_REVISION_OFFLINE_PASS tests="+str(result.testsRun))
+          print("ISL_HICP_EQUITY_BOND_GOLD_TR_QUALIFIED=0")
+          PY
+
+  official-pair-smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Two bounded read-only Eurostat public GETs; no source levels in logs
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m scripts.eurostat_hicp_fpd_revision_research_v01 \
+            --fetch-official --since 2026-07 --until 2026-09 |
+          python -c '
+          import sys,json
+          prefix="ISL_HICP_FPD_REVISION_RESEARCH="
+          raw=sys.stdin.read().strip()
+          if not raw.startswith(prefix):
+              raise SystemExit("MISSING_OFFICIAL_PAIR_REVISION_RECEIPT")
+          r=json.loads(raw[len(prefix):])
+          if (r["status"]!="REVISION_COMPARISON_RESEARCH_ONLY"
+              or r["month_count"]!=3
+              or r["comparable_month_count"]!=3
+              or r["missing_months"]
+              or r["exception_months"]
+              or r["qualified_model_series"]!=[]
+              or r["historical_point_in_time_certified"]
+              or r["model_state"]!="HOLD_CASH"
+              or r["orders_sent"]!=0
+              or r["financial_operations"]!=0):
+              raise SystemExit("HICP_REAL_SOURCE_REVISION_COMPARISON_INCOMPLETE")
+          print("ISL_HICP_FPD_OFFICIAL_REVISION_PAIR_PASS months="+str(r["comparable_month_count"]))
+          print("ISL_HICP_FPD_NONZERO_REVISION_MONTHS="+str(r["nonzero_revision_months"]))
+          print("ISL_HICP_FPD_MAX_ABS_REVISION_POINTS="+r["max_absolute_revision_index_points"])
+          print("ISL_HICP_FPD_FIRST_FINAL_SHA="+r["fpd_canonical_sha256"])
+          print("ISL_HICP_LATEST_SHA="+r["latest_canonical_sha256"])
+          print("ISL_HICP_REVISION_RECEIPT_SHA="+r["receipt_sha256"])
+          print("ISL_HICP_MACRO_ONLY_HISTORIC_PIT_NOT_CERTIFIED")
+          '
+
+  official-pl-january-2026:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Read Poland January 2026 FIN and latest — euro-area notice context only
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m scripts.eurostat_hicp_fpd_revision_research_v01 \
+            --fetch-official --since 2026-01 --until 2026-01 |
+          python -c '
+          import sys, json
+          prefix="ISL_HICP_FPD_REVISION_RESEARCH="
+          raw=sys.stdin.read().strip()
+          if not raw.startswith(prefix):
+              raise SystemExit("JAN2026_NO_OFFICIAL_EUROSTAT_RECEIPT")
+          r=json.loads(raw[len(prefix):])
+          if (r["country"]!="PL" or r["month_count"]!=1
+              or r["comparable_month_count"]!=1
+              or r["requested_from"]!="2026-01"
+              or r["requested_to"]!="2026-01"
+              or r["status"]!="REVISION_COMPARISON_RESEARCH_ONLY"
+              or r["exception_months"]!=[]
+              or r["euro_area_archive_notice_months_context_only"]!=["2026-01"]
+              or r["euro_area_archive_restoration_notice_scope"]!="EURO_AREA_AGGREGATES_NOT_PL"
+              or r["notice_is_independent_evidence_of_poland_revision"]
+              or not r["rows"][0]["included_in_revision_summary"]
+              or r["qualified_model_series"]!=[]
+              or r["historical_point_in_time_certified"]
+              or r["market_execution_authorized"]
+              or r["financial_operations"]!=0):
+              raise SystemExit("JAN2026_POLAND_RESEARCH_SCOPE_OR_SOURCE_FAILED")
+          print("ISL_HICP_PL_JAN2026_OFFICIAL_PAIR_PASS months=1")
+          print("ISL_HICP_PL_JAN2026_NONZERO_REVISIONS="+str(r["nonzero_revision_months"]))
+          print("ISL_HICP_PL_JAN2026_MAX_ABS_REVISION_INDEX_POINTS="+r["max_absolute_revision_index_points"])
+          print("ISL_HICP_JAN2026_EURO_AREA_ONLY_NOTICE_NOT_PL_ASSUMPTION")
+          print("ISL_HICP_PL_JAN2026_FPD_SHA="+r["fpd_canonical_sha256"])
+          print("ISL_HICP_PL_JAN2026_LATEST_SHA="+r["latest_canonical_sha256"])
+          print("ISL_HICP_PL_JAN2026_RECEIPT_SHA="+r["receipt_sha256"])
+          print("ISL_HICP_PL_JAN2026_MACRO_ONLY_NO_MARKET_TRADING")
+          '
+
+  official-pl-2026-nine-months:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Two bounded public Eurostat reads; Jan-Sep first FIN vs latest
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m scripts.eurostat_hicp_fpd_revision_research_v01 \
+            --fetch-official --since 2026-01 --until 2026-09 |
+          python -c '
+          import sys, json
+          prefix = "ISL_HICP_FPD_REVISION_RESEARCH="
+          raw = sys.stdin.read().strip()
+          if not raw.startswith(prefix):
+              raise SystemExit("HICP_2026_JAN_SEP_NO_OFFICIAL_RECEIPT")
+          r = json.loads(raw[len(prefix):])
+          months = [f"2026-{i:02d}" for i in range(1,10)]
+          rows = r.get("rows", [])
+          if (r["country"] != "PL"
+              or r["source"] != "Eurostat"
+              or r["frequency"] != "M"
+              or r["coicop18"] != "TOTAL"
+              or r["unit"] != "I25_INDEX_2025_100"
+              or r["fpd_dataset"] != "prc_hicp_fpd"
+              or r["fpd_release_category"] != "FIN"
+              or r["excluded_fpd_release_category"] != "FLS"
+              or r["latest_dataset"] != "prc_hicp_minr"
+              or r["status"] != "REVISION_COMPARISON_RESEARCH_ONLY"
+              or r["requested_from"] != "2026-01"
+              or r["requested_to"] != "2026-09"
+              or r["month_count"] != 9
+              or r["comparable_month_count"] != 9
+              or [x["month"] for x in rows] != months
+              or any(not x["included_in_revision_summary"] for x in rows)
+              or r["missing_months"] != []
+              or r["exception_months"] != []
+              or r["euro_area_archive_notice_months_context_only"] != ["2026-01"]
+              or r["notice_is_independent_evidence_of_poland_revision"]
+              or r["qualified_model_series"] != []
+              or r["paper_candidates"] != []
+              or r["model_state"] != "HOLD_CASH"
+              or r["historical_point_in_time_certified"]
+              or r["market_execution_authorized"]
+              or any(r[k] != 0 for k in ("orders_sent", "financial_operations", "paper_fills", "database_writes"))):
+              raise SystemExit("HICP_2026_JAN_SEP_SOURCE_OR_SCOPE_INVALID")
+          differences = [x for x in rows if x["revision_index_points"] != "0"
+                         and float(x["revision_index_points"]) != 0.0]
+          if len(differences) != r["nonzero_revision_months"]:
+              raise SystemExit("HICP_REVISION_COUNT_MISMATCH")
+          print("ISL_HICP_PL_2026_JAN_SEP_REAL_PAIR_PASS months=9")
+          print("ISL_HICP_PL_2026_JAN_SEP_NONZERO="+str(r["nonzero_revision_months"]))
+          print("ISL_HICP_PL_2026_JAN_SEP_MAX_ABS_INDEX_POINTS="+r["max_absolute_revision_index_points"])
+          print("ISL_HICP_PL_2026_JAN_SEP_REVISED_MONTHS="+json.dumps(
+              [{"month": x["month"], "revision_index_points": x["revision_index_points"]}
+               for x in differences], sort_keys=True))
+          print("ISL_HICP_PL_2026_JAN_SEP_FIRST_FIN_SHA="+r["fpd_canonical_sha256"])
+          print("ISL_HICP_PL_2026_JAN_SEP_CURRENT_SHA="+r["latest_canonical_sha256"])
+          print("ISL_HICP_PL_2026_JAN_SEP_RECEIPT_SHA="+r["receipt_sha256"])
+          print("ISL_HICP_PL_2026_JAN_SEP_RESEARCH_ONLY_NO_PIT_NO_TRADING")
+          '

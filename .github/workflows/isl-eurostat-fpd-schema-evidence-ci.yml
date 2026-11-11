@@ -1,0 +1,88 @@
+name: ISL Eurostat HICP FPD actual release schema and metadata-only audit
+
+# One explicit public-source read on PR / manual dispatch only.
+# No schedule, no price/index observation values in GitHub logs or artifacts.
+# No trading, broker, data storage, source promotion or external DB.
+on:
+  pull_request:
+    paths:
+      - 'scripts/eurostat_hicp_fpd_schema_probe_v01.py'
+      - 'tests/test_eurostat_hicp_fpd_schema_probe_v01.py'
+      - 'docs/EUROSTAT_HICP_FPD_SCHEMA_EVIDENCE_20261110_PL.md'
+      - '.github/workflows/isl-eurostat-fpd-schema-evidence-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-synthetic:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test source shape and non-disclosure contract without network
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import socket
+          import unittest
+          def blocked(*args, **kwargs):
+              raise AssertionError("FPD synthetic test network activity forbidden")
+          socket.socket.connect = blocked
+          socket.socket.connect_ex = blocked
+          socket.create_connection = blocked
+          suite = unittest.defaultTestLoader.loadTestsFromNames([
+              "tests.test_eurostat_hicp_fpd_schema_probe_v01"
+          ])
+          r = unittest.TextTestRunner(verbosity=2).run(suite)
+          if not r.wasSuccessful() or r.skipped or r.testsRun != 10:
+              raise SystemExit("FPD_OFFLINE_SOURCE_SCHEMA_GATE_BLOCKED")
+          print("ISL_EUROSTAT_FPD_SCHEMA_OFFLINE_PASS tests="+str(r.testsRun))
+          print("ISL_FPD_INDEX_VALUES_EXPORTED=0")
+          PY
+
+  official-schema:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: One official Eurostat public FPD GET; release dimension metadata only
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m scripts.eurostat_hicp_fpd_schema_probe_v01 --fetch-official |
+          python -c '
+          import sys,json
+          prefix="ISL_FPD_METADATA="
+          data=sys.stdin.read().strip()
+          if not data.startswith(prefix): raise SystemExit("NO_FPD_METADATA_RECEIPT")
+          r=json.loads(data[len(prefix):])
+          if (r["qualified_model_series"]!=[]
+              or r["first_release_value_compared"]
+              or r["historical_pit_certified"]
+              or r["model_state"]!="HOLD_CASH"
+              or r["index_values_emitted"]
+              or r["financial_operations"]!=0):
+              raise SystemExit("FPD_MACRO_GATE_NOT_SAFE")
+          print("ISL_FPD_PUBLIC_SCHEMA_VERIFIED=true")
+          print("ISL_FPD_SOURCE_SHA="+r["canonical_local_response_sha256"])
+          print("ISL_FPD_DIMENSIONS="+",".join(x["id"] for x in r["dimensions"]))
+          print("ISL_FPD_RELEASE_DIMENSION="+r["release_dimension_id"])
+          for axis in r["dimensions"]:
+              if axis["id"]==r["release_dimension_id"]:
+                  print("ISL_FPD_RELEASE_CATEGORY_COUNT="+str(axis["size"]))
+                  print("ISL_FPD_RELEASE_CATEGORIES="+json.dumps(axis["codes"],sort_keys=True))
+          print("ISL_FPD_NO_PRICE_VALUES_NO_PIT_ATTESTATION")
+          '
