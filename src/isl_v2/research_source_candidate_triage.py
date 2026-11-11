@@ -32,7 +32,7 @@ _CANDIDATES = {
     "TBSP_INDEX": CandidateDescription(
         "TBSP_INDEX", "BONDS_TR_PLN", "TOTAL_RETURN_INDEX", "PLN",
         "PL_SOVEREIGN_BONDS",
-        "https://www.bondspot.pl/tbsp_index_description_en",
+        "https://gpwbenchmark.pl/karta-indeksu?isin=PL9999999474",
     ),
     "VANGUARD_ALL_WORLD_ACC": CandidateDescription(
         "VANGUARD_ALL_WORLD_ACC", "EQUITY_TR_PLN",
