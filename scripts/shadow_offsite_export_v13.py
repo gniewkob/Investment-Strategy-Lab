@@ -64,7 +64,7 @@ def _read_source(path, expected_hash):
         if (len(data) > MAX_FILE_BYTES
                 or sha256(data).hexdigest() != expected_hash
                 or (os.fstat(fd).st_dev, os.fstat(fd).st_ino) != (st.st_dev, st.st_ino)):
-            raise ShadowInputError("source changed or content hash mismatch")
+            raise ShadowInputError("source digest mismatch or contents changed")
         return data
     finally:
         os.close(fd)
