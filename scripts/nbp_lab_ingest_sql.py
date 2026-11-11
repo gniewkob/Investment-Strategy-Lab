@@ -133,6 +133,8 @@ def build_sql(receipt: dict) -> str:
            + source_receipts["fx"]["sha256"][:12] + "-" + source_receipts["gold"]["sha256"][:12])
     prepared = _quoted(rows)
     sources = _quoted(source_receipts)
+    # NBP publication dates are mapped to explicit UTC midnight regardless
+    # of the executing PostgreSQL session TimeZone.
     # All dynamic values above are validated. Strings enter SQL exclusively
     # through SQL-escaped JSON literals, never from arbitrary SQL fragments.
     return f"""
@@ -147,12 +149,12 @@ candidate AS (
  SELECT c.instrument_code,c.publication_day FROM candidate c
  JOIN investment_lab.price_observations p
  ON p.instrument_code=c.instrument_code AND p.source_code=c.source_code
- AND p.observed_for=c.publication_day::timestamptz AND p.interval_code='1d'
+ AND p.observed_for=(c.publication_day::timestamp AT TIME ZONE 'UTC') AND p.interval_code='1d'
  WHERE p.close_price<>c.value OR p.return_basis<>c.return_basis
 ), inserted AS (
  INSERT INTO investment_lab.price_observations
  (instrument_code,source_code,observed_for,ingested_at,interval_code,close_price,return_basis,source_url)
- SELECT c.instrument_code,c.source_code,c.publication_day::timestamptz,
+ SELECT c.instrument_code,c.source_code,(c.publication_day::timestamp AT TIME ZONE 'UTC'),
  now(),'1d',c.value,c.return_basis,c.source_url
  FROM candidate c WHERE NOT EXISTS(SELECT 1 FROM conflicts)
  ON CONFLICT (instrument_code,source_code,observed_for,interval_code) DO NOTHING
