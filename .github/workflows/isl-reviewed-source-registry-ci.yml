@@ -1,0 +1,50 @@
+name: ISL reviewed source registry integrity (synthetic only)
+
+on:
+  pull_request:
+    paths:
+      - 'src/isl_v2/reviewed_source_registry.py'
+      - 'tests/test_reviewed_source_registry.py'
+      - '.github/workflows/isl-reviewed-source-registry-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  reviewed-source-registry-contract:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Synthetic official-series pin, integrity, and PIT rejection tests
+        run: |
+          set -euo pipefail
+          python -m unittest tests.test_reviewed_source_registry -v
+      - name: Assert actual registry has no approved sources
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from src.isl_v2.reviewed_source_registry import registry_inventory
+          report = registry_inventory()
+          assert report['reviewed_source_pin_count'] == 0
+          assert len(report['assets']) == 3
+          assert all(v['source_state'] == 'PIN_REVIEW_REQUIRED' for v in report['assets'])
+          assert report['model_admission_granted'] is False
+          assert report['qualified_model_series'] == []
+          assert report['financial_operations'] == 0
+          print('REVIEWED_SOURCE_PINS=0')
+          print('EQUITY_TR_PLN=BONDS_TR_PLN=GOLD_TR_PLN=PIN_REVIEW_REQUIRED')
+          print('MODEL_ADMISSION_GRANTED=false')
+          print('HISTORICAL_PIT_CERTIFIED=false')
+          print('M1_M2_M3=HOLD_CASH')
+          PY
