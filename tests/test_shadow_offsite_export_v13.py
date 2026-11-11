@@ -148,11 +148,14 @@ class V13CopyTests(unittest.TestCase):
         from scripts import shadow_offsite_export_v13 as module
         original = module._read_source
         moved = self.root / "displaced"
-        first = [True]
+        reads = [0]
 
         def interfere(*args, **kwargs):
-            if first[0]:
-                first[0] = False
+            # The first three reads now occur in the bounded source prescan,
+            # before destination_root is opened. Swap only during the actual
+            # file-copy phase, after the destination root descriptor is pinned.
+            reads[0] += 1
+            if reads[0] == 4:
                 self.destination.rename(moved)
                 self.destination.mkdir(mode=0o700)
             return original(*args, **kwargs)
