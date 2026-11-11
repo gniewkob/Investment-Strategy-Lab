@@ -1,0 +1,41 @@
+name: ISL Total-Return source evidence preflight (synthetic only)
+
+on:
+  pull_request:
+    paths:
+      - 'src/isl_v2/total_return_evidence_preflight.py'
+      - 'tests/test_total_return_evidence_preflight.py'
+      - '.github/workflows/isl-total-return-evidence-preflight-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  source-evidence-contract:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Synthetic-only TR source evidence and PIT contract checks
+        run: |
+          set -euo pipefail
+          python -m unittest tests.test_total_return_evidence_preflight -v
+      - name: Explicit no-authorization boundary
+        if: always()
+        run: |
+          echo "TR_SOURCE_STRUCTURAL_PREFLIGHT_ONLY"
+          echo "SOURCE_IDENTITY_INDEPENDENTLY_AUTHENTICATED=false"
+          echo "MODEL_ADMISSION_GRANTED=false"
+          echo "PIT_CERTIFIED=false"
+          echo "M1_M2_M3=HOLD_CASH"
+          echo "FINANCIAL_OPERATIONS=0"
