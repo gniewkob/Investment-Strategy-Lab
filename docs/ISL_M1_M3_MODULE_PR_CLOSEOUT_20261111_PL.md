@@ -30,10 +30,14 @@ Historyczne alerty GitGuardian #95 i #121 wskazywały incydent `22028650` związ
 
 Uruchomiony kod nie tworzył transakcji, nie przenosił aktywów, nie upoważniał do wdrożenia produkcyjnego ani nie podnosił jakości danych do `PIT_QUALIFIED`. Status badawczy modeli pozostaje `INSUFFICIENT_DATA/HOLD_CASH`.
 
-## Zadania P0 niezakończone — nie zamykać bez dowodów
+## Zadania P0 i ograniczony odbiór źródła Swinkels
 
 1. [#97](https://github.com/gniewkob/Investment-Strategy-Lab/issues/97): faktyczne oryginalne NAV Vanguard z 60 wymaganymi miesiącami, weryfikacja ISIN, SHA-256 i formatowania, dokładne dopasowanie dat NBP, prawo do konkretnego wykorzystania oraz wynik importerów. Zapis pliku w prywatnej bibliotece lub jego nazwa nie jest dowodem walidacji oryginalnych bajtów.
 2. [#116](https://github.com/gniewkob/Investment-Strategy-Lab/issues/116): prawa dostawców, dokładna semantyka indeksu i historyczne wersje publikacji TBSP/global equity/gold — brak dokumentów autoryzujących odpowiednie użycie i niezależnej chronologii. Nie korzystać z kopii obchodzących licencje.
-3. [#123](https://github.com/gniewkob/Investment-Strategy-Lab/issues/123): oryginalny Swinkels ODS/README oraz historyczne wzory i 360 obserwacji już zweryfikowane; jednak niepotwierdzona równoważność wersji DOI v6 vs migracja Dataverse i wciąż fail-closed publiczny interfejs statystyk rzeczywistych serii. Nie oznaczać pełnego odbioru do usunięcia tych dwóch luk.
+3. [#123](https://github.com/gniewkob/Investment-Strategy-Lab/issues/123): **zamknięte jako wykonany ograniczony audyt oryginalnego źródła**, nie jako kwalifikacja inwestycyjnych danych. Podstawą jest kontrola oryginalnego ODS/README, modeli zwrotów i 360 historycznych obserwacji (szczegóły: [komentarz odbioru](https://github.com/gniewkob/Investment-Strategy-Lab/issues/123#issuecomment-6805146044)). Nadal **nie** potwierdzono równoważności bajtów historycznego DOI v6 i migracji Dataverse, pełnych historycznych PIT ani odblokowania publicznego API rzeczywistych statystyk; ograniczenia te nie mogą być ukryte przez stan Closed. Brakującą kwalifikację źródła i historycznych wersji śledzi #116.
 
-**Exit criteria:** można uznać etap PR za zamknięty. Nie można oznaczyć całego modułu `DONE` bez rozliczenia trzech P0, formalnej triage incydentu bezpieczeństwa, oraz kwalifikacji uprawnionych danych historycznych. Nie zamieniać zielonego CI lub danych referencyjnych w autoryzację obrotu.
+**Exit criteria:** można uznać etap PR za zamknięty. Nie można oznaczyć całego modułu `DONE` bez rozliczenia dwóch nadal otwartych P0 (#97 i #116), formalnej triage incydentu bezpieczeństwa, oraz kwalifikacji uprawnionych danych historycznych. Nie zamieniać zielonego CI lub danych referencyjnych w autoryzację obrotu.
+
+## Korekta statusu 19:22 UTC
+
+Po stworzeniu pierwotnego dokumentu #123 zostało zamknięte jako **bounded original-source offline audit**, ze ściśle opisanymi ograniczeniami i bez kwalifikacji PIT. Nie zmienia to statusu całego modułu: #97/#116 pozostają otwarte, dane modelowe nadal `INSUFFICIENT_DATA/HOLD_CASH`.
