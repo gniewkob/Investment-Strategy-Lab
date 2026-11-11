@@ -1,5 +1,7 @@
 """v0.25 synthetic-only original XLSX + official NBP raw evidence tests."""
 from datetime import datetime, timezone
+from io import BytesIO
+from zipfile import ZipFile
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import os
@@ -81,6 +83,34 @@ class NAVFXCaptureV25Tests(unittest.TestCase):
         frozen,baseline=sources()
         with self.assertRaisesRegex(ValueError,"month incomplete"):
             run(frozen,baseline,raw_xlsx=fake_xlsx(61),clock=lambda:NOV)
+
+    def test_rejects_saved_partial_month_export_on_later_inspection(self):
+        frozen,baseline=sources()
+        with self.assertRaisesRegex(ValueError,"after completed month"):
+            run(frozen,baseline,raw_xlsx=fake_xlsx(61),
+                clock=lambda:DEC,
+                xlsx_retrieved_at_utc="2026-11-21T12:00:00+00:00")
+
+    def test_decimal_trailing_zero_does_not_count_as_historical_revision(self):
+        frozen,baseline=sources()
+        original=fake_xlsx(61)
+        raw_io=BytesIO()
+        # Synthetic XLSX only: change the string formatting of one unchanged
+        # historical NAV cell, preserving its numeric value.
+        with ZipFile(BytesIO(original)) as src, ZipFile(raw_io,"w") as dst:
+            for name in src.namelist():
+                contents=src.read(name)
+                if name=="xl/worksheets/sheet1.xml":
+                    old=b'<c r="C2"><v>100</v></c>'
+                    self.assertEqual(contents.count(old),1)
+                    contents=contents.replace(old,b'<c r="C2"><v>100.0000</v></c>')
+                dst.writestr(name,contents)
+        r,raw=run(frozen,baseline,raw_xlsx=raw_io.getvalue(),
+                  clock=lambda:DEC,
+                  xlsx_retrieved_at_utc="2026-12-02T12:00:00+00:00")
+        self.assertEqual(r["status"],"READY_FOR_EXPLICIT_NBP_SOURCE_READ")
+        self.assertEqual(r["historical_revision_count"],0)
+        self.assertIsNone(raw)
 
     def test_valid_new_export_without_network_is_ready_only(self):
         frozen,baseline=sources()

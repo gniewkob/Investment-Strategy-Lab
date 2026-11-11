@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 from datetime import datetime, timezone, date
+from decimal import Decimal
 from hashlib import sha256
 import json
 import os
@@ -68,6 +69,8 @@ def collect(frozen, baseline, *, raw_xlsx=None, xlsx_retrieved_at_utc=None,
     freeze_at = _utc(frozen["frozen_at_utc"])
     if not freeze_at < at <= now:
         raise ValueError("provider retrieval must postdate freeze and not be future")
+    if at.date() < date(2026,12,1):
+        raise ValueError("new original export must be retrieved after completed month")
     incoming = inspect_export(raw_xlsx, "2021-11", "2026-11", as_of=now.date())
     out["provider_original_sha256"] = incoming["raw_export_sha256"]
     if out["provider_original_sha256"] == frozen["original_nav_file_sha256"]:
@@ -75,7 +78,7 @@ def collect(frozen, baseline, *, raw_xlsx=None, xlsx_retrieved_at_utc=None,
     history = {r["month"]:r for r in baseline["monthly"]}
     revisions = [r["month"] for r in incoming["monthly"][:-1]
                  if (r["observed_for"] != history[r["month"]]["observed_for"]
-                     or r["nav_usd"] != history[r["month"]]["nav_usd"])]
+                     or Decimal(r["nav_usd"]) != Decimal(history[r["month"]]["nav_usd"]))]
     out["historical_revision_count"] = len(revisions)
     out["historical_revision_months"] = revisions
     if revisions:

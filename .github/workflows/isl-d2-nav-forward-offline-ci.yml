@@ -30,14 +30,16 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      # Original v0.23/v0.25 blobs remain preserved in historical PRs.
+      # This check pins the reviewed security fix, not the original 2026 freeze.
       - name: Verify unchanged v0.24/v0.25 source and v0.22/v0.23 frozen anchor
         shell: bash
         run: |
           set -euo pipefail
           test "$(git hash-object scripts/nav_forward_preflight_v24.py)" = "8dd45653fa74175630a278215ac514ee593e0b55"
-          test "$(git hash-object scripts/nav_fx_evidence_capture_v25.py)" = "e6fc4ef8910b04beb2de0bd1d0afd8ab5599c148"
+          test "$(git hash-object scripts/nav_fx_evidence_capture_v25.py)" = "3fe488a6932e107179476bfd9e1ea072bcbe46ad"
           test "$(git hash-object scripts/nav_forward_freeze_v22.py)" = "7a9c7e5cbc643b5ad760ec64d4212468b64a22bf"
-          test "$(git hash-object scripts/nav_forward_admission_v23.py)" = "d425076ea809f622e5b2c1c4e87ba59fe060f990"
+          test "$(git hash-object scripts/nav_forward_admission_v23.py)" = "712156d52220b48aba00aff25a075130a54626b4"
           echo "D2_ORIGINAL_SOURCE_BLOBS_VERIFIED"
       - name: Test private source candidate handling and fail-closed month chronology
         shell: bash
@@ -60,7 +62,7 @@ jobs:
               "tests.test_nav_fx_evidence_capture_v25",
           ])
           result=unittest.TextTestRunner(verbosity=2).run(suite)
-          if not result.wasSuccessful() or result.testsRun != 19 or result.skipped:
+          if not result.wasSuccessful() or result.testsRun != 21 or result.skipped:
               raise SystemExit("D2_NAV_FORWARD_SOURCE_GATE_BLOCKED")
           print("D2_NAV_FORWARD_OFFLINE_PASS tests="+str(result.testsRun))
           print("D2_PRIVATE_NBP_RAW_NO_OVERWRITE_NO_SYMLINK_RESEARCH_ONLY")

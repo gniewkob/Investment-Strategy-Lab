@@ -53,6 +53,15 @@ class NavForwardAdmissionV23Tests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,"not yet complete"):
             self.anchored(frozen,candidate,BEFORE)
 
+    def test_late_inspection_must_not_admit_partial_november_export(self):
+        frozen,candidate=fixture()
+        candidate["observed_for"]="2026-11-20"
+        candidate["nbp_source_url"]=candidate["nbp_source_url"].replace(
+            "2026-11-30/2026-11-30", "2026-11-20/2026-11-20")
+        candidate["original_export_retrieved_at_utc"]="2026-11-21T12:00:00+00:00"
+        with self.assertRaisesRegex(ValueError,"completed month"):
+            self.anchored(frozen,candidate,LATER)
+
     def test_later_candidate_is_still_unqualified_and_nonexecutible(self):
         frozen,candidate=fixture()
         result=self.anchored(frozen,candidate,LATER)
