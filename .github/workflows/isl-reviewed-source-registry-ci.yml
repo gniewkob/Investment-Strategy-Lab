@@ -5,6 +5,8 @@ on:
     paths:
       - 'src/isl_v2/reviewed_source_registry.py'
       - 'tests/test_reviewed_source_registry.py'
+      - 'src/isl_v2/research_source_candidate_triage.py'
+      - 'tests/test_research_source_candidate_triage.py'
       - '.github/workflows/isl-reviewed-source-registry-ci.yml'
   workflow_dispatch:
 
@@ -29,7 +31,7 @@ jobs:
       - name: Synthetic official-series pin, integrity, and PIT rejection tests
         run: |
           set -euo pipefail
-          python -m unittest tests.test_reviewed_source_registry -v
+          python -m unittest tests.test_reviewed_source_registry tests.test_research_source_candidate_triage -v
       - name: Assert actual registry has no approved sources
         run: |
           set -euo pipefail
