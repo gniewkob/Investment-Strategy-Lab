@@ -12,6 +12,8 @@ on:
       - 'scripts/vanguard_nav_to_pln_reference_v04.py'
       - 'tests/test_vanguard_xlsx_offline_intake_v04.py'
       - 'tests/test_reference_archive_calendar_v04.py'
+      - 'tests/test_a2_explicit_source_access_v01.py'
+      - 'docs/A2_POST_SPLIT_OFFLINE_GATE_REVIEW_20261109_PL.md'
       - 'tests/test_vanguard_nav_to_pln_reference_v04.py'
       - '.github/workflows/isl-a2-offline-source-evidence-ci.yml'
   workflow_dispatch:
@@ -41,7 +43,7 @@ jobs:
           def deny_network(*_args, **_kwargs):
               raise AssertionError('A2 offline source contract test attempted network access')
 
-          # Network disabled at Python socket layer during all three suites.
+          # Network disabled at Python socket layer during all four suites.
           socket.socket.connect = deny_network
           socket.socket.connect_ex = deny_network
           socket.create_connection = deny_network
@@ -49,6 +51,7 @@ jobs:
           suites = [
               'tests.test_vanguard_xlsx_offline_intake_v04',
               'tests.test_reference_archive_calendar_v04',
+              'tests.test_a2_explicit_source_access_v01',
               'tests.test_vanguard_nav_to_pln_reference_v04',
           ]
           tests = unittest.defaultTestLoader.loadTestsFromNames(suites)
