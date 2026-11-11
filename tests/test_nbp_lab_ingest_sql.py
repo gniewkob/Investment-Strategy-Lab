@@ -32,6 +32,11 @@ class NBPSqlCompilationTests(unittest.TestCase):
         self.assertIn("original_publication_hour_known',false", sql)
         self.assertEqual(sql, build_sql(receipt()))
 
+    def test_publication_date_uses_explicit_utc_midnight(self):
+        sql = build_sql(receipt())
+        self.assertEqual(sql.count("(c.publication_day::timestamp AT TIME ZONE 'UTC')"), 2)
+        self.assertNotIn("c.publication_day::timestamptz", sql)
+
     def test_rejects_tampered_price_and_source(self):
         for field, value in (("close_price", "-1"),
                              ("source_code", "coinbase_spot"),
