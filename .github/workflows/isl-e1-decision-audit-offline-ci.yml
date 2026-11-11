@@ -1,0 +1,61 @@
+name: ISL E1 decision robustness quality and chronology CI
+
+# Only synthetic scenario and pre-recorded decision tests; not true market
+# OOS, historical source PIT, prospective Alpha or portfolio advice.
+on:
+  pull_request:
+    paths:
+      - 'scripts/research_decision_robustness_v26.py'
+      - 'tests/test_research_decision_robustness_v26.py'
+      - 'scripts/research_decision_quality_v27.py'
+      - 'tests/test_research_decision_quality_v27.py'
+      - 'scripts/research_chronological_decision_audit_v28.py'
+      - 'tests/test_research_chronological_decision_audit_v28.py'
+      - '.github/workflows/isl-e1-decision-audit-offline-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  synthetic-decision:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate robustness, synthetic quality and ordered snapshot audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -W error::ResourceWarning - <<'PY'
+          import socket
+          import unittest
+
+          def no_network(*_a, **_k):
+              raise AssertionError("E1 synthetic research must never access providers")
+          socket.socket.connect = no_network
+          socket.socket.connect_ex = no_network
+          socket.create_connection = no_network
+
+          suite = unittest.defaultTestLoader.loadTestsFromNames([
+              "tests.test_research_decision_robustness_v26",
+              "tests.test_research_decision_quality_v27",
+              "tests.test_research_chronological_decision_audit_v28",
+          ])
+          result = unittest.TextTestRunner(verbosity=2).run(suite)
+          if not result.wasSuccessful() or result.testsRun != 23 or result.skipped:
+              raise SystemExit("E1_SYNTHETIC_DECISION_GATE_BLOCKED")
+          print("E1_DECISION_ROBUSTNESS_OFFLINE_PASS tests=" + str(result.testsRun))
+          print("E1_NO_REAL_MARKET_PIT_OOS_RETURNS_OR_EXECUTABLE_ORDERS")
+          PY
+      - name: Confirm source and account access constraints
+        run: echo "NO_ORIGINAL_MARKET_SOURCE_NO_NEON_NO_WALLET_NO_BROKER_NO_EXECUTION"
