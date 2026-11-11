@@ -24,6 +24,7 @@
 
 ### TBSP.Index — rozdzielenie administratora, historii i licencji
 
+- **Bezpośredni opis aktualnego administratora:** [GPW Benchmark — karta TBSP.Index, ISIN PL9999999474](https://gpwbenchmark.pl/karta-indeksu?isin=PL9999999474) potwierdza rodzaj indeksu dochodowego, reinwestycję kuponów, PLN, skład obligacji stałokuponowych i zerokuponowych oraz datę bazową 29.12.2006. To dowód klasyfikacji metodologicznej, **nie** autoryzowany eksport danych ani status PIT.
 - BondSpot wskazuje GPW Benchmark jako administratora indeksu od **01.12.2019**: https://www.bondspot.pl/tbsp_index_description_en
 - Oficjalny [archiwum TBSP.Index](https://www.bondspot.pl/tbsp_index_archive_en) zawiera archiwalne komunikaty i kalendarz. Nie jest jeszcze dowodem kompletnej, licencjonowanej serii miesięcznych poziomów 2020–2026.
 - Osobna [strona portfeli historycznych](https://www.bondspot.pl/tbsp_index_portfolio_en) wprost obejmuje składy **do grudnia 2019 r.**; nie utożsamiać portfela z szeregiem wartości indeksu.
