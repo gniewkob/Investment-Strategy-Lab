@@ -1,0 +1,69 @@
+name: ISL D2 private forward NAV/FX preflight (offline)
+
+# Stacked on D1 / A2. Only offline test fixtures; NO provider read, real XLSX,
+# portfolio, broker, wallet, Neon, credential, scheduler, or financial operation.
+on:
+  pull_request:
+    paths:
+      - 'scripts/nav_forward_preflight_v24.py'
+      - 'tests/test_nav_forward_preflight_v24.py'
+      - 'scripts/nav_fx_evidence_capture_v25.py'
+      - 'tests/test_nav_fx_evidence_capture_v25.py'
+      - '.github/workflows/isl-d2-nav-forward-offline-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  local-source-guard:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify unchanged v0.24/v0.25 source and v0.22/v0.23 frozen anchor
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git hash-object scripts/nav_forward_preflight_v24.py)" = "8dd45653fa74175630a278215ac514ee593e0b55"
+          test "$(git hash-object scripts/nav_fx_evidence_capture_v25.py)" = "e6fc4ef8910b04beb2de0bd1d0afd8ab5599c148"
+          test "$(git hash-object scripts/nav_forward_freeze_v22.py)" = "7a9c7e5cbc643b5ad760ec64d4212468b64a22bf"
+          test "$(git hash-object scripts/nav_forward_admission_v23.py)" = "d425076ea809f622e5b2c1c4e87ba59fe060f990"
+          echo "D2_ORIGINAL_SOURCE_BLOBS_VERIFIED"
+      - name: Test private source candidate handling and fail-closed month chronology
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import socket
+          import unittest
+          from scripts.nav_forward_admission_v23 import ANCHORED_FREEZE_SHA
+
+          assert ANCHORED_FREEZE_SHA == "3b8aca44ffa6aa72bf2d3a0b5d49102f0dd857d11191dc10e7d21b5051e704a2"
+          def deny_network(*_a, **_k):
+              raise AssertionError("D2 offline preflight must not fetch any external provider")
+          socket.socket.connect=deny_network
+          socket.socket.connect_ex=deny_network
+          socket.create_connection=deny_network
+
+          suite=unittest.defaultTestLoader.loadTestsFromNames([
+              "tests.test_nav_forward_preflight_v24",
+              "tests.test_nav_fx_evidence_capture_v25",
+          ])
+          result=unittest.TextTestRunner(verbosity=2).run(suite)
+          if not result.wasSuccessful() or result.testsRun != 19 or result.skipped:
+              raise SystemExit("D2_NAV_FORWARD_SOURCE_GATE_BLOCKED")
+          print("D2_NAV_FORWARD_OFFLINE_PASS tests="+str(result.testsRun))
+          print("D2_PRIVATE_NBP_RAW_NO_OVERWRITE_NO_SYMLINK_RESEARCH_ONLY")
+          PY
+      - name: Confirm no operations against market and production systems
+        run: echo "NO_ORIGINAL_NAV_NO_OFFICIAL_NBP_FETCH_NO_PRODUCTION_DB_NO_WALLET_NO_TRADES"
