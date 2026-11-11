@@ -1,5 +1,8 @@
 name: Full research runner offline regression tests (no secrets)
 
+# Run cross-module offline regression when engine, source, and host safety
+# contracts change, not only when the agent runner changes.
+
 on:
   pull_request:
     paths:
@@ -7,6 +10,18 @@ on:
       - tests/test_autonomous_agent.py
       - tests/test_agent_runner.py
       - tests/test_full_runner_staging.py
+      - db/working_engine_*.sql
+      - scripts/nbp_lab_ingest_sql.py
+      - scripts/nav_forward_*.py
+      - scripts/nav_fx_evidence_capture_v25.py
+      - scripts/deploy_shadow_evidence_mac_v12.py
+      - scripts/shadow_offsite_export_v13.py
+      - tests/integration/test_working_engine_v01.py
+      - tests/test_nbp_lab_ingest_sql.py
+      - tests/test_nav_forward_*.py
+      - tests/test_nav_fx_evidence_capture_v25.py
+      - tests/test_deploy_shadow_evidence_mac_v12.py
+      - tests/test_shadow_offsite_export_v13.py
       - .github/workflows/full-agent-staging-canary*.yml
   push:
     branches: [main]
@@ -15,6 +30,18 @@ on:
       - tests/test_autonomous_agent.py
       - tests/test_agent_runner.py
       - tests/test_full_runner_staging.py
+      - db/working_engine_*.sql
+      - scripts/nbp_lab_ingest_sql.py
+      - scripts/nav_forward_*.py
+      - scripts/nav_fx_evidence_capture_v25.py
+      - scripts/deploy_shadow_evidence_mac_v12.py
+      - scripts/shadow_offsite_export_v13.py
+      - tests/integration/test_working_engine_v01.py
+      - tests/test_nbp_lab_ingest_sql.py
+      - tests/test_nav_forward_*.py
+      - tests/test_nav_fx_evidence_capture_v25.py
+      - tests/test_deploy_shadow_evidence_mac_v12.py
+      - tests/test_shadow_offsite_export_v13.py
       - .github/workflows/full-agent-staging-canary*.yml
 
 permissions:
