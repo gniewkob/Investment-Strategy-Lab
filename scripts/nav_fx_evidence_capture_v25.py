@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 from datetime import datetime, timezone, date
+from decimal import Decimal, InvalidOperation
 from hashlib import sha256
 import json
 import os
@@ -68,14 +69,30 @@ def collect(frozen, baseline, *, raw_xlsx=None, xlsx_retrieved_at_utc=None,
     freeze_at = _utc(frozen["frozen_at_utc"])
     if not freeze_at < at <= now:
         raise ValueError("provider retrieval must postdate freeze and not be future")
+    if at.date() < date(2026,12,1):
+        raise ValueError("original provider export predates completed forward month")
     incoming = inspect_export(raw_xlsx, "2021-11", "2026-11", as_of=now.date())
     out["provider_original_sha256"] = incoming["raw_export_sha256"]
     if out["provider_original_sha256"] == frozen["original_nav_file_sha256"]:
         raise ValueError("provider original SHA identical to frozen original")
     history = {r["month"]:r for r in baseline["monthly"]}
+    # Numeric equality: identical source NAV with trailing-zero formatting is
+    # not a historical revision. Never round or use binary floats.
+    def parsed_nav(row):
+        value=row["nav_usd"]
+        if not isinstance(value,str):
+            raise ValueError("decimal-string NAV required for history comparison")
+        try:
+            nav=Decimal(value)
+        except (ValueError, InvalidOperation) as exc:
+            raise ValueError("invalid historical NAV decimal") from exc
+        if not nav.is_finite() or nav<=0:
+            raise ValueError("historical NAV must be positive and finite")
+        return nav
+
     revisions = [r["month"] for r in incoming["monthly"][:-1]
                  if (r["observed_for"] != history[r["month"]]["observed_for"]
-                     or r["nav_usd"] != history[r["month"]]["nav_usd"])]
+                     or parsed_nav(r) != parsed_nav(history[r["month"]]))]
     out["historical_revision_count"] = len(revisions)
     out["historical_revision_months"] = revisions
     if revisions:

@@ -1,5 +1,6 @@
 """v0.25 synthetic-only original XLSX + official NBP raw evidence tests."""
 from datetime import datetime, timezone
+from decimal import Decimal
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import os
@@ -11,6 +12,7 @@ import unittest
 from scripts.nav_forward_freeze_v22 import freeze
 from scripts import nav_forward_admission_v23 as v23
 from scripts.nav_fx_evidence_capture_v25 import collect, _write_private_raw
+from scripts import nav_fx_evidence_capture_v25 as v25
 from tests.test_conditional_m1_nav_diagnostic_v20 import sample_receipt
 from tests.test_vanguard_xlsx_offline_intake_v04 import fake_xlsx
 
@@ -109,6 +111,42 @@ class NAVFXCaptureV25Tests(unittest.TestCase):
         self.assertEqual(r["prospective_qualified_months"],0)
         self.assertFalse(r["strict_m1_qualified"])
         self.assertEqual(r["financial_operations"],0)
+
+    def test_late_evaluation_cannot_admit_early_partial_month_provider_export(self):
+        frozen,baseline=sources()
+        with self.assertRaisesRegex(ValueError,"predates completed"):
+            run(frozen,baseline,raw_xlsx=fake_xlsx(61),clock=lambda:DEC,
+                xlsx_retrieved_at_utc="2026-11-22T12:00:00+00:00")
+
+    def test_unmodified_numeric_nav_with_extra_trailing_zero_is_not_revision(self):
+        frozen,baseline=sources()
+        original=v25.inspect_export
+        def equivalent(*args,**kwargs):
+            result=original(*args,**kwargs)
+            old=result["monthly"][0]["nav_usd"]
+            result["monthly"][0]["nav_usd"]=(old+"0") if "." in old else (old+".0")
+            return result
+        with patch.object(v25,"inspect_export",side_effect=equivalent):
+            report,raw=run(frozen,baseline,raw_xlsx=fake_xlsx(61),clock=lambda:DEC,
+                xlsx_retrieved_at_utc="2026-12-02T12:00:00+00:00")
+        self.assertEqual(report["historical_revision_count"],0)
+        self.assertEqual(report["status"],"READY_FOR_EXPLICIT_NBP_SOURCE_READ")
+        self.assertIsNone(raw)
+
+    def test_real_numeric_nav_change_is_detected(self):
+        frozen,baseline=sources()
+        original=v25.inspect_export
+        def changed(*args,**kwargs):
+            result=original(*args,**kwargs)
+            row=result["monthly"][0]
+            row["nav_usd"]=str(Decimal(row["nav_usd"])+Decimal("0.01"))
+            return result
+        with patch.object(v25,"inspect_export",side_effect=changed):
+            report,raw=run(frozen,baseline,raw_xlsx=fake_xlsx(61),clock=lambda:DEC,
+                xlsx_retrieved_at_utc="2026-12-02T12:00:00+00:00")
+        self.assertEqual(report["status"],"BLOCKED_PROVIDER_REVISIONS_NEED_REVIEW")
+        self.assertEqual(report["historical_revision_count"],1)
+        self.assertIsNone(raw)
 
     def test_revisions_do_not_fetch_nbp(self):
         frozen,baseline=sources()
