@@ -102,9 +102,10 @@ def admission(frozen, candidate=None, *, clock=lambda: datetime.now(timezone.utc
         nav_at=_utc(candidate["original_export_retrieved_at_utc"])
         fx_at=_utc(candidate["nbp_retrieved_at_utc"])
         if (nav_at<=freeze_at or fx_at<=freeze_at or
+                nav_at.date()<date(2026,12,1) or
                 nav_at.date()<=observed or fx_at.date()<observed or
                 nav_at>now or fx_at>now):
-            raise ValueError("new original-source acquisition must follow observation and freeze")
+            raise ValueError("new original-source acquisition must follow completed month, observation and freeze")
         for k in ("original_export_sha256","nbp_original_response_sha256"):
             if not isinstance(candidate[k],str) or not HEX.fullmatch(candidate[k]):
                 raise ValueError("original raw source SHA-256 required")
