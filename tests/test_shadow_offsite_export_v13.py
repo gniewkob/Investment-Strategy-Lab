@@ -74,6 +74,18 @@ class V13CopyTests(unittest.TestCase):
                 self.export()
         self.assertEqual(list(self.destination.iterdir()), [])
 
+    @unittest.skipUnless(hasattr(os, "mkfifo"), "FIFO needs POSIX")
+    def test_fifo_source_rejected_without_hanging(self):
+        from scripts import shadow_offsite_export_v13 as module
+        fifo = Path(self.snapshot["path"]) / "anchor.json"
+        fifo.unlink()
+        os.mkfifo(fifo)
+        with patch.object(module, "verify_snapshot",
+                          side_effect=AssertionError("unbounded verifier reached")):
+            with self.assertRaisesRegex(ShadowInputError, "bounded regular"):
+                self.export()
+        self.assertEqual(list(self.destination.iterdir()), [])
+
     def test_export_readback_and_restore_drill(self):
         result = self.export()
         self.assertEqual(result["status"], "COPY_READBACK_VERIFIED_FAILURE_DOMAIN_UNVERIFIED")
