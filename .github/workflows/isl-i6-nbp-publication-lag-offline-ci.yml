@@ -1,0 +1,91 @@
+name: ISL I6 NBP publication-date conservative offline PIT research gate
+
+# NBP API EffectiveDate is a calendar date, not a verified release instant.
+# This synthetic test gate applies a local next-UTC-day research-only rule;
+# it neither fetches NBP data nor authorizes historical PIT or trades.
+on:
+  pull_request:
+    paths:
+      - 'scripts/nbp_publication_lag_offline_v01.py'
+      - 'tests/test_nbp_publication_lag_offline_v01.py'
+      - 'docs/I6_NBP_PUBLICATION_DATE_CONSERVATIVE_LAG_20261109_PL.md'
+      - '.github/workflows/isl-i6-nbp-publication-lag-offline-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  publication-lag-ubuntu:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test NBP lag and existing offline-source compatibility without network
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import socket
+          import unittest
+
+          def deny_network(*_a, **_k):
+              raise AssertionError('I6 attempted a Python network connection')
+          socket.socket.connect = deny_network
+          socket.socket.connect_ex = deny_network
+          socket.create_connection = deny_network
+
+          names = [
+              'tests.test_nbp_publication_lag_offline_v01',
+              'tests.test_a2_explicit_source_access_v01',
+              'tests.test_real_reference_gateway_v18',
+          ]
+          suite = unittest.defaultTestLoader.loadTestsFromNames(names)
+          r = unittest.TextTestRunner(verbosity=2).run(suite)
+          if not r.wasSuccessful() or r.skipped or r.testsRun != 31:
+              raise SystemExit('I6_PUBLICATION_DATE_RESEARCH_GATE_BLOCKED')
+          print('I6_NBP_DATE_LAG_OFFLINE_PASS tests=' + str(r.testsRun))
+          print('I6_NO_HISTORICAL_PIT_ATTESTATION_NO_FX_PROMOTION')
+          PY
+
+  publication-lag-macos:
+    runs-on: macos-15
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test NBP lag and existing offline-source compatibility without network
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import socket
+          import unittest
+
+          def deny_network(*_a, **_k):
+              raise AssertionError('I6 attempted a Python network connection')
+          socket.socket.connect = deny_network
+          socket.socket.connect_ex = deny_network
+          socket.create_connection = deny_network
+
+          names = [
+              'tests.test_nbp_publication_lag_offline_v01',
+              'tests.test_a2_explicit_source_access_v01',
+              'tests.test_real_reference_gateway_v18',
+          ]
+          suite = unittest.defaultTestLoader.loadTestsFromNames(names)
+          r = unittest.TextTestRunner(verbosity=2).run(suite)
+          if not r.wasSuccessful() or r.skipped or r.testsRun != 31:
+              raise SystemExit('I6_PUBLICATION_DATE_RESEARCH_GATE_BLOCKED')
+          print('I6_NBP_DATE_LAG_OFFLINE_PASS tests=' + str(r.testsRun))
+          print('I6_NO_HISTORICAL_PIT_ATTESTATION_NO_FX_PROMOTION')
+          PY
