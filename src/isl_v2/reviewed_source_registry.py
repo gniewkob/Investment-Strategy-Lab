@@ -80,16 +80,12 @@ def _strict_https(url: object) -> bool:
         port = p.port
     except ValueError:
         return False
-    return (
-        p.scheme == "https" and p.hostname is not None
-        and p.username is None and p.password is None and port in (None, 443)
-        and not p.query and not p.fragment and p.path.startswith("/")
-        and p.netloc == p.hostname if port is None else
-        p.scheme == "https" and p.hostname is not None
-        and p.username is None and p.password is None and port == 443
-        and not p.query and not p.fragment and p.path.startswith("/")
-        and p.netloc == p.hostname + ":443"
-    )
+    if (p.scheme != "https" or p.hostname is None or p.username is not None
+            or p.password is not None or port not in (None, 443)
+            or p.query or p.fragment or not p.path.startswith("/")):
+        return False
+    expected_authority = p.hostname if port is None else p.hostname + ":443"
+    return p.netloc == expected_authority
 
 
 def _iso_utc(value: object) -> datetime:
