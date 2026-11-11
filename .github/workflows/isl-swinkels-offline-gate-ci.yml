@@ -1,0 +1,39 @@
+name: ISL Swinkels offline research gate (synthetic only)
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/swinkels_offline_research_gate_v01.py'
+      - 'tests/test_swinkels_offline_research_gate_v01.py'
+      - '.github/workflows/isl-swinkels-offline-gate-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-unit-gate:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: 20 synthetic-only offline research gate tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest tests.test_swinkels_offline_research_gate_v01 -v
+      - name: Explicit research-only qualification
+        run: |
+          echo "QUALIFIED_MODEL_SERIES=[]"
+          echo "HISTORICAL_PIT_CERTIFIED=false"
+          echo "M1_M2_M3=HOLD_CASH"
+          echo "FINANCIAL_OPERATIONS=0"

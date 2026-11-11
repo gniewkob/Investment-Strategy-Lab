@@ -1,0 +1,40 @@
+name: ISL Swinkels 9-series yield ODF unit census (one-shot)
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/swinkels_nine_variant_yield_unit_census_v01.py'
+      - 'tests/test_swinkels_nine_variant_yield_unit_census_v01.py'
+      - '.github/workflows/isl-swinkels-nine-yield-unit-census-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  original-yield-unit-census:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Synthetic source-unit tests
+        run: |
+          set -euo pipefail
+          python -m unittest tests.test_swinkels_nine_variant_yield_unit_census_v01 -v
+      - name: SHA-pinned publisher ODS yield and return cell style census
+        run: |
+          set -euo pipefail
+          python -m scripts.swinkels_nine_variant_yield_unit_census_v01
+      - name: Model qualification remains blocked
+        if: always()
+        run: |
+          echo "SOURCE_UNIT_REVIEW_REQUIRED"
+          echo "QUALIFIED_MODEL_SERIES=[]"
+          echo "HISTORICAL_PIT_CERTIFIED=false"
+          echo "M1_M2_M3=HOLD_CASH"
+          echo "FINANCIAL_OPERATIONS=0"

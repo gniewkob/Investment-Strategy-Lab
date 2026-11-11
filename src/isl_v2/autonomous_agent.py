@@ -43,7 +43,14 @@ def _paper_decisions(prices: list[dict[str, Any]], as_of: str, requirements: dic
             cfg = requirements.get(code, {})
             if len(series) < 4 or cfg.get("basis") != "TOTAL_RETURN_INDEX" or cfg.get("currency") != "PLN":
                 missing.append(code)
-            elif any(row["interval_code"] != "1mo" for row in series[-4:]):
+            elif any(
+                    row["interval_code"] != "1mo"
+                    or row.get("value_concept") != "TOTAL_RETURN_INDEX"
+                    for row in series[-4:]):
+                # A caller-controlled requirements[basis] is not source evidence.
+                # The current source schema has no certified TOTAL_RETURN_INDEX
+                # observation concept. Consequently these models remain in cash
+                # until independent source admission/schema review is complete.
                 missing.append(code)
         # Model 3 also needs four consecutive, already-public past monthly equity observations.
         decision = "HOLD_CASH" if missing else "PAPER_TARGET_INTENT"

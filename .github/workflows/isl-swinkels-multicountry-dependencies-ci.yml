@@ -1,0 +1,39 @@
+name: ISL Swinkels 10-variant formula dependencies (one-shot)
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/swinkels_multicountry_formula_dependencies_v01.py'
+      - 'tests/test_swinkels_multicountry_formula_dependencies_v01.py'
+      - '.github/workflows/isl-swinkels-multicountry-dependencies-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  source-formula-dependencies:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Ten synthetic formula-dependency and constant-inventory tests
+        run: |
+          set -euo pipefail
+          python -m unittest tests.test_swinkels_multicountry_formula_dependencies_v01 -v
+      - name: Official original ODS 10-variant dependency topology
+        run: |
+          set -euo pipefail
+          python -m scripts.swinkels_multicountry_formula_dependencies_v01
+      - name: Source remains outside the decision models
+        if: always()
+        run: |
+          echo "HISTORICAL_PIT_CERTIFIED=false"
+          echo "QUALIFIED_MODEL_SERIES=[]"
+          echo "M1_M2_M3=HOLD_CASH"
+          echo "FINANCIAL_OPERATIONS=0"

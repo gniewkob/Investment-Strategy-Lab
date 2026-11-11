@@ -1,0 +1,56 @@
+name: ISL ALFRED DGS10 archived observation PIT evidence (one-shot)
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/swinkels_alfred_dgs10_pit_probe_v01.py'
+      - 'tests/test_swinkels_alfred_dgs10_pit_probe_v01.py'
+      - '.github/workflows/isl-alfred-dgs10-pit-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  synthetic-alfred-pit-contract:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Eleven synthetic ALFRED snapshot and PIT fail-closed checks
+        run: |
+          set -euo pipefail
+          python -m unittest tests.test_swinkels_alfred_dgs10_pit_probe_v01 -v
+
+  official-alfred-three-sample-pit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    env:
+      FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Official archived DGS10 read (reports BLOCKED without configured secret)
+        run: |
+          set -euo pipefail
+          python -m scripts.swinkels_alfred_dgs10_pit_probe_v01
+      - name: Preserve research-only boundary
+        if: always()
+        run: |
+          echo "ALFRED_SAMPLES_ARE_NOT_MONTH_END_PIT_CERTIFICATION"
+          echo "QUALIFIED_MODEL_SERIES=[]"
+          echo "M1_M2_M3=HOLD_CASH"
+          echo "FINANCIAL_OPERATIONS=0"

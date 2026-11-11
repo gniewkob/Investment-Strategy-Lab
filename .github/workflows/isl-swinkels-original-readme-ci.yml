@@ -1,0 +1,37 @@
+name: ISL Swinkels original Readme methodology probe (one-shot)
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/swinkels_readme_original_method_probe_v01.py'
+      - '.github/workflows/isl-swinkels-original-readme-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  official-readme-method-evidence:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install PDF text extraction utility
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends poppler-utils
+      - name: Official DataverseNL Readme PDF read and bounded review
+        run: |
+          set -euo pipefail
+          python -m scripts.swinkels_readme_original_method_probe_v01
+      - name: Hold research-only qualification
+        if: always()
+        run: |
+          echo "QUALIFIED_MODEL_SERIES=[]"
+          echo "RETURN_M_UNITS_NOT_CERTIFIED"
+          echo "M1_M2_M3=HOLD_CASH"
