@@ -1,0 +1,72 @@
+name: ISL Swinkels original-source bounded research statistics (CC BY, no PIT)
+
+# Original publisher source only, one SHA-pinned 2020–2022 research window.
+# No provider credentials, trading, user portfolio, scheduler or external DB.
+on:
+  pull_request:
+    paths:
+      - 'scripts/swinkels_source_bound_stats_v01.py'
+      - 'tests/test_swinkels_source_bound_stats_v01.py'
+      - '.github/workflows/isl-swinkels-source-bound-stats-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  no-network-negative-tests:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Unit tests with network blocked
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import socket
+          import unittest
+          def reject(*_args, **_kwargs):
+              raise AssertionError("Swinkels negative fixture attempted network access")
+          socket.socket.connect = reject
+          socket.socket.connect_ex = reject
+          socket.create_connection = reject
+          suite = unittest.defaultTestLoader.loadTestsFromName(
+              "tests.test_swinkels_source_bound_stats_v01")
+          result = unittest.TextTestRunner(verbosity=2).run(suite)
+          if not result.wasSuccessful() or result.skipped or result.testsRun < 9:
+              raise SystemExit("SOURCE_BOUND_STATS_NEGATIVE_FAIL")
+          PY
+
+  original-publisher-source-research:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: One publisher ODS, checked digest and two independent return models
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m scripts.swinkels_source_bound_stats_v01
+      - name: Source and trade qualification intentionally denied
+        if: always()
+        run: |
+          echo "ERASMUS_V6_BYTES_EQUIVALENT=false"
+          echo "HISTORICAL_PIT_CERTIFIED=false"
+          echo "QUALIFIED_MODEL_SERIES=[]"
+          echo "M1_M2_M3=HOLD_CASH"
+          echo "FINANCIAL_OPERATIONS=0"
