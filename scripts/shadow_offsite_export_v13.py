@@ -54,7 +54,7 @@ def _same_directory(fd, path):
 def _read_source(path, expected_hash):
     if not HASH.fullmatch(expected_hash):
         raise ShadowInputError("missing expected source digest")
-    fd = os.open(path, os.O_RDONLY | NOFOLLOW)
+    fd = os.open(path, os.O_RDONLY | NOFOLLOW | getattr(os, 'O_NONBLOCK', 0))
     try:
         st = os.fstat(fd)
         if not stat.S_ISREG(st.st_mode) or st.st_size > MAX_FILE_BYTES:
