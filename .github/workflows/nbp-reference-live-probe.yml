@@ -1,0 +1,32 @@
+name: NBP reference live probe (no database secrets)
+on:
+  pull_request:
+    paths:
+      - 'scripts/nbp_reference_capture.py'
+      - 'scripts/nbp_lab_prepare.py'
+      - 'scripts/nbp_lab_daily_source.py'
+      - 'scripts/nbp_lab_ingest_sql.py'
+      - 'tests/test_nbp_lab_prepare.py'
+      - 'tests/test_nbp_lab_daily_source.py'
+      - '.github/workflows/nbp-reference-live-probe.yml'
+permissions:
+  contents: read
+jobs:
+  offline-and-official-probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Check NBP format, provenance and fail-closed rules
+        run: python -m unittest discover -s tests -p 'test_nbp_lab_prepare.py' -v
+      - name: Test scheduled daily source compilation
+        run: python -m unittest discover -s tests -p 'test_nbp_lab_daily_source.py' -v
+      - name: Read NBP reference prices (no writes, no secrets)
+        run: python -m scripts.nbp_lab_prepare --start 2026-10-17 --end 2026-11-05
+      - name: Prepare validated daily import SQL for scheduler (never executed here)
+        run: python -m scripts.nbp_lab_daily_source --lookback-days 14

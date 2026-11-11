@@ -1,0 +1,40 @@
+name: Data readiness v1 offline
+on:
+  pull_request:
+    paths:
+      - 'scripts/data_readiness_v1.py'
+      - 'scripts/nbp_reference_capture.py'
+      - 'scripts/monthly_pit_calendar.py'
+      - 'scripts/gus_cpi_normalize.py'
+      - 'scripts/verified_source_candidate_intake.py'
+      - 'tests/test_data_readiness_v1.py'
+      - 'tests/test_nbp_reference_capture.py'
+      - 'tests/test_monthly_pit_calendar.py'
+      - 'tests/test_gus_cpi_normalize.py'
+      - 'tests/test_verified_source_candidate_intake.py'
+      - '.github/workflows/data-readiness-v1-ci.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/data_readiness_v1.py'
+      - 'scripts/nbp_reference_capture.py'
+      - 'scripts/monthly_pit_calendar.py'
+      - 'tests/test_data_readiness_v1.py'
+      - 'tests/test_nbp_reference_capture.py'
+      - 'tests/test_monthly_pit_calendar.py'
+      - '.github/workflows/data-readiness-v1-ci.yml'
+permissions:
+  contents: read
+jobs:
+  readiness:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m unittest discover -s tests -p 'test_data_readiness_v1.py' -v
+      - run: python -m unittest discover -s tests -p 'test_nbp_reference_capture.py' -v
+      - run: python -m unittest discover -s tests -p 'test_monthly_pit_calendar.py' -v
+      - run: python -m unittest discover -s tests -p 'test_gus_cpi_normalize.py' -v
+      - run: python -m unittest discover -s tests -p 'test_verified_source_candidate_intake.py' -v
