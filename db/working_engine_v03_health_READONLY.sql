@@ -1,5 +1,7 @@
 -- Working Engine v0.3 as-of independently READ-ONLY verification.
 -- Recomputes SQL-input evidence; never inserts, updates or deletes rows.
+-- Serialize all evidence timestamps in UTC to make hashes independent of
+-- the PostgreSQL session TimeZone (legacy UTC JSON representation retained).
 WITH
 clock AS (
   SELECT CASE
@@ -41,7 +43,7 @@ all_eligible_digest AS (
   -- Deterministic ordering avoids nondeterminism across query plans.
   -- A historical non-latest price mutation MUST invalidate same-cutoff replay.
   SELECT encode(sha256(convert_to(coalesce(jsonb_agg(
-     jsonb_build_array(instrument_code,source_code,observed_for,ingested_at,
+     jsonb_build_array(instrument_code,source_code,(replace((observed_for AT TIME ZONE 'UTC')::text,' ','T') || '+00:00'),(replace((ingested_at AT TIME ZONE 'UTC')::text,' ','T') || '+00:00'),
                        interval_code,return_basis,close_price,quote_currency,source_url)
      ORDER BY instrument_code,source_code,observed_for,ingested_at,
               interval_code,return_basis,close_price,source_url
@@ -51,7 +53,7 @@ all_eligible_digest AS (
 source_manifest AS (
   SELECT coalesce(jsonb_agg(jsonb_build_object(
     'instrument_code',instrument_code,'source_code',source_code,
-    'observed_for',observed_for,'ingested_at',ingested_at,
+    'observed_for',(replace((observed_for AT TIME ZONE 'UTC')::text,' ','T') || '+00:00'),'ingested_at',(replace((ingested_at AT TIME ZONE 'UTC')::text,' ','T') || '+00:00'),
     'interval_code',interval_code,'return_basis',return_basis,
     'quote_currency',quote_currency,'close_price',close_price,
     'source_url',source_url
@@ -106,7 +108,7 @@ nbp_stats AS (
         min(r.close_price) AS window_min,
         max(r.close_price) AS window_max,
         encode(sha256(convert_to(coalesce(jsonb_agg(
-          jsonb_build_array(r.observed_for,r.ingested_at,r.close_price,r.source_url)
+          jsonb_build_array((replace((r.observed_for AT TIME ZONE 'UTC')::text,' ','T') || '+00:00'),(replace((r.ingested_at AT TIME ZONE 'UTC')::text,' ','T') || '+00:00'),r.close_price,r.source_url)
           ORDER BY r.observed_for,r.ingested_at,r.source_url
         ) FILTER (WHERE r.n IS NOT NULL),'[]'::jsonb)::text,'UTF8')),'hex')
           AS window_sha256
@@ -117,7 +119,7 @@ nbp_stats AS (
 nbp_scored AS (
  SELECT s.*,
    CASE WHEN s.last_observed IS NULL THEN 'SOURCE_MISSING_AT_CUTOFF'
-        WHEN (clock.cutoff::date-s.last_observed::date)>7
+        WHEN ((clock.cutoff AT TIME ZONE 'UTC')::date-(s.last_observed AT TIME ZONE 'UTC')::date)>7
           THEN 'SOURCE_STALE_AT_CUTOFF'
         WHEN s.observations<21 THEN 'REFERENCE_WINDOW_SHORT_AT_CUTOFF'
         ELSE 'SOURCE_RECENT_AT_CUTOFF' END AS reference_status
@@ -127,8 +129,8 @@ nbp_context AS (
  SELECT coalesce(jsonb_agg(jsonb_build_object(
    'instrument_code',s.instrument_code,'source_code',s.source_code,
    'return_basis',s.return_basis,'currency','PLN',
-   'observations_in_window',s.observations,'last_observed',s.last_observed,
-   'last_ingested',s.last_ingested,'latest_value',s.latest_value,
+   'observations_in_window',s.observations,'last_observed',(replace((s.last_observed AT TIME ZONE 'UTC')::text,' ','T') || '+00:00'),
+   'last_ingested',(replace((s.last_ingested AT TIME ZONE 'UTC')::text,' ','T') || '+00:00'),'latest_value',s.latest_value,
    'change_five_observations_pct',CASE WHEN s.observations>=6
         THEN round(100*(s.latest_value/s.five_ago-1),4) ELSE NULL END,
    'change_twenty_observations_pct',CASE WHEN s.observations>=21
@@ -146,7 +148,7 @@ nbp_context AS (
 paper_ledger_rows AS (
  SELECT m.model_code,
    coalesce(jsonb_agg(jsonb_build_array(
-     e.event_id,e.event_time,e.recorded_at,e.event_kind,e.gross_amount,e.fee_amount
+     e.event_id,(replace((e.event_time AT TIME ZONE 'UTC')::text,' ','T') || '+00:00'),(replace((e.recorded_at AT TIME ZONE 'UTC')::text,' ','T') || '+00:00'),e.event_kind,e.gross_amount,e.fee_amount
      ) ORDER BY e.event_time,e.recorded_at,e.event_id)
      FILTER (WHERE e.event_id IS NOT NULL),'[]'::jsonb) AS events
  FROM models m CROSS JOIN clock
@@ -174,8 +176,8 @@ paper AS (
 ),
 prepared AS (
   SELECT m.model_code,m.version_no,m.rules,clock.cutoff,
-   md5('isl-engine-v03-run|'||m.model_code||'|'||clock.cutoff::text)::uuid AS run_id,
-   md5('isl-engine-v03-signal|'||m.model_code||'|'||clock.cutoff::text)::uuid AS signal_id,
+   md5('isl-engine-v03-run|'||m.model_code||'|'||((clock.cutoff AT TIME ZONE 'UTC')::text || '+00'))::uuid AS run_id,
+   md5('isl-engine-v03-signal|'||m.model_code||'|'||((clock.cutoff AT TIME ZONE 'UTC')::text || '+00'))::uuid AS signal_id,
    missing.missing_series,paper.contributions_pln,paper.booked_fees,paper.prior_fills,
    prices_summary.eligible_rows,source_manifest.rows AS sources,
    all_eligible_digest.all_rows_sha256 AS source_digest,
@@ -185,7 +187,7 @@ prepared AS (
    paper_ledger.ledger_sha256 AS paper_ledger_sha256,
    jsonb_build_object(
       'engine_version','v03','model_code',m.model_code,'model_version',m.version_no,
-      'cutoff_utc',clock.cutoff,'model_rules',m.rules,
+      'cutoff_utc',(replace((clock.cutoff AT TIME ZONE 'UTC')::text,' ','T') || '+00:00'),'model_rules',m.rules,
       'eligible_market_rows',prices_summary.eligible_rows,
       'all_eligible_market_rows_sha256',all_eligible_digest.all_rows_sha256,
       'latest_market_references',source_manifest.rows,
@@ -265,14 +267,14 @@ SELECT model_code,cutoff,run_id,
               OR stored_metrics->>'nbp_reference_status_at_cutoff'
                    IS DISTINCT FROM reference_status_at_cutoff
                  THEN 'SOURCE_OR_LEDGER_INPUT_CHANGED'
-            WHEN stored_status<>'COMPLETED'
-              OR stored_engine<>'working-engine-v03'
+            WHEN stored_status IS DISTINCT FROM 'COMPLETED'
+              OR stored_engine IS DISTINCT FROM 'working-engine-v03'
               OR signal_rows<>1 OR audit_rows<>1
               OR signal_match IS NOT TRUE OR audit_match IS NOT TRUE
               OR signal_engine_matches IS NOT TRUE
               OR audit_paper_only_matches IS NOT TRUE
-              OR stored_metrics->>'real_financial_operations'<>'0'
-              OR stored_metrics->>'new_paper_events'<>'0'
+              OR stored_metrics->>'real_financial_operations' IS DISTINCT FROM '0'
+              OR stored_metrics->>'new_paper_events' IS DISTINCT FROM '0'
                  THEN 'CYCLE_INVALID'
             ELSE 'ENGINE_OK' END AS engine_status,
        verdict AS evaluated_verdict,reference_status_at_cutoff,
