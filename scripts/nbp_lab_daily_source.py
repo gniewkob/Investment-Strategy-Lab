@@ -11,6 +11,7 @@ from hashlib import sha256
 import json
 
 from scripts.nbp_lab_prepare import prepare
+from scripts.nbp_reference_capture import _fetch
 from scripts.nbp_lab_ingest_sql import build_sql
 
 
@@ -57,8 +58,11 @@ def daily_source(now: datetime | None = None, *, fetch=None, clock=None, lookbac
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--lookback-days", type=int, default=31)
+    parser.add_argument("--allow-public-nbp-fetch", action="store_true")
     args = parser.parse_args()
-    meta, sql = daily_source(lookback_days=args.lookback_days)
+    if not args.allow_public_nbp_fetch:
+        parser.error("public NBP HTTPS access requires --allow-public-nbp-fetch")
+    meta, sql = daily_source(fetch=_fetch, lookback_days=args.lookback_days)
     print("NBP_LAB_DAILY_META=" + json.dumps(meta, separators=(",", ":"), sort_keys=True))
     print("NBP_LAB_DAILY_SQL=" + sql)
 

@@ -10,7 +10,7 @@ import argparse
 from datetime import datetime, timedelta, timezone
 import json
 
-from .nbp_reference_capture import capture
+from .nbp_reference_capture import capture, _fetch
 
 MAP = {
     "usdpln": ("USDPLN_NBP", "nbp_rates", "FX_RATE"),
@@ -80,11 +80,14 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--start")
     parser.add_argument("--end")
+    parser.add_argument("--allow-public-nbp-fetch", action="store_true")
     args = parser.parse_args()
     today = datetime.now(timezone.utc).date()
     start = args.start or (today - timedelta(days=31)).isoformat()
     end = args.end or today.isoformat()
-    result = prepare(start, end)
+    if not args.allow_public_nbp_fetch:
+        parser.error("public NBP HTTPS access requires --allow-public-nbp-fetch")
+    result = prepare(start, end, fetch=_fetch)
     # One compact single-line JSON receipt in CI logs; no secrets.
     print("NBP_LAB_RECEIPT_JSON=" + json.dumps(
         result, ensure_ascii=False, separators=(",", ":"), sort_keys=True))

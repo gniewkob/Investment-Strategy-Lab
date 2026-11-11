@@ -1,4 +1,4 @@
-name: Working Engine v0.1 E2E
+name: ISL isolated research engine Postgres E2E (G1-reviewed CI only)
 on:
   pull_request:
     paths:
@@ -17,7 +17,7 @@ on:
       - 'tests/test_nbp_lab_ingest_sql.py'
       - 'tests/test_nbp_lab_daily_source.py'
       - 'tests/integration/test_working_engine_v01.py'
-      - '.github/workflows/working-engine-v01-ci.yml'
+      - '.github/workflows/isl-research-engine-postgres-isolated-ci.yml'
   push:
     branches: [main]
     paths:
@@ -36,7 +36,7 @@ on:
       - 'tests/test_nbp_lab_ingest_sql.py'
       - 'tests/test_nbp_lab_daily_source.py'
       - 'tests/integration/test_working_engine_v01.py'
-      - '.github/workflows/working-engine-v01-ci.yml'
+      - '.github/workflows/isl-research-engine-postgres-isolated-ci.yml'
 permissions:
   contents: read
 jobs:
