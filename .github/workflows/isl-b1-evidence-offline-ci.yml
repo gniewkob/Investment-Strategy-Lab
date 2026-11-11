@@ -1,0 +1,78 @@
+name: ISL B1 offline evidence chain CI
+
+# Stacked on A2 Draft PR #99: uses its source-receipt calendar validator.
+# No live GitHub capture, provider calls, DB service, credential scopes,
+# account operations, wallet access, scheduled jobs, or real trading.
+on:
+  pull_request:
+    paths:
+      - 'scripts/shadow_decision_engine_v05.py'
+      - 'scripts/shadow_capture_v07.py'
+      - 'scripts/github_checkpoint_verify_v08.py'
+      - 'scripts/shadow_evidence_ledger_v09.py'
+      - 'scripts/shadow_external_anchor_v10.py'
+      - 'scripts/shadow_backup_restore_v11.py'
+      - 'tests/test_shadow_decision_engine_v05.py'
+      - 'tests/test_shadow_capture_v07.py'
+      - 'tests/test_github_checkpoint_verify_v08.py'
+      - 'tests/test_shadow_evidence_ledger_v09.py'
+      - 'tests/test_shadow_external_anchor_v10.py'
+      - 'tests/test_shadow_backup_restore_v11.py'
+      - 'evidence/shadow/v09/checkpoint-bundle-run-42305280062.json'
+      - '.github/workflows/isl-b1-evidence-offline-ci.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  offline-evidence-contract:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate source SHA and isolated evidence chain contracts, no network
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import socket
+          import unittest
+          from hashlib import sha256
+          from pathlib import Path
+
+          artifact=Path('evidence/shadow/v09/checkpoint-bundle-run-42305280062.json')
+          assert artifact.is_file(), 'archived v0.9 bundle absent'
+          expected='4a4fece5c84996cf7e663abae81d5c583e5397904bbe17ab57b8f0a150b797d3'
+          assert sha256(artifact.read_bytes()).hexdigest()==expected, 'v0.9 archived original bytes changed'
+
+          def no_network(*_args, **_kwargs):
+              raise AssertionError('B1 offline CI attempted network access')
+          socket.socket.connect = no_network
+          socket.socket.connect_ex = no_network
+          socket.create_connection = no_network
+
+          modules=[
+              'tests.test_shadow_decision_engine_v05',
+              'tests.test_shadow_capture_v07',
+              'tests.test_github_checkpoint_verify_v08',
+              'tests.test_shadow_evidence_ledger_v09',
+              'tests.test_shadow_external_anchor_v10',
+              'tests.test_shadow_backup_restore_v11',
+          ]
+          suite=unittest.defaultTestLoader.loadTestsFromNames(modules)
+          results=unittest.TextTestRunner(verbosity=2).run(suite)
+          if not results.wasSuccessful() or results.testsRun < 40 or results.skipped:
+              raise SystemExit('B1_EVIDENCE_GATE_BLOCKED')
+          print('B1_EVIDENCE_OFFLINE_PASS tests='+str(results.testsRun))
+          print('B1_ORIGINAL_V09_BUNDLE_SHA256_VERIFIED')
+          PY
+      - name: Confirm research-only evidence boundaries
+        run: echo "NO_PROVIDER_CALLS_NO_BROKER_NO_NEON_NO_LIVE_CAPTURE_NO_ORDERS"

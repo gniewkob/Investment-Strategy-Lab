@@ -1,0 +1,57 @@
+name: ISL A2-B1-C1-C2 combined-tree offline acceptance
+
+# Research-only cross-layer integration. No provider source collection,
+# market feed, database, finance account, brokerage or trading action.
+# Fail closed on any upstream A2 drift, v0.9 archive change or test failure.
+on:
+  pull_request:
+    paths:
+      - 'scripts/**'
+      - 'tests/**'
+      - 'evidence/shadow/v09/**'
+      - '.github/workflows/isl-a2-offline-source-evidence-ci.yml'
+      - '.github/workflows/isl-b1-evidence-offline-ci.yml'
+      - '.github/workflows/isl-c1-decision-offline-ci.yml'
+      - '.github/workflows/isl-c2-source-gateway-offline-ci.yml'
+      - '.github/workflows/isl-stack-chain-offline-ci.yml'
+      - 'docs/A2_POST_SPLIT_OFFLINE_GATE_REVIEW_20261109_PL.md'
+      - 'docs/C2_CURRENCY_PROVENANCE_AND_SOURCE_RIGHTS_REVIEW_20261109_PL.md'
+      - 'docs/STACKED_A2_B1_C1_C2_OFFLINE_INTEGRATION_20261109_PL.md'
+
+permissions:
+  contents: read
+
+jobs:
+  stack-ubuntu:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify pinned source/immutability guard regression
+        run: python -m unittest -v tests.test_isl_stack_chain_acceptance_v01
+      - name: Run 158 synthetic offline test contracts across A2 B1 C1 C2
+        run: python -m scripts.isl_stack_chain_acceptance_v01 --repository-root .
+      - name: Record final offline boundary
+        run: echo 'INTEGRATION_RESEARCH_ONLY_NO_NETWORK_NO_NEON_NO_PROVIDER_NO_FUNDS'
+
+  stack-macos:
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify pinned source/immutability guard regression
+        run: python -m unittest -v tests.test_isl_stack_chain_acceptance_v01
+      - name: Run 158 synthetic offline test contracts across A2 B1 C1 C2
+        run: python -m scripts.isl_stack_chain_acceptance_v01 --repository-root .
+      - name: Record final offline boundary
+        run: echo 'INTEGRATION_RESEARCH_ONLY_NO_NETWORK_NO_NEON_NO_PROVIDER_NO_FUNDS'
