@@ -5,6 +5,9 @@ from pathlib import Path
 import stat
 import tempfile
 import unittest
+from unittest.mock import patch
+
+from scripts import deploy_shadow_evidence_mac_v12 as installer
 
 from scripts.deploy_shadow_evidence_mac_v12 import deploy_isolated
 from scripts.shadow_decision_engine_v05 import ShadowInputError
@@ -46,6 +49,35 @@ class MacShadowDeployV12Tests(unittest.TestCase):
         recorded = json.loads((self.target / "state" / "deployment-receipt-v12.json").read_text())
         self.assertEqual(recorded["head_sha256"], done["head_sha256"])
         self.assertEqual(json.dumps(self.bundle, sort_keys=True), self.original_bundle)
+
+    def test_source_preflight_rejects_modified_and_untracked_checkout(self):
+        # Mock the Git metadata; never interact with a real Mac or installer.
+        repo_root = Path(installer.__file__).resolve().parents[1]
+        for working_tree in (
+            " M scripts/shadow_evidence_ledger_v09.py\\n",
+            "?? scripts/new_unreviewed_helper.py\\n",
+        ):
+            with self.subTest(status=working_tree):
+                answers = ["a" * 40, "https://github.com/" + installer.REPOSITORY,
+                           working_tree]
+                with patch.object(installer.os, "geteuid", return_value=1000), \
+                     patch.object(installer.subprocess, "check_output",
+                                  side_effect=answers):
+                    with self.assertRaisesRegex(ShadowInputError, "must be clean"):
+                        installer.preflight(repo_root, self.target, "a" * 40,
+                                            require_macos=False)
+                self.assertFalse(self.target.exists())
+
+    def test_source_preflight_accepts_clean_exact_checkout(self):
+        repo_root = Path(installer.__file__).resolve().parents[1]
+        answers = ["a" * 40, "https://github.com/" + installer.REPOSITORY, ""]
+        with patch.object(installer.os, "geteuid", return_value=1000), \
+             patch.object(installer.subprocess, "check_output",
+                          side_effect=answers):
+            evidence = installer.preflight(
+                repo_root, self.target, "a" * 40, require_macos=False)
+        self.assertIsInstance(evidence, dict)
+        self.assertFalse(self.target.exists())
 
     def test_no_redeploy_when_target_already_exists(self):
         before = self.target.mkdir()

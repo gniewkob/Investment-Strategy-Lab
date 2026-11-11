@@ -54,7 +54,7 @@ def _same_directory(fd, path):
 def _read_source(path, expected_hash):
     if not HASH.fullmatch(expected_hash):
         raise ShadowInputError("missing expected source digest")
-    fd = os.open(path, os.O_RDONLY | NOFOLLOW)
+    fd = os.open(path, os.O_RDONLY | NOFOLLOW | getattr(os, 'O_NONBLOCK', 0))
     try:
         st = os.fstat(fd)
         if not stat.S_ISREG(st.st_mode) or st.st_size > MAX_FILE_BYTES:
@@ -64,7 +64,7 @@ def _read_source(path, expected_hash):
         if (len(data) > MAX_FILE_BYTES
                 or sha256(data).hexdigest() != expected_hash
                 or (os.fstat(fd).st_dev, os.fstat(fd).st_ino) != (st.st_dev, st.st_ino)):
-            raise ShadowInputError("source changed or content hash mismatch")
+            raise ShadowInputError("source digest mismatch or contents changed")
         return data
     finally:
         os.close(fd)
@@ -88,13 +88,46 @@ def _read_at(dirfd, name, expected):
 
 
 def _file_digests(snapshot, pinned_manifest):
-    verified = verify_snapshot(snapshot, pinned_manifest)
-    manifest = json.loads((Path(snapshot) / "manifest.json").read_bytes())
-    return verified, {
+    """Bound every source file BEFORE the older full-snapshot verifier.
+
+    The v0.11 verifier is still responsible for SQLite/anchor semantics, but
+    its initial full hashes and JSON read must never run on oversized inputs.
+    """
+    if not isinstance(pinned_manifest, str) or not HASH.fullmatch(pinned_manifest):
+        raise ShadowInputError("externally supplied manifest pin required")
+    folder = Path(snapshot)
+    if folder.is_symlink() or not folder.is_dir():
+        raise ShadowInputError("source must be an existing non-symlink snapshot")
+    if os.name == "posix" and stat.S_IMODE(folder.stat().st_mode) & 0o077:
+        raise ShadowInputError("snapshot directory must be private")
+    if {entry.name for entry in folder.iterdir()} != FILES:
+        raise ShadowInputError("unexpected snapshot file set")
+    manifest_path = folder / "manifest.json"
+    if (manifest_path.is_symlink() or not manifest_path.is_file()
+            or manifest_path.stat().st_size > 64 * 1024):
+        raise ShadowInputError("snapshot manifest must be a bounded regular file")
+    manifest_bytes = _read_source(manifest_path, pinned_manifest)
+    if len(manifest_bytes) > 64 * 1024:
+        raise ShadowInputError("oversized snapshot manifest")
+    try:
+        manifest = json.loads(manifest_bytes)
+    except (ValueError, UnicodeError) as exc:
+        raise ShadowInputError("invalid bounded snapshot manifest") from exc
+    if not isinstance(manifest, dict):
+        raise ShadowInputError("snapshot manifest must be an object")
+    expected = {
         "manifest.json": pinned_manifest,
-        "ledger.sqlite3": manifest["ledger_sha256"],
-        "anchor.json": manifest["anchor_sha256"],
+        "ledger.sqlite3": manifest.get("ledger_sha256"),
+        "anchor.json": manifest.get("anchor_sha256"),
     }
+    for name in ("ledger.sqlite3", "anchor.json"):
+        digest = expected[name]
+        if not isinstance(digest, str) or not HASH.fullmatch(digest):
+            raise ShadowInputError("manifest contains invalid source digest")
+        _read_source(folder / name, digest)
+    # All three files passed bounded, non-following reads before calling v0.11.
+    verified = verify_snapshot(snapshot, pinned_manifest)
+    return verified, expected
 
 
 def _check_name(name):

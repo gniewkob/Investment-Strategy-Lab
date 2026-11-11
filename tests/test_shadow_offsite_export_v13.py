@@ -37,6 +37,55 @@ class V13CopyTests(unittest.TestCase):
     def export(self, name="separate-copy-01"):
         return export_copy(self.snapshot["path"], self.pin, self.destination, name=name)
 
+    def test_oversize_manifest_rejected_before_unbounded_verifier(self):
+        from scripts import shadow_offsite_export_v13 as module
+        manifest = Path(self.snapshot["path"]) / "manifest.json"
+        with manifest.open("ab") as out:
+            out.write(b"x" * (64 * 1024 + 1))
+        with patch.object(module, "verify_snapshot",
+                          side_effect=AssertionError("unbounded verifier reached")):
+            with self.assertRaisesRegex(ShadowInputError, "bounded"):
+                self.export()
+        self.assertEqual(list(self.destination.iterdir()), [])
+
+    def test_oversize_ledger_rejected_before_unbounded_verifier(self):
+        from scripts import shadow_offsite_export_v13 as module
+        snap = Path(self.snapshot["path"])
+        manifest_bytes = (snap / "manifest.json").stat().st_size
+        ledger_bytes = (snap / "ledger.sqlite3").stat().st_size
+        self.assertGreater(ledger_bytes, manifest_bytes + 1)
+        with patch.object(module, "MAX_FILE_BYTES", manifest_bytes + 1), \
+             patch.object(module, "verify_snapshot",
+                          side_effect=AssertionError("unbounded verifier reached")):
+            with self.assertRaisesRegex(ShadowInputError, "bounded"):
+                self.export()
+        self.assertEqual(list(self.destination.iterdir()), [])
+
+    def test_symlink_source_rejected_before_unbounded_verifier(self):
+        from scripts import shadow_offsite_export_v13 as module
+        anchor = Path(self.snapshot["path"]) / "anchor.json"
+        target = self.root / "same-anchor.json"
+        target.write_bytes(anchor.read_bytes())
+        anchor.unlink()
+        anchor.symlink_to(target)
+        with patch.object(module, "verify_snapshot",
+                          side_effect=AssertionError("unbounded verifier reached")):
+            with self.assertRaises(OSError):
+                self.export()
+        self.assertEqual(list(self.destination.iterdir()), [])
+
+    @unittest.skipUnless(hasattr(os, "mkfifo"), "FIFO needs POSIX")
+    def test_fifo_source_rejected_without_hanging(self):
+        from scripts import shadow_offsite_export_v13 as module
+        fifo = Path(self.snapshot["path"]) / "anchor.json"
+        fifo.unlink()
+        os.mkfifo(fifo)
+        with patch.object(module, "verify_snapshot",
+                          side_effect=AssertionError("unbounded verifier reached")):
+            with self.assertRaisesRegex(ShadowInputError, "bounded regular"):
+                self.export()
+        self.assertEqual(list(self.destination.iterdir()), [])
+
     def test_export_readback_and_restore_drill(self):
         result = self.export()
         self.assertEqual(result["status"], "COPY_READBACK_VERIFIED_FAILURE_DOMAIN_UNVERIFIED")
@@ -111,11 +160,14 @@ class V13CopyTests(unittest.TestCase):
         from scripts import shadow_offsite_export_v13 as module
         original = module._read_source
         moved = self.root / "displaced"
-        first = [True]
+        reads = [0]
 
         def interfere(*args, **kwargs):
-            if first[0]:
-                first[0] = False
+            # The first three reads now occur in the bounded source prescan,
+            # before destination_root is opened. Swap only during the actual
+            # file-copy phase, after the destination root descriptor is pinned.
+            reads[0] += 1
+            if reads[0] == 4:
                 self.destination.rename(moved)
                 self.destination.mkdir(mode=0o700)
             return original(*args, **kwargs)

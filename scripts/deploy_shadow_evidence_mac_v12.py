@@ -83,8 +83,17 @@ def preflight(repo_root, base, expected_sha, *, require_macos=True):
             ["git", "-C", str(repo_root), "remote", "get-url", "origin"],
             text=True, stderr=subprocess.DEVNULL,
         ).strip().removesuffix(".git")
+        # A commit SHA does not attest uncommitted or untracked executed code.
+        # Reject any dirty checkout before loading the bundled Python helpers.
+        working_tree = subprocess.check_output(
+            ["git", "-C", str(repo_root), "status", "--porcelain=v1",
+             "--untracked-files=all"],
+            text=True, stderr=subprocess.DEVNULL,
+        )
     except (OSError, subprocess.CalledProcessError) as exc:
         raise ShadowInputError("required source Git repo metadata unavailable") from exc
+    if working_tree.strip():
+        raise ShadowInputError("attested source checkout must be clean")
     if head != expected_sha:
         raise ShadowInputError("checked-out HEAD differs from authorized commit")
     if origin not in (
