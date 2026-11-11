@@ -17,7 +17,8 @@ import os
 from pathlib import Path
 
 from scripts.nav_forward_preflight_v24 import preflight
-from scripts.nav_forward_admission_v23 import admission, _utc
+from scripts.nav_forward_admission_v23 import _utc
+from scripts.nav_forward_admission_v26 import admission
 from scripts.nav_forward_freeze_v22 import verify_pending
 from scripts.vanguard_xlsx_offline_intake_v04 import inspect_export
 from scripts.vanguard_nav_intake_bundle_v04 import _fetch_public_fx, _parse_fx

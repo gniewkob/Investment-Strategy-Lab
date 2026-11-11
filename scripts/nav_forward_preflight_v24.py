@@ -14,7 +14,8 @@ from hashlib import sha256
 import json
 from pathlib import Path
 
-from scripts.nav_forward_admission_v23 import admission, _utc
+from scripts.nav_forward_admission_v23 import _utc
+from scripts.nav_forward_admission_v26 import admission
 from scripts.vanguard_xlsx_offline_intake_v04 import inspect_export
 from scripts.vanguard_nav_intake_bundle_v04 import _parse_fx
 from scripts.conditional_m1_nav_diagnostic_v20 import evaluate_nav_reference

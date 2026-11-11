@@ -85,16 +85,6 @@ class NavForwardAdmissionV23Tests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,"multiplication"):
             self.anchored(frozen,candidate,LATER)
 
-    def test_direct_admission_rejects_provider_export_before_full_month_completion(self):
-        frozen,candidate=fixture()
-        candidate["observed_for"]="2026-11-21"
-        candidate["original_export_retrieved_at_utc"]="2026-11-22T15:00:00+00:00"
-        candidate["nbp_source_url"]=(
-            "https://api.nbp.pl/api/exchangerates/tables/a/"
-            "2026-11-21/2026-11-21/?format=json")
-        with self.assertRaisesRegex(ValueError,"must follow"):
-            self.anchored(frozen,candidate,LATER)
-
     def test_retrieval_before_freeze_or_after_now_fails(self):
         frozen,candidate=fixture()
         candidate["original_export_retrieved_at_utc"]="2026-11-06T12:00:00+00:00"

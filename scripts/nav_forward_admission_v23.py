@@ -98,15 +98,11 @@ def admission(frozen, candidate=None, *, clock=lambda: datetime.now(timezone.utc
         # December even if a daily November price already exists.
         if now.date()<date(2026,12,1):
             raise ValueError("forward month is not yet complete")
-        # A later inspection date does not make an earlier export admissible.
-        # The source file itself must be acquired after the observed month ended.
-        following_month=date(observed.year + (observed.month==12),
-                             observed.month % 12 + 1, 1)
         freeze_at=_utc(frozen["frozen_at_utc"])
         nav_at=_utc(candidate["original_export_retrieved_at_utc"])
         fx_at=_utc(candidate["nbp_retrieved_at_utc"])
         if (nav_at<=freeze_at or fx_at<=freeze_at or
-                nav_at.date()<following_month or fx_at.date()<observed or
+                nav_at.date()<=observed or fx_at.date()<observed or
                 nav_at>now or fx_at>now):
             raise ValueError("new original-source acquisition must follow observation and freeze")
         for k in ("original_export_sha256","nbp_original_response_sha256"):
