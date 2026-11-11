@@ -2,6 +2,7 @@ import json
 import unittest
 from copy import deepcopy
 from src.isl_v2.autonomous_agent import run_cycle, evaluate_hypothesis
+from src.isl_v2.provenance import select_asof
 
 
 def obs(code, day, available, price, revision=1, interval='1mo', src='wb_pink_monthly'):
@@ -40,6 +41,38 @@ class AgentTests(unittest.TestCase):
         r=run_cycle(d)
         self.assertEqual(r['paper_decisions'][0]['decision_type'],'HOLD_CASH')
         self.assertEqual(r['paper_fills_created'],0)
+    def test_asof_preserves_original_source_value_concept(self):
+        rows=[obs('EQUITY_TR_PLN','2026-09-30T00:00:00Z',
+                  '2026-10-02T00:00:00Z',110)]
+        selected=select_asof(rows,'2026-10-17T00:00:00Z')
+        self.assertEqual(len(selected),1)
+        self.assertEqual(selected[0]['value_concept'],'MONTHLY_AVERAGE')
+
+    def test_four_reference_prices_cannot_be_laundered_into_total_return(self):
+        d=self.job()
+        months=['2026-06-30','2026-07-31','2026-08-31','2026-09-30']
+        available=['2026-07-02','2026-08-02','2026-09-02','2026-10-02']
+        instruments=('EQUITY_TR_PLN','BONDS_TR_PLN','GOLD_TR_PLN')
+        for instrument in instruments:
+            for i,(month,received) in enumerate(zip(months,available)):
+                d['observations'].append(obs(
+                    instrument,month+'T00:00:00Z',received+'T00:00:00Z',
+                    100+i,src='unqualified_ref'
+                ))
+        d['requirements']={
+            code:{'basis':'TOTAL_RETURN_INDEX','currency':'PLN'}
+            for code in instruments
+        }
+        result=run_cycle(d)
+        self.assertEqual(result['observations_available'],12)
+        self.assertEqual(
+            [row['decision_type'] for row in result['paper_decisions']],
+            ['HOLD_CASH']*3
+        )
+        self.assertTrue(all(not row['target_weights'] for row in result['paper_decisions']))
+        self.assertEqual(result['paper_fills_created'],0)
+        self.assertEqual(result['real_orders_created'],0)
+
     def test_hypothesis_is_only_research(self):
         d=self.job()
         for month in range(1,14):

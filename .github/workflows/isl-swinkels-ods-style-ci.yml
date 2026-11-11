@@ -1,0 +1,33 @@
+name: ISL Swinkels ODS Return M styles (one-shot)
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/swinkels_ods_return_m_style_probe_v01.py'
+      - '.github/workflows/isl-swinkels-ods-style-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  official-ods-cell-style:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Original ODS style/formula structure without numeric observations
+        run: |
+          set -euo pipefail
+          python -m scripts.swinkels_ods_return_m_style_probe_v01
+      - name: No source qualification
+        if: always()
+        run: |
+          echo "QUALIFIED_MODEL_SERIES=[]"
+          echo "RETURN_M_UNITS_NOT_CERTIFIED"
+          echo "M1_M2_M3=HOLD_CASH"

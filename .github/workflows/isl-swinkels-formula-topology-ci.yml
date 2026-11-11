@@ -1,0 +1,38 @@
+name: ISL Swinkels original Return M formula topology (one-shot)
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/swinkels_formula_topology_probe_v01.py'
+      - 'tests/test_swinkels_formula_shape_v01.py'
+      - '.github/workflows/isl-swinkels-formula-topology-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  original-formula-topology:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Six synthetic offline formula shape tests
+        run: |
+          set -euo pipefail
+          python -m unittest tests.test_swinkels_formula_shape_v01 -v
+      - name: Verify source SHA and formula references without finance values
+        run: |
+          set -euo pipefail
+          python -m scripts.swinkels_formula_topology_probe_v01
+      - name: Research qualification stays disabled
+        if: always()
+        run: |
+          echo "QUALIFIED_MODEL_SERIES=[]"
+          echo "FORMULA_ECONOMIC_SEMANTICS_CERTIFIED=false"
+          echo "M1_M2_M3=HOLD_CASH"
