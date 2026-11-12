@@ -28,6 +28,23 @@ jobs:
         with:
           python-version: '3.12'
       - run: npm --prefix wallet-portal ci --ignore-scripts
+      - name: Offline advisory gate negative tests
+        run: npm --prefix wallet-portal run test:security
+      - name: Report independent release block (not a dependency fix)
+        shell: bash
+        run: |
+          set +e
+          node wallet-portal/security-zod-gate.mjs
+          result=$?
+          set -e
+          if [ "$result" -eq 2 ]; then
+            echo "::warning::Zod dependency release gate BLOCKED; see issue #146. This is NOT a clean security release."
+            echo "Zod dependency remediation: BLOCKED (issue #146 OPEN)" >> "$GITHUB_STEP_SUMMARY"
+          elif [ "$result" -eq 0 ]; then
+            echo "Zod static lockfile gate: PASS; separate npm audit, compatibility testing and security review still required." >> "$GITHUB_STEP_SUMMARY"
+          else
+            exit "$result"
+          fi
       - run: npm --prefix wallet-portal test
       - run: npm --prefix wallet-portal run build
       - run: cd wallet-portal && npx playwright install --with-deps chromium

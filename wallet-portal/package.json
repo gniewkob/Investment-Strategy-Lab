@@ -5,7 +5,9 @@
   "scripts": {
     "build": "esbuild app.mjs --bundle --format=esm --platform=browser --outfile=dist/app.js",
     "test": "node --test test-transfer.mjs",
-    "test:e2e": "playwright test portal.spec.mjs --workers=1"
+    "test:e2e": "playwright test portal.spec.mjs --workers=1",
+    "security:check": "node security-zod-gate.mjs",
+    "test:security": "node --test test-security-zod-gate.mjs"
   },
   "dependencies": {
     "@base-org/account": "2.5.13"
