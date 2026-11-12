@@ -34,8 +34,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git hash-object scripts/nav_forward_preflight_v24.py)" = "8dd45653fa74175630a278215ac514ee593e0b55"
-          test "$(git hash-object scripts/nav_fx_evidence_capture_v25.py)" = "e6fc4ef8910b04beb2de0bd1d0afd8ab5599c148"
+          test "$(git hash-object scripts/nav_forward_preflight_v24.py)" = "80d01a7dd9798000b67d64bd805a4d23947a351c"
+          test "$(git hash-object scripts/nav_fx_evidence_capture_v25.py)" = "20eec04275bef96bb5bc619e0ed7f93458d9562d"
           test "$(git hash-object scripts/nav_forward_freeze_v22.py)" = "7a9c7e5cbc643b5ad760ec64d4212468b64a22bf"
           test "$(git hash-object scripts/nav_forward_admission_v23.py)" = "d425076ea809f622e5b2c1c4e87ba59fe060f990"
           echo "D2_ORIGINAL_SOURCE_BLOBS_VERIFIED"
