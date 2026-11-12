@@ -26,6 +26,8 @@ on:
       - tests/test_public_first_hicp_nbp_purchasing_power_v01.py
       - scripts/eurostat_pl_*.py
       - tests/test_eurostat_pl_*.py
+      - scripts/public_first_multisource_macro_evidence_v05.py
+      - tests/test_public_first_multisource_macro_evidence_v05.py
       - scripts/public_first_prospective_source_observation_v03.py
       - tests/test_public_first_prospective_source_observation_v03.py
       - scripts/public_first_nbp_reference_research_v01.py
@@ -57,6 +59,8 @@ on:
       - tests/test_public_first_hicp_nbp_purchasing_power_v01.py
       - scripts/eurostat_pl_*.py
       - tests/test_eurostat_pl_*.py
+      - scripts/public_first_multisource_macro_evidence_v05.py
+      - tests/test_public_first_multisource_macro_evidence_v05.py
       - scripts/public_first_prospective_source_observation_v03.py
       - tests/test_public_first_prospective_source_observation_v03.py
       - scripts/public_first_nbp_reference_research_v01.py
