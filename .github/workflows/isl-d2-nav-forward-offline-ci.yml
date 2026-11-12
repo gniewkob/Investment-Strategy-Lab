@@ -60,7 +60,7 @@ jobs:
               "tests.test_nav_fx_evidence_capture_v25",
           ])
           result=unittest.TextTestRunner(verbosity=2).run(suite)
-          if not result.wasSuccessful() or result.testsRun != 19 or result.skipped:
+          if not result.wasSuccessful() or result.testsRun != 22 or result.skipped:
               raise SystemExit("D2_NAV_FORWARD_SOURCE_GATE_BLOCKED")
           print("D2_NAV_FORWARD_OFFLINE_PASS tests="+str(result.testsRun))
           print("D2_PRIVATE_NBP_RAW_NO_OVERWRITE_NO_SYMLINK_RESEARCH_ONLY")
