@@ -277,6 +277,8 @@ def observe_once(*, nbp_start: str, nbp_end: str, hicp_since: str,
     """Explicit injection: callers must opt in; never auto-run HTTP."""
     if nbp_fetch is None or hicp_fetch is None:
         raise SourceObservationBlocked("EXPLICIT_OFFICIAL_SOURCE_FETCH_REQUIRED")
+    # Refuse missing or naive clocks BEFORE making any HTTP request.
+    _utc(clock())
     nbp = capture(nbp_start, nbp_end, fetch=nbp_fetch, clock=clock)
     data = hicp_fetch(eurostat_query(hicp_since, hicp_until))
     hicp = inspect_hicp(data, since=hicp_since, until=hicp_until,
