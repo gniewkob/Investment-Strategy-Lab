@@ -42,7 +42,7 @@ jobs:
           suite = unittest.defaultTestLoader.loadTestsFromName(
               "tests.test_public_first_nbp_reference_research_v01")
           result = unittest.TextTestRunner(verbosity=2).run(suite)
-          if not result.wasSuccessful() or result.skipped or result.testsRun != 14:
+          if not result.wasSuccessful() or result.skipped or result.testsRun != 15:
               raise SystemExit("PUBLIC_FIRST_SOURCE_CONTRACT_NOT_ACCEPTED")
           PY
 
