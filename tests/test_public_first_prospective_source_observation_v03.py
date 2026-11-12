@@ -4,11 +4,16 @@ from __future__ import annotations
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 import json
+import os
+from pathlib import Path
+import tempfile
 import unittest
+from unittest.mock import patch
+from io import StringIO
 
 from scripts.public_first_prospective_source_observation_v03 import (
     SCHEMA, SourceObservationBlocked, assemble_receipt, compare_receipts,
-    observe_once, verify_receipt,
+    observe_once, verify_receipt, _load_previous, main,
 )
 from scripts.nbp_reference_capture import capture
 from scripts.eurostat_hicp_macro_context_v01 import inspect_hicp
@@ -167,6 +172,79 @@ class ProspectivePublicSourceTests(unittest.TestCase):
             with self.subTest(stamp=stamp), self.assertRaisesRegex(
                 SourceObservationBlocked, "EUROSTAT_PROVIDER_UPDATED_INVALID"):
                 snap(hicp=fake)
+
+    def test_previous_receipt_regular_file_round_trip(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "previous.json"
+            previous = snap()
+            path.write_text(json.dumps(previous), encoding="utf-8")
+            self.assertEqual(_load_previous(path), previous)
+
+    def test_previous_receipt_symlink_oversized_and_fifo_rejected(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            regular = root / "receipt.json"
+            regular.write_text(json.dumps(snap()), encoding="utf-8")
+            link = root / "receipt.link"
+            link.symlink_to(regular)
+            with self.assertRaises(SourceObservationBlocked):
+                _load_previous(link)
+            big = root / "too-big.json"
+            big.write_bytes(b"x" * 20_001)
+            with self.assertRaisesRegex(SourceObservationBlocked, "BOUNDED_REGULAR_FILE"):
+                _load_previous(big)
+            pipe = root / "fifo"
+            os.mkfifo(pipe)
+            with self.assertRaisesRegex(SourceObservationBlocked, "BOUNDED_REGULAR_FILE"):
+                _load_previous(pipe)
+
+    def test_previous_receipt_invalid_json_and_missing_file_rejected(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "invalid.json"
+            path.write_text("{", encoding="utf-8")
+            with self.assertRaisesRegex(SourceObservationBlocked, "PREVIOUS_RECEIPT_UNREADABLE"):
+                _load_previous(path)
+            with self.assertRaisesRegex(SourceObservationBlocked, "PREVIOUS_RECEIPT_UNREADABLE"):
+                _load_previous(Path(d) / "absent.json")
+
+    def test_cli_preflights_prior_receipt_before_public_fetch(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "old.json"
+            for content in ("not-a-receipt", json.dumps(snap(end="2026-09-29"))):
+                path.write_text(content, encoding="utf-8")
+                argv = [
+                    "source-observe", "--nbp-start", START,
+                    "--nbp-end", END, "--hicp-since", SINCE,
+                    "--hicp-until", UNTIL, "--allow-public-source-fetch",
+                    "--previous-receipt", str(path),
+                ]
+                with self.subTest(content=content[:20]):
+                    with patch("sys.argv", argv), patch("sys.stderr", new=StringIO()), \
+                         patch("scripts.public_first_prospective_source_observation_v03.official_fetch") as nbp, \
+                         patch("scripts.public_first_prospective_source_observation_v03.official_hicp_fetch") as hicp:
+                        with self.assertRaises(SystemExit) as cm:
+                            main()
+                        self.assertEqual(cm.exception.code, 2)
+                        nbp.assert_not_called()
+                        hicp.assert_not_called()
+
+    def test_invalid_current_windows_preflight_never_fetches(self):
+        for start, end, since, until in (
+                (START, "2026-12-01", SINCE, UNTIL),
+                (START, END, "2026-13", "2026-13"),
+                ("2026-13-01", END, SINCE, UNTIL)):
+            with self.subTest(end=end, since=since):
+                calls = []
+                def forbidden(*_args, **_kwargs):
+                    calls.append(True)
+                    raise AssertionError("PUBLIC_API_REQUEST_PRECEDES_VALIDATION")
+                with self.assertRaises((SourceObservationBlocked, ValueError)):
+                    observe_once(
+                        nbp_start=start, nbp_end=end,
+                        hicp_since=since, hicp_until=until,
+                        nbp_fetch=forbidden, hicp_fetch=forbidden,
+                        clock=lambda: AT)
+                self.assertEqual(calls, [])
 
     def test_no_implicit_network_or_naive_clock(self):
         with self.assertRaisesRegex(SourceObservationBlocked,
