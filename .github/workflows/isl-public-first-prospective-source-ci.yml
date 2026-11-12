@@ -1,0 +1,72 @@
+name: ISL public-first prospective NBP+Eurostat source observation
+
+# One-shot, explicitly bounded official public endpoints only. No schedule,
+# no paid APIs, no secrets, no market-data artifacts or account operations.
+on:
+  pull_request:
+    paths:
+      - 'scripts/public_first_prospective_source_observation_v03.py'
+      - 'tests/test_public_first_prospective_source_observation_v03.py'
+      - 'docs/ISL_PUBLIC_FIRST_PROSPECTIVE_OBSERVATIONS_20261112_PL.md'
+      - '.github/workflows/isl-public-first-prospective-source-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-source-and-revision-contract:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Synthetic negative tests, network disabled
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import socket, unittest
+          def reject(*_a, **_kw):
+              raise AssertionError("NETWORK_ATTEMPT_IN_OFFLINE_OBSERVATION_TESTS")
+          socket.socket.connect = reject
+          socket.socket.connect_ex = reject
+          socket.create_connection = reject
+          suite = unittest.defaultTestLoader.loadTestsFromName(
+              "tests.test_public_first_prospective_source_observation_v03")
+          result = unittest.TextTestRunner(verbosity=2).run(suite)
+          if not result.wasSuccessful() or result.skipped or result.testsRun != 12:
+              raise SystemExit("PUBLIC_FIRST_PROSPECTIVE_NEGATIVE_CONTRACT_FAIL")
+          PY
+
+  original-public-source-observation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Real public NBP and Eurostat HTTPS source fingerprints, no raw market values
+        run: |
+          set -euo pipefail
+          python -m scripts.public_first_prospective_source_observation_v03 \
+            --nbp-start 2026-09-01 --nbp-end 2026-09-30 \
+            --hicp-since 2026-08 --hicp-until 2026-09 \
+            --allow-public-source-fetch
+      - name: No historical source PIT or real financial authorization
+        if: always()
+        run: |
+          echo 'SOURCE_FIRST_RELEASE_PIT_CERTIFIED=false'
+          echo 'QUALIFIED_MODEL_SERIES=[]'
+          echo 'M1_M2_M3=INSUFFICIENT_DATA/HOLD_CASH'
+          echo 'FINANCIAL_OPERATIONS=0'
