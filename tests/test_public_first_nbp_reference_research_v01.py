@@ -3,13 +3,18 @@ from __future__ import annotations
 
 from datetime import date, datetime, timezone
 from decimal import Decimal
+from email.message import Message
+from io import BytesIO
 import json
 from unittest import TestCase, main
 from unittest.mock import patch
 from urllib.parse import urlsplit
+from urllib.request import BaseHandler, ProxyHandler, build_opener
+from urllib.response import addinfourl
 
 from scripts.public_first_nbp_reference_research_v01 import (
     PublicReferenceBlocked, research_public_nbp, official_fetch, _ranges,
+    _NoRedirect,
 )
 
 TODAY = date(2026, 11, 12)
@@ -54,6 +59,28 @@ def mock_fetch(start="2021-11", end="2026-10", *,
             raise ValueError("EMPTY_SOURCE_SLICE")
         return json.dumps(data).encode()
     return fetch
+
+
+def _stub_urllib_opener(*, status, payload, attempts, location=None):
+    """Exercise urllib's *real* redirect machinery with zero network I/O."""
+    class OfflineHTTPS(BaseHandler):
+        handler_order = 100  # run before urllib's real HTTPSHandler
+
+        def https_open(self, req):
+            attempts.append(req.full_url)
+            if len(attempts) != 1 or urlsplit(req.full_url).netloc != "api.nbp.pl":
+                raise AssertionError("Unexpected redirected/outbound HTTP request")
+            headers = Message()
+            if location is not None:
+                headers["Location"] = location
+            return addinfourl(BytesIO(payload), headers, req.full_url, status)
+
+    def factory(*handlers):
+        if not any(isinstance(h, _NoRedirect) for h in handlers):
+            raise AssertionError("NBP opener must explicitly prohibit redirects")
+        return build_opener(OfflineHTTPS(), ProxyHandler({}), *handlers)
+
+    return factory
 
 
 class PublicFirstNBPTests(TestCase):
@@ -160,17 +187,34 @@ class PublicFirstNBPTests(TestCase):
                                     "NON_OFFICIAL_NBP_ENDPOINT"):
             official_fetch("http://api.nbp.pl/api/cenyzlota/2026-01-01/2026-01-31/?format=json")
 
-    def test_official_fetch_rejects_redirect_to_other_host(self):
-        class Response:
-            status = 200
-            def __enter__(self):return self
-            def __exit__(self,*a):return False
-            def geturl(self):return "https://example.org/"
-            def read(self,n):return b"[]"
-        with patch("scripts.public_first_nbp_reference_research_v01.urlopen",
-                   return_value=Response()):
-            with self.assertRaisesRegex(PublicReferenceBlocked,"UNEXPECTED_NBP"):
-                official_fetch("https://api.nbp.pl/api/cenyzlota/2026-01-01/2026-01-31/?format=json")
+    def test_official_fetch_rejects_redirect_before_network_egress(self):
+        url = ("https://api.nbp.pl/api/cenyzlota/"
+               "2026-01-01/2026-01-31/?format=json")
+        for status, target in ((302, "https://example.org/untrusted"),
+                               (307, "https://api.nbp.pl/api/other?format=json")):
+            with self.subTest(status=status, target=target):
+                attempts = []
+                with patch("scripts.public_first_nbp_reference_research_v01.build_opener",
+                           side_effect=_stub_urllib_opener(
+                               status=status, payload=b"redirect-body",
+                               location=target, attempts=attempts)):
+                    with self.assertRaisesRegex(PublicReferenceBlocked,
+                                                "UNEXPECTED_NBP_REDIRECT"):
+                        official_fetch(url)
+                # Most important security invariant: redirect destination is
+                # NEVER contacted, even once, before fail-closed rejection.
+                self.assertEqual(attempts, [url])
+
+    def test_official_fetch_valid_https_200_no_redirect(self):
+        url = ("https://api.nbp.pl/api/cenyzlota/"
+               "2026-01-01/2026-01-31/?format=json")
+        attempts = []
+        payload = b'[{"data":"2026-01-27","cena":320.25}]'
+        with patch("scripts.public_first_nbp_reference_research_v01.build_opener",
+                   side_effect=_stub_urllib_opener(
+                       status=200, payload=payload, attempts=attempts)):
+            self.assertEqual(official_fetch(url), payload)
+        self.assertEqual(attempts, [url])
 
 
 if __name__ == "__main__":
