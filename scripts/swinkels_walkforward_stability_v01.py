@@ -59,7 +59,9 @@ def evaluate_lagged_error(values) -> dict:
         recent = abs(realized - candidate) * 10000
         base_errors.append(base)
         recent_errors.append(recent)
-        improved += recent < base
+        # Ignore floating-point noise; tied errors are not predictive wins.
+        if recent < base and not math.isclose(recent, base, rel_tol=1e-12, abs_tol=1e-9):
+            improved += 1
     base_mae = math.fsum(base_errors) / 24
     recent_mae = math.fsum(recent_errors) / 24
     if not math.isfinite(base_mae) or not math.isfinite(recent_mae):
