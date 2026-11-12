@@ -1,0 +1,70 @@
+name: ISL Swinkels original Erasmus v6 DOI lineage (metadata-only)
+
+# Public DataCite DOI records only. No licensed price rows, provider secrets,
+# broker/wallet API, subscriptions, live execution or database mutations.
+on:
+  pull_request:
+    paths:
+      - 'scripts/swinkels_datacite_doi_lineage_v01.py'
+      - 'tests/test_swinkels_datacite_doi_lineage_v01.py'
+      - 'docs/SWINKELS_V6_DATACITE_CROSSWALK_20261112_PL.md'
+      - '.github/workflows/isl-swinkels-datacite-lineage-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  metadata-offline-tests:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Run static negative checks without network access
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import socket, unittest
+          def reject(*_args, **_kwargs):
+              raise AssertionError("Offline DOI tests attempted network")
+          socket.socket.connect = reject
+          socket.socket.connect_ex = reject
+          socket.create_connection = reject
+          suite = unittest.defaultTestLoader.loadTestsFromName(
+              "tests.test_swinkels_datacite_doi_lineage_v01")
+          result = unittest.TextTestRunner(verbosity=2).run(suite)
+          if not result.wasSuccessful() or result.skipped or result.testsRun != 14:
+              raise SystemExit("DOI_LINEAGE_NEGATIVE_TESTS_FAILED")
+          PY
+
+  original-publisher-registry:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Read only two original DataCite DOI records
+        run: |
+          set -euo pipefail
+          python -m scripts.swinkels_datacite_doi_lineage_v01
+      - name: Keep source/model qualification restricted
+        if: always()
+        run: |
+          echo "HISTORIC_V6_BYTES_IDENTICAL=NOT_VERIFIED"
+          echo "DATASET_HISTORIC_PIT_CERTIFIED=false"
+          echo "QUALIFIED_MODEL_SERIES=[]"
+          echo "M1_M2_M3=HOLD_CASH"
+          echo "FINANCIAL_OPERATIONS=0"
