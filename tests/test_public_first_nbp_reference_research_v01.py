@@ -58,8 +58,11 @@ def mock_fetch(start="2021-11", end="2026-10", *,
 
 class PublicFirstNBPTests(TestCase):
     def run_study(self, start="2021-11", end="2026-10", fetch=None):
-        return research_public_nbp(start, end, fetch=fetch or mock_fetch(start,end),
-                                   today=TODAY, clock=CLOCK)
+        # Keep synthetic fixture creation independent of invalid input dates.
+        # A mock cannot loop forever while testing an invalid YYYY-13 month.
+        return research_public_nbp(
+            start, end, fetch=fetch or mock_fetch("2021-10", "2026-10"),
+            today=TODAY, clock=CLOCK)
 
     def test_sixty_complete_months_and_provenance(self):
         out = self.run_study()
