@@ -1,0 +1,74 @@
+name: ISL Swinkels original-source lag-only forecast errors (research)
+
+# Bounded original publisher SHA-pinned ODS; no wallet, signing, DB, orders,
+# licensed equity/bond model admission or automatic financial decisions.
+on:
+  pull_request:
+    paths:
+      - 'scripts/swinkels_walkforward_stability_v01.py'
+      - 'tests/test_swinkels_walkforward_stability_v01.py'
+      - 'docs/ISL_SWINKELS_WALKFORWARD_STABILITY_20261112_PL.md'
+      - '.github/workflows/isl-swinkels-walkforward-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  synthetic-no-network:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Ten synthetic lag and source-integrity negative tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import socket
+          import unittest
+          def reject(*args, **kwargs):
+              raise AssertionError("NETWORK_ATTEMPTED_DURING_WALKFORWARD_UNIT_TESTS")
+          socket.socket.connect = reject
+          socket.socket.connect_ex = reject
+          socket.create_connection = reject
+          suite = unittest.defaultTestLoader.loadTestsFromName(
+              "tests.test_swinkels_walkforward_stability_v01"
+          )
+          result = unittest.TextTestRunner(verbosity=2).run(suite)
+          if not result.wasSuccessful() or result.skipped or result.testsRun != 10:
+              raise SystemExit("WALKFORWARD_UNIT_TESTS_BLOCKED")
+          PY
+
+  original-publisher-retrospective:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Original public DataverseNL ODS, 360 reconciled observations, 240 forecast comparisons
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m scripts.swinkels_walkforward_stability_v01
+      - name: Non-execution and historic-source qualification warnings
+        if: always()
+        run: |
+          echo 'M1_M2_M3=INSUFFICIENT_DATA/HOLD_CASH'
+          echo 'HISTORICAL_PIT_CERTIFIED=false'
+          echo 'ORIGINAL_ERASMUS_V6_BYTE_EQUIVALENCE=false'
+          echo 'CONFIRMATORY_HOLDOUT=false'
+          echo 'FINANCIAL_OPERATIONS=0'
