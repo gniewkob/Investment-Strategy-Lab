@@ -73,7 +73,9 @@ def _stub_urllib_opener(*, status, payload, attempts, location=None):
             headers = Message()
             if location is not None:
                 headers["Location"] = location
-            return addinfourl(BytesIO(payload), headers, req.full_url, status)
+            response = addinfourl(BytesIO(payload), headers, req.full_url, status)
+            response.msg = "OK" if status == 200 else "Redirect"  # urllib's HTTPErrorProcessor requires msg
+            return response
 
     def factory(*handlers):
         if not any(isinstance(h, _NoRedirect) for h in handlers):
