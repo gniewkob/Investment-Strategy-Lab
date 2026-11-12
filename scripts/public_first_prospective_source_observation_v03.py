@@ -66,6 +66,24 @@ def _bounded_day(value: object) -> date:
         raise SourceObservationBlocked("SOURCE_DATE_INVALID") from exc
 
 
+def _provider_update(value: object, observed_at: datetime) -> str:
+    """Validate provider's latest-update timestamp; never first publication."""
+    if value == "NOT_PROVIDED":
+        return value
+    if (type(value) is not str or len(value) > 40 or not re.fullmatch(
+            r"[12]\d{3}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}"
+            r"(?:\.\d{1,6})?(?:Z|[+-]\d{2}:?\d{2})", value)):
+        raise SourceObservationBlocked("EUROSTAT_PROVIDER_UPDATED_INVALID")
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise SourceObservationBlocked("EUROSTAT_PROVIDER_UPDATED_INVALID") from exc
+    if parsed.tzinfo is None or parsed.astimezone(timezone.utc) > (
+            observed_at + timedelta(minutes=5)):
+        raise SourceObservationBlocked("EUROSTAT_PROVIDER_UPDATED_INVALID")
+    return value
+
+
 def _sha(value: object) -> str:
     if not isinstance(value, str) or not _SHA.fullmatch(value):
         raise SourceObservationBlocked("SOURCE_FINGERPRINT_INVALID")
@@ -167,8 +185,8 @@ def assemble_receipt(nbp: object, hicp: object, *, nbp_start: str,
         "source_fingerprints_sha256": source_hashes,
         "source_capture_completed_at_utc": capture_times,
         "source_semantics": SOURCE_TYPES.copy(),
-        "eurostat_provider_reported_updated": str(hicp.get(
-            "provider_reported_last_update", "NOT_PROVIDED"))[:80],
+        "eurostat_provider_reported_updated": _provider_update(
+            hicp.get("provider_reported_last_update"), finished),
         "nbp_observation_counts": {k: len(v) for k, v in series.items()},
         "eurostat_observation_months": len(observations),
         "historical_first_publication_timestamp_verified": False,
@@ -219,6 +237,7 @@ def verify_receipt(receipt: object) -> dict:
                               if k != "receipt_sha256"})).hexdigest()):
         raise SourceObservationBlocked("RECEIPT_INTEGRITY_OR_SAFETY_INVALID")
     finished = _read_utc(receipt.get("captured_at_utc"))
+    _provider_update(receipt.get("eurostat_provider_reported_updated"), finished)
     nbp = receipt.get("nbp_window")
     est = receipt.get("eurostat_window")
     fingerprints = receipt.get("source_fingerprints_sha256")

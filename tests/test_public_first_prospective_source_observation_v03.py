@@ -156,6 +156,18 @@ class ProspectivePublicSourceTests(unittest.TestCase):
                              hicp_since=SINCE, hicp_until=UNTIL,
                              completed_at=AT)
 
+    def test_malformed_or_future_provider_timestamp_rejected(self):
+        for stamp in ("2035-01-01T11:00:00+0000",
+                      "bad-updated",
+                      "2026-11-12T10:00:00+0000\\n::warning::forged"):
+            def fake(url):
+                payload = eurostat_fetch(url)
+                payload["updated"] = stamp
+                return payload
+            with self.subTest(stamp=stamp), self.assertRaisesRegex(
+                SourceObservationBlocked, "EUROSTAT_PROVIDER_UPDATED_INVALID"):
+                snap(hicp=fake)
+
     def test_no_implicit_network_or_naive_clock(self):
         with self.assertRaisesRegex(SourceObservationBlocked,
                                     "EXPLICIT_OFFICIAL_SOURCE_FETCH"):
