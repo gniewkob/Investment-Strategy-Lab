@@ -3,6 +3,8 @@ name: ISL A2-B1-C1-C2 combined-tree offline acceptance
 # Research-only cross-layer integration. No provider source collection,
 # market feed, database, finance account, brokerage or trading action.
 # Fail closed on any upstream A2 drift, v0.9 archive change or test failure.
+# PR143 CI retrigger 2026-11-12: the previous macOS hosted job was cancelled
+# while queued; preserve both platform jobs and all original assertions.
 on:
   pull_request:
     paths:
