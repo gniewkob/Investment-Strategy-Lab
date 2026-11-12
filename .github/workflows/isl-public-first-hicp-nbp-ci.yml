@@ -1,0 +1,71 @@
+name: ISL public-first HICP + NBP purchasing-power source research
+
+# New optional public-only macro research lane; no deployment, DB, funds,
+# private sources, API keys, paper fills or trading connections.
+on:
+  pull_request:
+    paths:
+      - 'scripts/public_first_hicp_nbp_purchasing_power_v01.py'
+      - 'tests/test_public_first_hicp_nbp_purchasing_power_v01.py'
+      - 'docs/ISL_PUBLIC_FIRST_HICP_NBP_ACCEPTANCE_20261112_PL.md'
+      - '.github/workflows/isl-public-first-hicp-nbp-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  source-contract-offline:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Sixteen bounded HICP and NBP negative tests without network
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import socket
+          import unittest
+          def reject(*args, **kwargs):
+              raise AssertionError("UNEXPECTED_NETWORK_IN_OFFLINE_HICP_TESTS")
+          socket.socket.connect = reject
+          socket.socket.connect_ex = reject
+          socket.create_connection = reject
+          suite=unittest.defaultTestLoader.loadTestsFromName(
+              "tests.test_public_first_hicp_nbp_purchasing_power_v01")
+          result=unittest.TextTestRunner(verbosity=2).run(suite)
+          if not result.wasSuccessful() or result.skipped or result.testsRun != 16:
+              raise SystemExit("PUBLIC_HICP_SOURCE_CONTRACT_NOT_ACCEPTED")
+          PY
+
+  live-official-eurostat-nbp:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Original official Eurostat PL HICP + NBP references for 59 published months
+        run: |
+          set -euo pipefail
+          python -m scripts.public_first_hicp_nbp_purchasing_power_v01 \
+            --since 2021-11 --until 2026-09 --allow-public-source-fetch
+      - name: Keep downstream decision boundaries explicit
+        if: always()
+        run: |
+          echo 'EXTERNAL_ORDERS_SENT=0'
+          echo 'FINANCIAL_OPERATIONS=0'
+          echo 'HISTORICAL_PIT_CERTIFIED=false'
+          echo 'LEGACY_M1_M2_M3=NOT_RUN_UNQUALIFIED_TOTAL_RETURN_SERIES'
