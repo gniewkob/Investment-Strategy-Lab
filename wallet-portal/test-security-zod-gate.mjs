@@ -61,7 +61,7 @@ test("an unpatched Zod version is blocked, even with a dual SDK range", () => {
 test("an SDK declaring Zod 3 only blocks a forged patched lock", () => {
   const result = assessZodLock(fixture({ version: "4.6.7", range: "^3.25.76" }));
   assert.equal(result.status, "BLOCKED");
-  assert.ok(result.findings.includes("CDP_SDK_ZOD4_COMPATIBILITY_NOT_DECLARED"));
+  assert.ok(result.findings.some(f => f.startsWith("CDP_SDK_ZOD4_COMPATIBILITY_NOT_DECLARED:")));
 });
 
 test("a patched Zod 4 with compatible SDK range passes only the static gate", () => {
