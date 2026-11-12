@@ -54,3 +54,12 @@ Warunki:
 - [ ] Model M1–M3, prawa i źródła płatne pozostają odrębne; żadnych operacji finansowych.
 
 **Uwaga implementacyjna:** Rozwój na gałęzi bazującej na HEAD PR #143 umożliwia wcześniejsze testy. Bieżący PR jest **stacked**: nie scalamy go przed przyjęciem PR #143 i potwierdzeniem nowej bazy.
+
+
+## 6. Potwierdzony wynik niezależnego skanu i integracja po #143
+
+- Codex Security CLI, scan `b17edeb3-63f1-4aaf-82e1-164b2f323338` (2026-11-12): 8/8 recenzji, 0 findings, exit code 0; **zakres ograniczony do sześciu plików Python** (cztery moduły i dwa testy). Raport i threat model pozostają lokalne u właściciela. Nie jest to pełny audyt bezpieczeństwa repozytorium ani historycznego alertu GitGuardian #138.
+- Skan został przeprowadzony na izolowanym checkout #145 `56de0cae81542f62caee01a61b35353cbf64afa2`; po integracji z main porównano identyczność blob SHA-1 wszystkich sześciu zeskanowanych plików. Skan nie dotyczył zmian w workflow ani dokumentacji.
+- PR #143 scalono do main jako `7a3c378153fc43dda623a6479e28e48ca2d52c02`; regresja po merge [GitHub Actions #43290981087](https://github.com/gniewkob/Investment-Strategy-Lab/actions/runs/43290981087) PASS, 1285 testów, 1 pominięty.
+- Po retarget #145 na main konflikt przodków rozwiązano **merge commitem z dwoma rodzicami**, bez force push. Docelowy diff względem main obejmuje tylko pięć HICP plików (moduł, test, workflow, dokument i wpisy w full runner); nowa implementacja NBP z #143 została zachowana.
+- Dokładny HEAD PR #145 wymaga ponownego pełnego CI i GitGuardian po tej integracji, a po merge końcowej regresji main. **Żaden zakres nie autoryzuje rzeczywistych transakcji, M1–M3 ani promowania danych price-only do total return.**
