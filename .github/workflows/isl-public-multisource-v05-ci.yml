@@ -1,0 +1,90 @@
+name: ISL v0.5 public multi-source macro research bundle
+
+# Source scope: only fixed official NBP+Eurostat HTTPS, four GET total.
+# No automation schedule, no paid licence, no user accounts or transactions.
+on:
+  pull_request:
+    paths:
+      - 'scripts/public_first_multisource_macro_evidence_v05.py'
+      - 'tests/test_public_first_multisource_macro_evidence_v05.py'
+      - 'docs/ISL_PUBLIC_FIRST_MULTISOURCE_BUNDLE_20261113_PL.md'
+      - '.github/workflows/isl-public-multisource-v05-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-multi-source-contract:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Offline five-series source, PIT and rights regression
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import socket, unittest
+          def offline(*a, **kw):
+              raise AssertionError("OFFLINE_TEST_NETWORK_ATTEMPT")
+          socket.socket.connect = offline
+          socket.socket.connect_ex = offline
+          socket.create_connection = offline
+          tests = unittest.defaultTestLoader.loadTestsFromName(
+              "tests.test_public_first_multisource_macro_evidence_v05")
+          result = unittest.TextTestRunner(verbosity=2).run(tests)
+          if not result.wasSuccessful() or result.skipped or result.testsRun != 12:
+              raise SystemExit("MULTISOURCE_OFFLINE_ACCEPTANCE_FAILED")
+          PY
+
+  original-four-endpoint-source-evidence:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Real public NBP Table A + NBP gold + Eurostat HICP + PL 10Y yield
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from scripts.public_first_multisource_macro_evidence_v05 import (
+              observe_once,
+          )
+          from scripts.public_first_nbp_reference_research_v01 import official_fetch
+          from scripts.eurostat_hicp_macro_context_v01 import _fetch as hicp_fetch
+          from scripts.eurostat_pl_bond_yield_source_probe_v04 import (
+              fetch_official as bond_yield_fetch,
+          )
+          result = observe_once(
+              nbp_fetch=official_fetch, hicp_fetch=hicp_fetch,
+              yield_fetch=bond_yield_fetch)
+          if (not 18 <= result["nbp_observed_business_days"] <= 23
+                  or result["hicp_months"] != 13
+                  or result["government_yield_months"] != 59
+                  or len(result["source_fingerprints_sha256"]) != 4
+                  or len(result["series_types"]) != 5
+                  or result["historical_point_in_time_certified"] is not False
+                  or result["source_rights_fully_approved"] is not False
+                  or result["asset_total_return_series_qualified"] != []
+                  or result["m1_m2_m3"] != "INSUFFICIENT_DATA_HOLD_CASH"
+                  or result["financial_operations"] != 0
+                  or result["orders_sent"] != 0
+                  or result["database_writes"] != 0):
+              raise SystemExit("OFFICIAL_MULTISOURCE_EVIDENCE_BLOCKED")
+          print("ISL_PUBLIC_MULTISOURCE_CONTEXT=" +
+                json.dumps(result, sort_keys=True, separators=(",", ":")))
+          PY
