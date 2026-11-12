@@ -109,7 +109,7 @@ class PublicFirstNBPTests(TestCase):
                                     "MISSING_LATE_MONTH_NBP_PUBLICATION"):
             self.run_study("2025-01","2025-12",
                            fetch=mock_fetch("2025-01","2025-12",
-                                           missing_gold="2025-12-27"))
+                                           missing_gold="2025-06-27"))
 
     def test_duplicate_publication_fails_closed(self):
         with self.assertRaisesRegex(PublicReferenceBlocked,"NBP_CHUNK_REJECTED"):
