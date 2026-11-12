@@ -13,7 +13,7 @@ from hashlib import sha256
 import json
 import re
 from urllib.parse import urlsplit
-from urllib.request import Request, urlopen
+from urllib.request import HTTPRedirectHandler, HTTPSHandler, Request, build_opener
 
 from scripts.nbp_reference_capture import capture
 
@@ -73,8 +73,15 @@ def _ranges(first: date, last: date):
         cursor = stop + timedelta(days=1)
 
 
+class _NoRedirect(HTTPRedirectHandler):
+    """Refuse HTTP redirects before urllib can contact their target host."""
+
+    def redirect_request(self, request, fp, code, msg, headers, newurl):
+        raise PublicReferenceBlocked("UNEXPECTED_NBP_REDIRECT_OR_STATUS")
+
+
 def official_fetch(url: str) -> bytes:
-    """Strict URL and redirect allowlist, bounded payload; no credentials."""
+    """Strict NBP HTTPS origin, no redirects, bounded payload; no credentials."""
     parsed = urlsplit(url)
     if (parsed.scheme != "https" or parsed.netloc != "api.nbp.pl"
             or not parsed.path.startswith("/api/") or
@@ -82,7 +89,10 @@ def official_fetch(url: str) -> bytes:
         raise PublicReferenceBlocked("NON_OFFICIAL_NBP_ENDPOINT")
     req = Request(url, headers={"Accept": "application/json",
                                 "User-Agent": "ISL-public-first-educational/1"})
-    with urlopen(req, timeout=25) as response:
+    # A response.geturl() check alone is too late: urlopen follows 30x first.
+    # Use a request-local opener; never alter process-global urllib behavior.
+    opener = build_opener(_NoRedirect(), HTTPSHandler())
+    with opener.open(req, timeout=25) as response:
         final = urlsplit(response.geturl())
         if (response.status != 200 or final.scheme != "https"
                 or final.netloc != parsed.netloc or
