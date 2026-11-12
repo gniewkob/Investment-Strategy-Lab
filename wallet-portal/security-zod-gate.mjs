@@ -47,6 +47,20 @@ function hasSupportedZod4Range(range, resolvedVersion) {
   });
 }
 
+function resolveInstalledZod(packages, sdkPath) {
+  // Follow Node's nearest-ancestor node_modules resolution order; checking
+  // root Zod first could falsely validate an incompatible nested resolution.
+  let cursor = sdkPath;
+  while (cursor) {
+    const candidate = `${cursor}/node_modules/zod`;
+    if (Object.hasOwn(packages, candidate)) return packages[candidate];
+    const separator = cursor.lastIndexOf("/node_modules/");
+    if (separator < 0) break;
+    cursor = cursor.slice(0, separator);
+  }
+  return packages["node_modules/zod"] ?? null;
+}
+
 export function assessZodLock(lock) {
   const findings = [];
   const packages = lock && typeof lock === "object" ? lock.packages : null;
@@ -94,10 +108,7 @@ export function assessZodLock(lock) {
     if (!validPackageVersion(sdk?.version)) {
       findings.push(`CDP_SDK_VERSION_NOT_VERIFIABLE:${name}`);
     }
-    const sdkDir = name.slice(0, -"/node_modules/@coinbase/cdp-sdk".length);
-    const scopedZod = packages[`${name}/node_modules/zod`] ||
-      (sdkDir ? packages[`${sdkDir}/node_modules/zod`] : null) ||
-      packages["node_modules/zod"];
+    const scopedZod = resolveInstalledZod(packages, name);
     if (!scopedZod || !hasSupportedZod4Range(sdk?.dependencies?.zod, scopedZod.version)) {
       findings.push(`CDP_SDK_ZOD4_COMPATIBILITY_NOT_DECLARED:${name}`);
     }
