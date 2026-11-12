@@ -1,17 +1,26 @@
-name: ISL v0.4 original official Eurostat PL bond yield source probe
+name: ISL v0.4 original Eurostat PL sovereign yield reference
+# Public and official Eurostat, source-typed, no paid APIs, no credentials,
+# no financial operations and no automatic schedules.
 on:
   pull_request:
     paths:
       - 'scripts/eurostat_pl_bond_yield_source_probe_v04.py'
+      - 'scripts/eurostat_pl_government_bond_yield_context_v04.py'
       - 'tests/test_eurostat_pl_bond_yield_source_probe_v04.py'
+      - 'tests/test_eurostat_pl_government_bond_yield_context_v04.py'
+      - 'docs/ISL_EUROSTAT_PL_SOVEREIGN_YIELD_REFERENCE_V04_20261112_PL.md'
       - '.github/workflows/isl-eurostat-pl-yield-probe-v04.yml'
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
   offline-contract:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 6
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
         with:
@@ -19,8 +28,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: No-network schema-probe unit tests
+      - name: No-network original-source source shape and typed yield cases
         run: |
+          set -euo pipefail
           python - <<'PY'
           import socket, unittest
           def deny(*args, **kwargs):
@@ -28,13 +38,17 @@ jobs:
           socket.socket.connect = deny
           socket.socket.connect_ex = deny
           socket.create_connection = deny
-          suite = unittest.defaultTestLoader.loadTestsFromName(
-              "tests.test_eurostat_pl_bond_yield_source_probe_v04")
+          suite = unittest.TestSuite()
+          for name in (
+            "tests.test_eurostat_pl_bond_yield_source_probe_v04",
+            "tests.test_eurostat_pl_government_bond_yield_context_v04",
+          ):
+              suite.addTests(unittest.defaultTestLoader.loadTestsFromName(name))
           result = unittest.TextTestRunner(verbosity=2).run(suite)
-          if not result.wasSuccessful() or result.skipped or result.testsRun != 5:
-              raise SystemExit("EUROSTAT_SOURCE_PROBE_UNIT_FAILURE")
+          if not result.wasSuccessful() or result.skipped or result.testsRun != 17:
+              raise SystemExit("EUROSTAT_PL_YIELD_SOURCE_CONTRACT_FAILURE")
           PY
-  official-source-shape:
+  official-original-source-evidence:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -44,6 +58,32 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Official original public Eurostat data, schema-only stdout
+      - name: One official Eurostat HTTPS GET; print schema + yield aggregates only
         run: |
-          python -m scripts.eurostat_pl_bond_yield_source_probe_v04 --allow-public-eurostat-read
+          set -euo pipefail
+          python - <<'PY'
+          from datetime import datetime, timezone
+          import json
+          from scripts.eurostat_pl_bond_yield_source_probe_v04 import (
+              fetch_official, inspect_source_shape,
+          )
+          from scripts.eurostat_pl_government_bond_yield_context_v04 import (
+              parse_original_yields,
+          )
+          raw = fetch_official()
+          observed_at = datetime.now(timezone.utc)
+          shape = inspect_source_shape(raw, observed_at=observed_at)
+          receipt = parse_original_yields(raw, observed_at=observed_at)
+          if (shape["source_bytes_sha256"] != receipt["original_response_sha256"]
+                  or shape["time_count"] != receipt["observed_months"]
+                  or receipt["observed_months"] != 59
+                  or receipt["historical_pit_certified"] is not False
+                  or receipt["qualified_model_series"] != []
+                  or receipt["orders_sent"] != 0
+                  or receipt["financial_operations"] != 0):
+              raise SystemExit("ORIGINAL_PL_EUROSTAT_YIELD_NOT_ACCEPTED")
+          print("ISL_ORIGINAL_PL_YIELD_SOURCE_SHAPE=" +
+                json.dumps(shape, sort_keys=True, separators=(",", ":")))
+          print("ISL_ORIGINAL_PL_YIELD_CONTEXT=" +
+                json.dumps(receipt, sort_keys=True, separators=(",", ":")))
+          PY
