@@ -192,8 +192,13 @@ class PublicFirstNBPTests(TestCase):
     def test_official_fetch_rejects_redirect_before_network_egress(self):
         url = ("https://api.nbp.pl/api/cenyzlota/"
                "2026-01-01/2026-01-31/?format=json")
-        for status, target in ((302, "https://example.org/untrusted"),
-                               (307, "https://api.nbp.pl/api/other?format=json")):
+        for status, target in (
+            (301, "https://example.org/moved"),
+            (302, "https://example.org/untrusted"),
+            (303, "http://api.nbp.pl/api/insecure"),
+            (307, "https://api.nbp.pl/api/other?format=json"),
+            (308, "https://another.invalid/api/cenyzlota/"),
+        ):
             with self.subTest(status=status, target=target):
                 attempts = []
                 with patch("scripts.public_first_nbp_reference_research_v01.build_opener",
