@@ -1,0 +1,71 @@
+name: ISL public-first NBP 60-month reference research (no paid data)
+
+# Public, official reference data only. One-shot checks, no production
+# scheduling; no DB, secrets, purchase, trading, wallet or paper-event writes.
+on:
+  pull_request:
+    paths:
+      - 'scripts/public_first_nbp_reference_research_v01.py'
+      - 'tests/test_public_first_nbp_reference_research_v01.py'
+      - 'docs/ISL_PUBLIC_FIRST_NBP_RESEARCH_ACCEPTANCE_20261112_PL.md'
+      - '.github/workflows/isl-public-first-nbp-reference-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-synthetic-contract:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Run public-source integrity and negative tests with network blocked
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import socket, unittest
+          def reject(*args, **kwargs):
+              raise AssertionError("Unexpected network during offline public-first source tests")
+          socket.socket.connect = reject
+          socket.socket.connect_ex = reject
+          socket.create_connection = reject
+          suite = unittest.defaultTestLoader.loadTestsFromName(
+              "tests.test_public_first_nbp_reference_research_v01")
+          result = unittest.TextTestRunner(verbosity=2).run(suite)
+          if not result.wasSuccessful() or result.skipped or result.testsRun != 14:
+              raise SystemExit("PUBLIC_FIRST_SOURCE_CONTRACT_NOT_ACCEPTED")
+          PY
+
+  public-official-nbp-evidence:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: One-shot real 60-month public NBP source snapshot and reference scenarios
+        run: |
+          set -euo pipefail
+          python -m scripts.public_first_nbp_reference_research_v01 \
+            --start-month 2021-11 --end-month 2026-10 --allow-public-nbp-fetch
+      - name: Explicit model qualification and authorization limits
+        if: always()
+        run: |
+          echo 'LEGACY_M1_M2_M3=NOT_RUN_UNQUALIFIED_TOTAL_RETURN_SERIES'
+          echo 'HISTORICAL_VINTAGES_VERIFIED=false'
+          echo 'PAPER_EVENTS_CREATED=0'
+          echo 'DATABASE_WRITES=0'
+          echo 'FINANCIAL_OPERATIONS=0'
