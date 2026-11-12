@@ -90,6 +90,43 @@ test("missing manifest edges or missing Zod cannot be mistaken for remediation",
   }
 });
 
+test("a declared Zod-4 range must not exclude the resolved patched version", () => {
+  for (const range of [
+    "^3.25.76 || >=4.0.0 <4.6.6",
+    "^3.25.76 || ^4.8.0",
+    ">=4.0.0 <4.6.6",
+  ]) {
+    const result = assessZodLock(fixture({ version: "4.6.7", range }));
+    assert.equal(result.status, "BLOCKED", range);
+    assert.ok(result.findings.some(f => f.startsWith("CDP_SDK_ZOD4_COMPATIBILITY_NOT_DECLARED")));
+  }
+});
+
+test("every installed SDK copy is checked, including the nested Base resolution", () => {
+  const lock = fixture({ version: "4.6.7", range: "^3.25.76 || ^4.6.6" });
+  lock.packages["node_modules/@base-org/account/node_modules/@coinbase/cdp-sdk"] = {
+    version: "1.61.0", dependencies: { zod: "^3.25.76" },
+  };
+  const result = assessZodLock(lock);
+  assert.equal(result.status, "BLOCKED");
+  assert.equal(result.checked_sdk_package_count, 2);
+  assert.ok(result.findings.some(f =>
+    f.includes("node_modules/@base-org/account/node_modules/@coinbase/cdp-sdk")));
+});
+
+test("missing or empty versions of Base/SDK are rejected even if Zod is patched", () => {
+  for (const variant of ["missing-base", "empty-base", "missing-sdk", "empty-sdk"]) {
+    const lock = fixture({ version: "4.6.7", range: "^3.25.76 || ^4.6.6" });
+    if (variant === "missing-base") delete lock.packages["node_modules/@base-org/account"].version;
+    if (variant === "empty-base") lock.packages["node_modules/@base-org/account"].version = "";
+    if (variant === "missing-sdk") delete lock.packages["node_modules/@coinbase/cdp-sdk"].version;
+    if (variant === "empty-sdk") lock.packages["node_modules/@coinbase/cdp-sdk"].version = "";
+    const result = assessZodLock(lock);
+    assert.equal(result.status, "BLOCKED", variant);
+    assert.ok(result.findings.some(f => f.includes("VERSION_NOT_VERIFIABLE")), variant);
+  }
+});
+
 test("CLI reports block as exit code 2, without invoking npm or a wallet", () => {
   const lock = JSON.parse(readFileSync(join(root, "package-lock.json"), "utf8"));
   const result = assessZodLock(lock);
