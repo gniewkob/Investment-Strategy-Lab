@@ -28,3 +28,9 @@
 ## Rzeczy pozostające poza zakresem
 
 Rentowność w procentach p.a. to nie zrealizowany zwrot z portfela obligacji; brak cen transakcyjnych, kupowanych ISIN, kuponów, reinwestycji, kosztów i różnych terminów zapadalności. Sam hash dzisiejszej odpowiedzi nie dowodzi historycznego stanu `first_available_at`. Nadal otwarty [P0 #116](https://github.com/gniewkob/Investment-Strategy-Lab/issues/116) dotyczący praw do oryginalnego indeksu TR, source vintages i uprawnień. Ta analiza **nie kwalifikuje** `PL_BONDS_TR_PLN` ani M1–M3.
+
+## Faktycznie opublikowane wartości z oryginalnego odczytu — PASS
+
+Zrealizowany [jednorazowy odczyt oficjalnego Eurostat w CI #43325200200](https://github.com/gniewkob/Investment-Strategy-Lab/actions/runs/43325200200) wykazał **59/59 niepustych miesięcy 2021-11…2026-09**, bez statusów specjalnych (`source_statistical_flags_count={}`). Rzeczywisty SHA-256 pobranych bajtów `acc302b641ca981b5c8e22259a613d092e5c12d0cb01e39e7e093c07c59c3abf`, receipt `4157225ea7cc1f2a5bf9816f9141ab036f098a29f0d5e5f3cfecdda42388b9f6`. Źródło zgłosiło ostatnią aktualizację `2026-11-12T11:00:00+0100`. Zapis **nie** poświadcza dokładnej pierwotnej daty żadnej historycznej obserwacji.
+
+Na oficjalnych liczbach: minimum **3,12% p.a.**, maksimum **7,82% p.a.**, średnia z miesięcznych poziomów **5,6115% p.a.**, największa bezwzględna różnica między poziomami sąsiadujących miesięcy **154 pb** (tj. 1,54 punktu procentowego). Ta różnica **nie jest** stopą zwrotu z obligacji ani maksymalną stratą/zyskiem inwestora. Ani poziom rentowności, ani jego zmiana nie reprezentują realizowalnego indeksu dochodowego.

@@ -45,7 +45,7 @@ jobs:
           ):
               suite.addTests(unittest.defaultTestLoader.loadTestsFromName(name))
           result = unittest.TextTestRunner(verbosity=2).run(suite)
-          if not result.wasSuccessful() or result.skipped or result.testsRun != 17:
+          if not result.wasSuccessful() or result.skipped or result.testsRun != 19:
               raise SystemExit("EUROSTAT_PL_YIELD_SOURCE_CONTRACT_FAILURE")
           PY
   official-original-source-evidence:

@@ -9,6 +9,8 @@ import argparse
 from datetime import datetime, timezone
 from hashlib import sha256
 import json
+import re
+from scripts.public_first_prospective_source_observation_v03 import _provider_update
 from urllib.parse import urlencode, urlsplit
 from urllib.request import HTTPRedirectHandler, HTTPSHandler, Request, build_opener
 
@@ -63,7 +65,9 @@ def inspect_source_shape(raw: object, *, observed_at: datetime) -> dict:
         raise PublicEurostatProbeBlocked("JSONSTAT_STRUCTURE_NOT_MATCHED")
     dims = data["dimension"]
     names = data["id"]
-    if (not 1 <= len(names) <= 7 or len(names) != len(set(names))
+    if (len(names) != 4 or any(type(name) is not str for name in names)
+            or len(names) != len(set(names))
+            or set(names) != {"freq", "int_rt", "geo", "time"}
             or set(names) != set(dims) or len(data["size"]) != len(names)):
         raise PublicEurostatProbeBlocked("DIMENSIONS_INCOHERENT")
     codes = {}
@@ -74,9 +78,20 @@ def inspect_source_shape(raw: object, *, observed_at: datetime) -> dict:
             raise PublicEurostatProbeBlocked("DIMENSION_INVALID")
         cat = dims[name].get("category")
         ix = cat.get("index") if isinstance(cat, dict) else None
-        if not isinstance(ix, dict) or len(ix) != count:
+        if (not isinstance(ix, dict) or len(ix) != count
+                or any(type(v) is not int for v in ix.values())
+                or set(ix.values()) != set(range(count))
+                or any(type(k) is not str or not re.fullmatch(
+                    r"20\d{2}-(0[1-9]|1[0-2])" if name == "time"
+                    else r"[A-Z0-9_]{1,16}", k) for k in ix)):
             raise PublicEurostatProbeBlocked("CATEGORIES_INVALID")
-        codes[name] = sorted(str(k) for k in ix)
+        codes[name] = sorted(ix)
+    try:
+        provider_update = _provider_update(
+            data.get("updated", "NOT_PROVIDED"),
+            observed_at.astimezone(timezone.utc))
+    except ValueError as exc:
+        raise PublicEurostatProbeBlocked("PROVIDER_UPDATED_INVALID") from exc
     # No raw data or complete time series is ever printed/returned.
     return {
         "schema": "ISL_PUBLIC_EUROSTAT_PL_BONDS_YIELD_SHAPE_PROBE_V04",
@@ -91,7 +106,7 @@ def inspect_source_shape(raw: object, *, observed_at: datetime) -> dict:
         "time_first": codes["time"][0] if "time" in codes else None,
         "time_last": codes["time"][-1] if "time" in codes else None,
         "time_count": len(codes.get("time", [])),
-        "provider_updated_not_first_release": str(data.get("updated", "UNKNOWN"))[:50],
+        "provider_updated_not_first_release": provider_update,
         "actual_rate_values_in_output": False,
         "historical_pit_certified": False,
         "bond_holding_period_total_return": False,

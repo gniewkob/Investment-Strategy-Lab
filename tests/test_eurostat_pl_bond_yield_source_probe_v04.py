@@ -46,6 +46,32 @@ class EurostatPLBondYieldProbeTests(unittest.TestCase):
             with self.subTest(size=len(raw)), self.assertRaises(PublicEurostatProbeBlocked):
                 inspect_source_shape(raw, observed_at=CLOCK)
 
+    def test_provider_updated_injection_and_future_rejected(self):
+        for provider_update in (
+                "2026-11-12T11:00:00+0100\n::warning::malicious",
+                "2032-01-01T00:00:00Z",
+                123456):
+            d = sample()
+            d["updated"] = provider_update
+            with self.subTest(value=str(provider_update)), self.assertRaisesRegex(
+                    PublicEurostatProbeBlocked, "PROVIDER_UPDATED_INVALID"):
+                inspect_source_shape(json.dumps(d).encode(), observed_at=CLOCK)
+
+    def test_invalid_category_positions_and_code_injection_rejected(self):
+        for mutation in ("duplicate", "malicious", "bad-id"):
+            d = sample()
+            if mutation == "duplicate":
+                d["dimension"]["time"]["category"]["index"]["2026-09"] = 0
+            elif mutation == "malicious":
+                d["dimension"]["geo"]["category"]["index"] = {
+                    "PL\n::warning::forged": 0,
+                }
+            else:
+                d["id"][0] = ["malicious"]
+            with self.subTest(mutation=mutation), self.assertRaises(
+                    PublicEurostatProbeBlocked):
+                inspect_source_shape(json.dumps(d).encode(), observed_at=CLOCK)
+
     def test_naive_clock_blocked(self):
         with self.assertRaisesRegex(PublicEurostatProbeBlocked, "CLOCK_REQUIRED"):
             inspect_source_shape(json.dumps(sample()).encode(),
