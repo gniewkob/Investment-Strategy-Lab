@@ -42,7 +42,7 @@ jobs:
           suite = unittest.defaultTestLoader.loadTestsFromName(
               "tests.test_public_first_prospective_source_observation_v03")
           result = unittest.TextTestRunner(verbosity=2).run(suite)
-          if not result.wasSuccessful() or result.skipped or result.testsRun != 13:
+          if not result.wasSuccessful() or result.skipped or result.testsRun != 18:
               raise SystemExit("PUBLIC_FIRST_PROSPECTIVE_NEGATIVE_CONTRACT_FAIL")
           PY
 
