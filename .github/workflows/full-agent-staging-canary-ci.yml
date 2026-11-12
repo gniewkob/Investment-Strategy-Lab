@@ -22,6 +22,8 @@ on:
       - tests/test_nav_fx_evidence_capture_v25.py
       - tests/test_deploy_shadow_evidence_mac_v12.py
       - tests/test_shadow_offsite_export_v13.py
+      - scripts/public_first_nbp_reference_research_v01.py
+      - tests/test_public_first_nbp_reference_research_v01.py
       - scripts/swinkels_*.py
       - tests/test_swinkels_*.py
       - .github/workflows/isl-swinkels-source-bound-stats-ci.yml
@@ -45,6 +47,8 @@ on:
       - tests/test_nav_fx_evidence_capture_v25.py
       - tests/test_deploy_shadow_evidence_mac_v12.py
       - tests/test_shadow_offsite_export_v13.py
+      - scripts/public_first_nbp_reference_research_v01.py
+      - tests/test_public_first_nbp_reference_research_v01.py
       - scripts/swinkels_*.py
       - tests/test_swinkels_*.py
       - .github/workflows/isl-swinkels-source-bound-stats-ci.yml
