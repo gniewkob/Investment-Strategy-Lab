@@ -24,6 +24,8 @@ on:
       - tests/test_shadow_offsite_export_v13.py
       - scripts/public_first_hicp_nbp_purchasing_power_v01.py
       - tests/test_public_first_hicp_nbp_purchasing_power_v01.py
+      - scripts/public_first_prospective_source_observation_v03.py
+      - tests/test_public_first_prospective_source_observation_v03.py
       - scripts/public_first_nbp_reference_research_v01.py
       - tests/test_public_first_nbp_reference_research_v01.py
       - scripts/swinkels_*.py
@@ -51,6 +53,8 @@ on:
       - tests/test_shadow_offsite_export_v13.py
       - scripts/public_first_hicp_nbp_purchasing_power_v01.py
       - tests/test_public_first_hicp_nbp_purchasing_power_v01.py
+      - scripts/public_first_prospective_source_observation_v03.py
+      - tests/test_public_first_prospective_source_observation_v03.py
       - scripts/public_first_nbp_reference_research_v01.py
       - tests/test_public_first_nbp_reference_research_v01.py
       - scripts/swinkels_*.py

@@ -1,0 +1,36 @@
+name: ISL public-first source CodeQL static security scan
+
+# GitHub CodeQL is free for public repositories. This independently scans
+# Python source risks; it does NOT substitute for a human code review.
+on:
+  pull_request:
+    paths:
+      - 'scripts/public_first_prospective_source_observation_v03.py'
+      - 'tests/test_public_first_prospective_source_observation_v03.py'
+      - '.github/workflows/isl-public-first-prospective-source-ci.yml'
+      - '.github/workflows/isl-public-first-prospective-codeql-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+  security-events: write
+
+jobs:
+  codeql-public-source-python:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Initialize CodeQL Python security analysis
+        uses: github/codeql-action/init@v4
+        with:
+          languages: python
+          build-mode: none
+          queries: security-extended
+      - name: CodeQL analysis and upload to GitHub code scanning
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: '/language:python'
