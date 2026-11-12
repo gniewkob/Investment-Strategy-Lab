@@ -11,8 +11,10 @@ import argparse
 from datetime import date, datetime, timedelta, timezone
 from hashlib import sha256
 import json
+import os
 from pathlib import Path
 import re
+import stat
 from typing import Callable
 
 from scripts.nbp_reference_capture import capture
@@ -296,10 +298,19 @@ def observe_once(*, nbp_start: str, nbp_end: str, hicp_since: str,
     """Explicit injection: callers must opt in; never auto-run HTTP."""
     if nbp_fetch is None or hicp_fetch is None:
         raise SourceObservationBlocked("EXPLICIT_OFFICIAL_SOURCE_FETCH_REQUIRED")
-    # Refuse missing or naive clocks BEFORE making any HTTP request.
-    _utc(clock())
+    # Validate both date windows and an aware clock BEFORE any HTTP request.
+    started = _utc(clock())
+    first, last = _bounded_day(nbp_start), _bounded_day(nbp_end)
+    if (last < first or (last - first).days > 92
+            or last > started.date()
+            or not isinstance(hicp_since, str) or not isinstance(hicp_until, str)
+            or not re.fullmatch(r"20\d{2}-(0[1-9]|1[0-2])", hicp_since)
+            or not re.fullmatch(r"20\d{2}-(0[1-9]|1[0-2])", hicp_until)
+            or not hicp_since <= hicp_until <= started.strftime("%Y-%m")):
+        raise SourceObservationBlocked("SOURCE_WINDOW_OUTSIDE_OBSERVATION")
+    hicp_url = eurostat_query(hicp_since, hicp_until)
     nbp = capture(nbp_start, nbp_end, fetch=nbp_fetch, clock=clock)
-    data = hicp_fetch(eurostat_query(hicp_since, hicp_until))
+    data = hicp_fetch(hicp_url)
     hicp = inspect_hicp(data, since=hicp_since, until=hicp_until,
                         retrieval_scope="EUROSTAT_PUBLIC_READ_ONLY")
     return assemble_receipt(
@@ -309,11 +320,29 @@ def observe_once(*, nbp_start: str, nbp_end: str, hicp_since: str,
 
 
 def _load_previous(path: Path) -> dict:
-    if path.is_symlink() or not path.is_file() or path.stat().st_size > MAX_LOCAL_RECEIPT_BYTES:
+    """Read only a bounded, already-open regular file without symlink races."""
+    if not isinstance(path, Path) or not hasattr(os, "O_NOFOLLOW"):
+        raise SourceObservationBlocked("PREVIOUS_RECEIPT_UNSAFE_FILE_SYSTEM")
+    flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC
+    try:
+        fd = os.open(path, flags)
+    except OSError as exc:
+        raise SourceObservationBlocked("PREVIOUS_RECEIPT_UNREADABLE") from exc
+    try:
+        with os.fdopen(fd, "rb") as stream:
+            info = os.fstat(stream.fileno())
+            if (not stat.S_ISREG(info.st_mode) or info.st_size <= 0
+                    or info.st_size > MAX_LOCAL_RECEIPT_BYTES):
+                raise SourceObservationBlocked(
+                    "PREVIOUS_RECEIPT_NOT_BOUNDED_REGULAR_FILE")
+            raw = stream.read(MAX_LOCAL_RECEIPT_BYTES + 1)
+    except OSError as exc:
+        raise SourceObservationBlocked("PREVIOUS_RECEIPT_UNREADABLE") from exc
+    if not raw or len(raw) > MAX_LOCAL_RECEIPT_BYTES:
         raise SourceObservationBlocked("PREVIOUS_RECEIPT_NOT_BOUNDED_REGULAR_FILE")
     try:
-        previous = json.loads(path.read_bytes())
-    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        previous = json.loads(raw)
+    except (UnicodeError, json.JSONDecodeError) as exc:
         raise SourceObservationBlocked("PREVIOUS_RECEIPT_UNREADABLE") from exc
     return verify_receipt(previous)
 
@@ -330,14 +359,21 @@ def main() -> None:
     if not args.allow_public_source_fetch:
         parser.error("Explicit --allow-public-source-fetch required")
     try:
+        previous = (_load_previous(args.previous_receipt)
+                    if args.previous_receipt is not None else None)
+        if previous is not None and (
+                previous["nbp_window"] != {
+                    "start": args.nbp_start, "end": args.nbp_end}
+                or previous["eurostat_window"] != {
+                    "since": args.hicp_since, "until": args.hicp_until}):
+            raise SourceObservationBlocked("PREVIOUS_RECEIPT_WINDOW_MISMATCH")
         current = observe_once(
             nbp_start=args.nbp_start, nbp_end=args.nbp_end,
             hicp_since=args.hicp_since, hicp_until=args.hicp_until,
             nbp_fetch=official_fetch, hicp_fetch=official_hicp_fetch)
         print("ISL_PROSPECTIVE_PUBLIC_SOURCE_RECEIPT=" + json.dumps(
             current, sort_keys=True, separators=(",", ":")))
-        if args.previous_receipt is not None:
-            previous = _load_previous(args.previous_receipt)
+        if previous is not None:
             comparison = compare_receipts(previous, current)
             print("ISL_PUBLIC_SOURCE_REVISION_COMPARISON=" + json.dumps(
                 comparison, sort_keys=True, separators=(",", ":")))
