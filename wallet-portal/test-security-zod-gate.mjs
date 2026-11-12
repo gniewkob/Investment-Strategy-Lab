@@ -114,6 +114,28 @@ test("every installed SDK copy is checked, including the nested Base resolution"
     f.includes("node_modules/@base-org/account/node_modules/@coinbase/cdp-sdk")));
 });
 
+test("SDK Zod resolution checks every ancestor before the hoisted root copy", () => {
+  const lock = fixture({ version: "4.6.7", range: "^3.25.76 || ^4.6.6" });
+  const nestedSdk = "node_modules/a/node_modules/b/node_modules/@coinbase/cdp-sdk";
+  const nearestZod = "node_modules/a/node_modules/zod";
+  lock.packages[nestedSdk] = {
+    version: "1.62.0", dependencies: { zod: "4.6.7" },
+  };
+  lock.packages[nearestZod] = { version: "4.7.0" };
+  const wrong = assessZodLock(lock);
+  assert.equal(wrong.status, "BLOCKED");
+  assert.ok(wrong.findings.some(f =>
+    f.includes("CDP_SDK_ZOD4_COMPATIBILITY_NOT_DECLARED:" + nestedSdk)));
+
+  // Node resolves the nearest copy first; a compatible nearer copy
+  // supersedes the incompatible intermediate ancestor.
+  lock.packages["node_modules/a/node_modules/b/node_modules/zod"] = {
+    version: "4.6.7",
+  };
+  const fixed = assessZodLock(lock);
+  assert.equal(fixed.status, "PASS_STATIC_LOCKFILE_ONLY");
+});
+
 test("missing or empty versions of Base/SDK are rejected even if Zod is patched", () => {
   for (const variant of ["missing-base", "empty-base", "missing-sdk", "empty-sdk"]) {
     const lock = fixture({ version: "4.6.7", range: "^3.25.76 || ^4.6.6" });
