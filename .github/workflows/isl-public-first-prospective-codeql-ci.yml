@@ -5,6 +5,8 @@ name: ISL public-first source CodeQL static security scan
 on:
   pull_request:
     paths:
+      - 'scripts/eurostat_pl_*.py'
+      - 'tests/test_eurostat_pl_*.py'
       - 'scripts/public_first_prospective_source_observation_v03.py'
       - 'tests/test_public_first_prospective_source_observation_v03.py'
       - '.github/workflows/isl-public-first-prospective-source-ci.yml'
