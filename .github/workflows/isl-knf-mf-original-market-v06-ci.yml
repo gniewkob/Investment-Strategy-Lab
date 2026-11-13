@@ -4,7 +4,10 @@ on:
   pull_request:
     paths:
       - 'scripts/knf_mf_official_source_probe_v06.py'
+      - 'scripts/knf_original_unit_history_research_v06.py'
       - 'tests/test_knf_mf_official_source_probe_v06.py'
+      - 'tests/test_knf_original_unit_history_research_v06.py'
+      - 'docs/ISL_UKNF_MF_BROAD_MARKET_RESEARCH_V06_20261113_PL.md'
       - '.github/workflows/isl-knf-mf-original-market-v06-ci.yml'
   workflow_dispatch:
 permissions:
@@ -32,10 +35,12 @@ jobs:
           socket.socket.connect = deny
           socket.socket.connect_ex = deny
           socket.create_connection = deny
-          suite=unittest.defaultTestLoader.loadTestsFromName(
-              "tests.test_knf_mf_official_source_probe_v06")
+          suite=unittest.TestSuite()
+          for name in ("tests.test_knf_mf_official_source_probe_v06",
+                       "tests.test_knf_original_unit_history_research_v06"):
+              suite.addTests(unittest.defaultTestLoader.loadTestsFromName(name))
           result=unittest.TextTestRunner(verbosity=2).run(suite)
-          if not result.wasSuccessful() or result.skipped or result.testsRun != 13:
+          if not result.wasSuccessful() or result.skipped or result.testsRun != 27:
               raise SystemExit("MARKET_ORIGINAL_NEGATIVE_CONTRACT_FAIL")
           PY
   real-uknf-fund-kid-valuations:
@@ -64,3 +69,17 @@ jobs:
       - name: One official public MF XLSX read, no macros or raw data logs
         run: |
           python -m scripts.knf_mf_official_source_probe_v06 --source mf --allow-public-original-source-read
+
+  real-uknf-one-primary-share-class:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: One actual primary PLN share class 2026-09 history and one KID, 4 UKNF GET max
+        run: |
+          python -m scripts.knf_original_unit_history_research_v06 --allow-public-original-source-read
