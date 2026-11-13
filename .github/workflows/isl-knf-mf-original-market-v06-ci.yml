@@ -63,4 +63,4 @@ jobs:
           python-version: '3.12'
       - name: One official public MF XLSX read, no macros or raw data logs
         run: |
-          python -m scripts.knf_mf_official_source_probe_v06 --source mf --allow-public-original-source-read
+          python -m scripts.knf_mf_official_source_probe_v06 --source mf --allow-public-original-source-read --mf-structure-only
