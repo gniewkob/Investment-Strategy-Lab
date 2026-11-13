@@ -4,14 +4,23 @@ on:
     paths:
       - 'scripts/mf_original_turnover_schema_v07.py'
       - 'tests/test_mf_original_turnover_schema_v07.py'
+      - 'scripts/knf_one_class_nav_quality_v07.py'
+      - 'tests/test_knf_one_class_nav_quality_v07.py'
+      - 'scripts/research_readiness_quality_v07.py'
+      - 'tests/test_research_readiness_quality_v07.py'
+      - 'docs/ISL_CROSS_SOURCE_RESEARCH_QUALITY_V07_20261113_PL.md'
       - '.github/workflows/isl-mf-market-quality-v07-ci.yml'
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
-  offline-mf-schema:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 8
+  offline-mf-and-nav-and-evidence:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:
@@ -26,10 +35,14 @@ jobs:
           socket.socket.connect=forbidden
           socket.socket.connect_ex=forbidden
           socket.create_connection=forbidden
-          suite=unittest.defaultTestLoader.loadTestsFromName("tests.test_mf_original_turnover_schema_v07")
+          suite=unittest.TestSuite()
+          for module in ("tests.test_mf_original_turnover_schema_v07",
+                         "tests.test_knf_one_class_nav_quality_v07",
+                         "tests.test_research_readiness_quality_v07"):
+              suite.addTests(unittest.defaultTestLoader.loadTestsFromName(module))
           result=unittest.TextTestRunner(verbosity=2).run(suite)
-          if not result.wasSuccessful() or result.testsRun!=5:
-              raise SystemExit("OFFLINE_MF_SCHEMA_TEST_FAILURE")
+          if not result.wasSuccessful() or result.skipped or result.testsRun!=27:
+              raise SystemExit("OFFLINE_CROSS_SOURCE_QUALITY_CONTRACT_FAILURE")
           PY
   official-mf-schema-probe:
     runs-on: ubuntu-24.04
