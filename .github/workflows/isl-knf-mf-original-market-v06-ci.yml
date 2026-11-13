@@ -35,7 +35,7 @@ jobs:
           suite=unittest.defaultTestLoader.loadTestsFromName(
               "tests.test_knf_mf_official_source_probe_v06")
           result=unittest.TextTestRunner(verbosity=2).run(suite)
-          if not result.wasSuccessful() or result.skipped or result.testsRun != 12:
+          if not result.wasSuccessful() or result.skipped or result.testsRun != 13:
               raise SystemExit("MARKET_ORIGINAL_NEGATIVE_CONTRACT_FAIL")
           PY
   real-uknf-fund-kid-valuations:
@@ -63,4 +63,4 @@ jobs:
           python-version: '3.12'
       - name: One official public MF XLSX read, no macros or raw data logs
         run: |
-          python -m scripts.knf_mf_official_source_probe_v06 --source mf --allow-public-original-source-read --mf-structure-only
+          python -m scripts.knf_mf_official_source_probe_v06 --source mf --allow-public-original-source-read
