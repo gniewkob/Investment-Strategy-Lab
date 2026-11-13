@@ -1,0 +1,66 @@
+name: ISL public market originals KNF fund valuation and MF bond trading probe
+# One small page per official KNF endpoint and one original MF XLSX, no schedules.
+on:
+  pull_request:
+    paths:
+      - 'scripts/knf_mf_official_source_probe_v06.py'
+      - 'tests/test_knf_mf_official_source_probe_v06.py'
+      - '.github/workflows/isl-knf-mf-original-market-v06-ci.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  offline-original-contract:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Strict original schema negative tests, all sockets denied
+        run: |
+          python - <<'PY'
+          import socket, unittest
+          def deny(*args, **kwargs): raise AssertionError("OFFLINE_NETWORK_ATTEMPT")
+          socket.socket.connect = deny
+          socket.socket.connect_ex = deny
+          socket.create_connection = deny
+          suite=unittest.defaultTestLoader.loadTestsFromName(
+              "tests.test_knf_mf_official_source_probe_v06")
+          result=unittest.TextTestRunner(verbosity=2).run(suite)
+          if not result.wasSuccessful() or result.skipped or result.testsRun != 12:
+              raise SystemExit("MARKET_ORIGINAL_NEGATIVE_CONTRACT_FAIL")
+          PY
+  real-uknf-fund-kid-valuations:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: At most three small pages, public UKNF original market API
+        run: |
+          python -m scripts.knf_mf_official_source_probe_v06 --source knf --allow-public-original-source-read
+  real-mf-secondary-bond-market-original:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: One official public MF XLSX read, no macros or raw data logs
+        run: |
+          python -m scripts.knf_mf_official_source_probe_v06 --source mf --allow-public-original-source-read
