@@ -1,0 +1,74 @@
+name: ISL public market originals KNF fund valuation and MF bond trading probe
+# One scoped UKNF primary-unit history query + one MF original XLSX.
+# Original fund directory/KID list pages already audited in CI run 43335870547.
+# No parallel redundant UKNF batch calls, avoiding provider load.
+on:
+  pull_request:
+    paths:
+      - 'scripts/knf_mf_official_source_probe_v06.py'
+      - 'scripts/knf_original_unit_history_research_v06.py'
+      - 'tests/test_knf_mf_official_source_probe_v06.py'
+      - 'tests/test_knf_original_unit_history_research_v06.py'
+      - 'docs/ISL_UKNF_MF_BROAD_MARKET_RESEARCH_V06_20261113_PL.md'
+      - '.github/workflows/isl-knf-mf-original-market-v06-ci.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  offline-original-contract:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Strict original schema negative tests, all sockets denied
+        run: |
+          python - <<'PY'
+          import socket, unittest
+          def deny(*args, **kwargs): raise AssertionError("OFFLINE_NETWORK_ATTEMPT")
+          socket.socket.connect = deny
+          socket.socket.connect_ex = deny
+          socket.create_connection = deny
+          suite=unittest.TestSuite()
+          for name in ("tests.test_knf_mf_official_source_probe_v06",
+                       "tests.test_knf_original_unit_history_research_v06"):
+              suite.addTests(unittest.defaultTestLoader.loadTestsFromName(name))
+          result=unittest.TextTestRunner(verbosity=2).run(suite)
+          if not result.wasSuccessful() or result.skipped or result.testsRun != 32:
+              raise SystemExit("MARKET_ORIGINAL_NEGATIVE_CONTRACT_FAIL")
+          PY
+  real-mf-secondary-bond-market-original:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: One official public MF XLSX read, no macros or raw data logs
+        run: |
+          python -m scripts.knf_mf_official_source_probe_v06 --source mf --allow-public-original-source-read
+
+  real-uknf-one-primary-share-class:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: One actual primary PLN share class 2026-09 NAV history; attach matching KID only (3-4 GET)
+        run: |
+          python -m scripts.knf_original_unit_history_research_v06 --allow-public-original-source-read
