@@ -6,7 +6,7 @@ import unittest
 from unittest.mock import Mock
 
 from scripts.knf_original_unit_history_research_v06 import (
-    evaluate_sample, observe_once, _url,
+    evaluate_sample, observe_once, _url, _matching_kid,
     Blocked, KNF_URLS,
 )
 
@@ -28,7 +28,7 @@ def sample():
     }
     kid_page={
         "content":[
-            {"fundId":None,"subfundId":200,"documentUuid":KID_ID,
+            {"fundId":None,"subfundId":210,"documentUuid":KID_ID,
              "publicationDate":"2026-09-09","currency":"PLN","unit":"A"}
         ],
         "page":{"size":2,"number":0,"totalElements":1}
@@ -42,7 +42,8 @@ def sample():
         "page":{"size":30,"number":0,"totalElements":3}
     }
     kid_detail={
-        "fundId":None,"subfundId":200,"documentUuid":KID_ID,
+        "fundId":None,"subfundId":210,"documentUuid":KID_ID,
+        "currency":"PLN","unit":"A","isPrimary":True,
         "publicationDate":"2026-09-09","riskLevel":4,
         "maxEntryFeeRate":0.01,"maxExitFeeRate":0,
         "managementAndOtherFeesRate":0.018,"transactionCostsRate":0.001,
@@ -63,6 +64,7 @@ class KNFSingleShareClassTests(unittest.TestCase):
     def test_actual_source_shape_research_semantics(self):
         x=evaluate()
         self.assertEqual(x["daily_same_class_observations"],3)
+        self.assertTrue(x["kid_exact_fund_unit_currency_match"])
         self.assertEqual(x["selected_currency"],"PLN")
         self.assertTrue(x["selected_primary_share_class"])
         self.assertEqual(x["observed_nav_level_change_pct_not_total_return"],"0.5000")
@@ -139,6 +141,24 @@ class KNFSingleShareClassTests(unittest.TestCase):
         d["maxEntryFeeRate"]=10
         with self.assertRaises(Blocked):
             evaluate(a,b,c,d)
+    def test_kid_for_other_subfund_rejected(self):
+        a,b,c,d=sample()
+        b["content"][0]["subfundId"]=300
+        with self.assertRaisesRegex(Blocked,"MATCHING_KID_DIFFERENT_FUND_OR_UNIT"):
+            evaluate(a,b,c,d)
+
+    def test_kid_future_to_history_cutoff_rejected(self):
+        a,b,c,d=sample()
+        b["content"][0]["publicationDate"]="2026-10-01"
+        with self.assertRaisesRegex(Blocked,"MATCHING_KID_LOOKAHEAD_PUBLICATION"):
+            evaluate(a,b,c,d)
+
+    def test_kid_detail_different_class_rejected(self):
+        a,b,c,d=sample()
+        d["unit"]="B"
+        with self.assertRaisesRegex(Blocked,"KID_DETAIL_IDENTITY_CHANGED"):
+            evaluate(a,b,c,d)
+
     def test_explicit_fetch_and_bounded_requests(self):
         with self.assertRaisesRegex(Blocked,"EXPLICIT"):
             observe_once(fetch=None)
@@ -146,6 +166,7 @@ class KNFSingleShareClassTests(unittest.TestCase):
         source={KNF_URLS["primary_pln_valuations"]:raw(a),
                 KNF_URLS["kid_units"]:raw(b),
                 _url("history",a["content"][0]):raw(c),
+                _url("kid_list",a["content"][0]):raw(b),
                 _url("kid",b["content"][0]):raw(d)}
         calls=[]
         def fetch(url):
