@@ -64,7 +64,8 @@ class OfficialMarketSourcesTests(unittest.TestCase):
         self.assertFalse(receipt["any_macro_or_script_executed"])
 
     def test_mf_rejects_macros_and_external_links(self):
-        for poison in ("xl/vbaProject.bin","xl/externalLinks/externalLink1.xml","../unsafe.xml"):
+        for poison in ("xl/vbaProject.bin","xl/externalLinks/externalLink1.xml",
+                       "xl/notes.BIN","xl/VBAPROJECT.BIN","../unsafe.xml"):
             with self.subTest(poison=poison),self.assertRaises(OriginalEvidenceBlocked):
                 inspect_mf_workbook(fake_xlsx(poison=poison),completed_at=NOW)
     def test_mf_rejects_fake_zip(self):

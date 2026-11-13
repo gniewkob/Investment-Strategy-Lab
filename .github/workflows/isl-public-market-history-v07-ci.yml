@@ -1,0 +1,74 @@
+name: ISL public v0.7 MF market history and quality audit
+# Original XLSX read only, no trading or scheduled tasks.
+on:
+  pull_request:
+    paths:
+      - 'scripts/mf_bond_market_history_v07.py'
+      - 'tests/test_mf_bond_market_history_v07.py'
+      - 'scripts/mf_bond_turnover_metrics_v07.py'
+      - 'scripts/isl_v07_offline_acceptance.py'
+      - 'tests/test_mf_bond_turnover_metrics_v07.py'
+      - 'scripts/public_first_market_quality_v07.py'
+      - 'tests/test_public_first_market_quality_v07.py'
+      - 'docs/ISL_PUBLIC_FIRST_MARKET_QUALITY_V07_20261113_PL.md'
+      - '.github/workflows/isl-public-market-history-v07-ci.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  offline-original-source:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Full no-network source acceptance across MF/UKNF/cross-market guards
+        run: python -m scripts.isl_v07_offline_acceptance
+  original-mf-layout:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Original current gov.pl XLSX sample, small safe XML schema excerpt
+        run: |
+          python - <<'PY'
+          from datetime import datetime,timezone
+          import json
+          from scripts.knf_mf_official_source_probe_v06 import MF_URL,fetch_exact
+          from scripts.mf_bond_market_history_v07 import audit_mf_schema
+          from scripts.mf_bond_turnover_metrics_v07 import analyze_mf_original
+          raw=fetch_exact(MF_URL) # exactly ONE source HTTPS read
+          at=datetime.now(timezone.utc)
+          schema=audit_mf_schema(raw,completed_at=at)
+          print("ISL_MF_ORIGINAL_SOURCE_LAYOUT="+json.dumps({
+              "source_sha256":schema["original_raw_sha256"],
+              "size_bytes":schema["size_bytes"],
+              "xml_rows":schema["xml_rows"],
+              "formula_cells":schema["formula_cells"],
+              "layout_excerpt":schema["schema_preview_first13_last4"],
+              "source_original_first_publication_certified":False,
+              "financial_operations":0,
+          },sort_keys=True,separators=(",",":")))
+          metrics=analyze_mf_original(raw,completed_at=at)
+          if (metrics["unique_month_count"]!=202
+                  or metrics["last_month"]!="2026-09"
+                  or metrics["latest_total_mln_pln"]!="3140385.25"
+                  or metrics["financial_operations"]!=0
+                  or metrics["tradable_bond_total_return_series_qualified"] is not False):
+              raise SystemExit("MF_ORIGINAL_HISTORICAL_SOURCE_VALIDATION_BLOCKED")
+          print("ISL_MF_ORIGINAL_HISTORY="+json.dumps(
+              metrics,sort_keys=True,separators=(",",":")))
+          PY
