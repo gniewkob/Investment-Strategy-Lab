@@ -41,3 +41,15 @@ W istniejącym module UKNF v0.6 potwierdzano zgodność daty ostatniej wyceny z 
 Dodatkowo kontroler arkusza MF odrzuca niedozwolone elementy binarne ZIP **niezależnie od wielkości liter rozszerzenia** (`.bin`, `.BIN`); dopuszczane pozostają tylko dane ustawień drukarki `xl/printerSettings/`. Nie są wykonywane makra, funkcje Excela ani zewnętrzne łącza.
 
 **Wniosek o statusie:** implementacja v0.7 i zestawy testów są przygotowane na gałęzi PR #159, lecz do czasu realnego startu Actions i otrzymania wyników nie oznaczamy ich jako przetestowanych, zaś historyczne 202 miesiące MF pozostają **SOURCE_LAYOUT_UNVERIFIED**. Nie ma akceptacji do scalania na `main`.
+
+## 6. Lokalny odbiór niezależny od GitHub Actions
+
+Na gałęzi PR #159 dodano bezsieciowy kontroler `scripts/isl_v07_offline_acceptance.py`. Po zaktualizowaniu checkoutu można uruchomić:
+
+```bash
+python3 -m scripts.isl_v07_offline_acceptance
+```
+
+Wykonuje kontrolę składni pięciu głównych modułów i **57 syntetycznych testów** bez połączeń sieciowych: 24 nowo dodane testy v0.7 oraz 33 testy źródeł UKNF/MF z v0.6, w tym dopasowania KID i dat/wycen NAV. Wynik `ISL_V07_OFFLINE_ACCEPTANCE` zawiera status, liczby testów i jawne `network=DENIED`. Jest to **alternatywna weryfikacja kodu**, ale **nie zastępuje** odczytu rzeczywistego oryginalnego skoroszytu MF i nie może samoistnie kwalifikować go do wykorzystania.
+
+GitHub Actions nadal kończy wszystkie hostowane joby przed wykonaniem pierwszego kroku (także niezmienione workflow), więc bez poprawy infrastruktury albo lokalnego dowodu odbioru kod pozostaje **NIE DONE**.

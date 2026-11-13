@@ -6,6 +6,7 @@ on:
       - 'scripts/mf_bond_market_history_v07.py'
       - 'tests/test_mf_bond_market_history_v07.py'
       - 'scripts/mf_bond_turnover_metrics_v07.py'
+      - 'scripts/isl_v07_offline_acceptance.py'
       - 'tests/test_mf_bond_turnover_metrics_v07.py'
       - 'scripts/public_first_market_quality_v07.py'
       - 'tests/test_public_first_market_quality_v07.py'
@@ -29,24 +30,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Test without any network, raw XLSX provenance and formula denial
-        run: |
-          python - <<'PY'
-          import socket,unittest
-          def deny(*a,**k): raise RuntimeError("OFFLINE_SOURCE_NETWORK_FORBIDDEN")
-          socket.socket.connect=deny
-          socket.socket.connect_ex=deny
-          socket.create_connection=deny
-          names=("tests.test_mf_bond_market_history_v07",
-                 "tests.test_mf_bond_turnover_metrics_v07",
-                 "tests.test_public_first_market_quality_v07")
-          suite=unittest.TestSuite()
-          for name in names:
-              suite.addTests(unittest.defaultTestLoader.loadTestsFromName(name))
-          result=unittest.TextTestRunner(verbosity=2).run(suite)
-          if not result.wasSuccessful() or result.skipped or result.testsRun != 24:
-              raise SystemExit("SOURCE_CONTRACT_FAILED")
-          PY
+      - name: Full no-network source acceptance across MF/UKNF/cross-market guards
+        run: python -m scripts.isl_v07_offline_acceptance
   original-mf-layout:
     runs-on: ubuntu-24.04
     timeout-minutes: 9
