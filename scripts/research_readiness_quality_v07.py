@@ -49,7 +49,7 @@ def compose_source_readiness(*, nav_quality: dict, mf_schema: dict,
         {"source":"UKNF","data_type":"SINGLE_PRIMARY_PLN_UNIT_NAV_LEVELS",
          "original_response_sha256":nav_hash,
          "observed_points":nav_quality["distinct_valuation_days"],
-         "observed_units":"ONE_FUND_UNIT_PNL_NOMINAL_NAV",
+         "observed_units":"ONE_FUND_UNIT_PLN_NOMINAL_NAV",
          "data_fitness":"SAME_CLASS_DESCRIPTIVE_NAV_CHANGE_ONLY",
          "historical_first_publication_certified":False,
          "income_or_distribution_adjusted_total_return":False,
@@ -78,10 +78,11 @@ def compose_source_readiness(*, nav_quality: dict, mf_schema: dict,
             raise ResearchEvidenceBlocked("MACRO_SOURCE_SEMANTIC_CONFLICT")
         for k in m["source_fingerprints_sha256"]:
             _sha(m["source_fingerprints_sha256"][k],"MACRO")
+        macro_hash=_sha(m.get("receipt_sha256"),"MACRO_RECEIPT")
         rows.append({
             "source":"NBP_EUROSTAT",
             "data_type":"FX_MID_GOLD_PRICE_HICP_AND_GOV_YIELD_REFERENCE",
-            "original_response_sha256":m["receipt_sha256"],
+            "original_response_sha256":macro_hash,
             "observed_points":None,
             "observed_units":"MIXED_CURRENCY_PER_G_PRICE_INDEX_AND_YIELD_PA_SEPARATE",
             "data_fitness":"MACRO_REFERENCE_CONTEXT_ONLY",
