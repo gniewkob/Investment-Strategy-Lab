@@ -64,6 +64,25 @@ class ReadinessTests(unittest.TestCase):
         n,m=evidence()
         d=compose_source_readiness(nav_quality=n,mf_schema=m,macro_reference=None,observed_at=NOW)
         self.assertEqual(len(d["source_readiness"]),2)
+    def test_valid_existing_macro_context_kept_separate(self):
+        n,m=evidence()
+        macro={"schema":"ISL_PUBLIC_MULTISOURCE_MACRO_EVIDENCE_V05",
+               "historical_point_in_time_certified":False,
+               "source_rights_fully_approved":False,
+               "asset_total_return_series_qualified":[],
+               "financial_operations":0,"hicp_months":13,
+               "government_yield_months":59,
+               "receipt_sha256":SHA,
+               "source_fingerprints_sha256":{
+                  "nbp_gold":SHA,"nbp_fx":SHA,"eurostat_hicp":SHA,
+                  "eurostat_pl_government_yield":SHA}}
+        result=compose_source_readiness(
+            nav_quality=n,mf_schema=m,macro_reference=macro,observed_at=NOW)
+        self.assertEqual(result["source_families"],3)
+        self.assertEqual(result["source_readiness"][-1]["data_fitness"],
+                         "MACRO_REFERENCE_CONTEXT_ONLY")
+        self.assertEqual(result["asset_total_return_qualified"],[])
+
     def test_wrong_macro_series_denied(self):
         n,m=evidence()
         fake={"schema":"ISL_PUBLIC_MULTISOURCE_MACRO_EVIDENCE_V05",
