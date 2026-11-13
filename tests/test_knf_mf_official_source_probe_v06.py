@@ -56,6 +56,13 @@ class OfficialMarketSourcesTests(unittest.TestCase):
         self.assertEqual(x["workbook_worksheet_count"],1)
         self.assertFalse(x["any_macro_or_script_executed"])
         self.assertEqual(x["financial_operations"],0)
+    def test_mf_printersettings_are_data_only(self):
+        receipt=inspect_mf_workbook(
+            fake_xlsx(poison="xl/printerSettings/printerSettings1.bin"),
+            completed_at=NOW)
+        self.assertEqual(receipt["workbook_worksheet_count"],1)
+        self.assertFalse(receipt["any_macro_or_script_executed"])
+
     def test_mf_rejects_macros_and_external_links(self):
         for poison in ("xl/vbaProject.bin","xl/externalLinks/externalLink1.xml","../unsafe.xml"):
             with self.subTest(poison=poison),self.assertRaises(OriginalEvidenceBlocked):
