@@ -44,13 +44,50 @@ def _first_record(kind: str, raw: bytes, when: datetime) -> dict:
     return data["content"][0]
 
 
+def _matching_kid(raw: bytes, chosen: dict, at: datetime) -> dict:
+    """Only an original KID for exactly the NAV fund, unit, PLN and month."""
+    _utc(at)
+    if type(raw) is not bytes or not 0 < len(raw) <= MAX_KNF_BYTES:
+        raise Blocked("MATCHING_KID_SOURCE_INVALID")
+    try:
+        page=json.loads(raw)
+    except (UnicodeError,json.JSONDecodeError) as exc:
+        raise Blocked("MATCHING_KID_SOURCE_INVALID") from exc
+    if not isinstance(page,dict) or not isinstance(page.get("content"),list) or not isinstance(page.get("page"),dict):
+        raise Blocked("MATCHING_KID_PAGE_MALFORMED")
+    rows,pg=page["content"],page["page"]
+    if (not 1 <= len(rows) <= 5 or type(pg.get("number")) is not int or pg["number"] != 0
+            or type(pg.get("size")) is not int or not 1 <= pg["size"] <= 5
+            or type(pg.get("totalElements")) is not int or pg["totalElements"] < len(rows)):
+        raise Blocked("MATCHING_KID_ASOF_UNAVAILABLE")
+    for kid in rows:
+        if not isinstance(kid,dict):
+            raise Blocked("MATCHING_KID_ROW_INVALID")
+        if (kid.get("subfundId") != chosen.get("subfundId")
+                or kid.get("fundId") != chosen.get("fundId")
+                or kid.get("unit") != chosen.get("unit")
+                or kid.get("currency") != "PLN"
+                or kid.get("isPrimary") is not True):
+            raise Blocked("MATCHING_KID_DIFFERENT_FUND_OR_UNIT")
+        try:
+            published=date.fromisoformat(kid["publicationDate"])
+        except (TypeError,KeyError,ValueError) as exc:
+            raise Blocked("MATCHING_KID_PUBLICATION_INVALID") from exc
+        if published > date.fromisoformat(MONTH_END):
+            raise Blocked("MATCHING_KID_LOOKAHEAD_PUBLICATION")
+        if (type(kid.get("documentUuid")) is not str
+                or not ID_PATTERN.fullmatch(kid["documentUuid"])):
+            raise Blocked("MATCHING_KID_DOCUMENT_UUID_INVALID")
+    return max(rows,key=lambda row:row["publicationDate"])
+
+
 def _url(kind: str, initial_row: dict) -> str:
     if kind == "kid":
         docid = initial_row["documentUuid"]
         if not ID_PATTERN.fullmatch(docid):
             raise Blocked("KID_DOC_ID_INVALID")
         return KNF_ROOT + "/v1/key-information/units/" + docid
-    if kind != "history":
+    if kind not in ("history", "kid_list"):
         raise Blocked("UNSUPPORTED_KNF_REQUEST_TYPE")
     fid = initial_row.get("fundId")
     sid = initial_row.get("subfundId")
@@ -71,6 +108,13 @@ def _url(kind: str, initial_row: dict) -> str:
         "fromDate": MONTH_BEGIN, "toDate": MONTH_END,
         "page": 0, "size": MAX_ROWS,
     }
+    if kind == "kid_list":
+        return KNF_ROOT + "/v1/key-information/units?" + urlencode({
+            "fundId" if fid is not None else "subfundId": fid if fid is not None else sid,
+            "unit": unit, "currency": "PLN", "isPrimary": "true",
+            "includeInactive": "true", "toPublicationDate": MONTH_END,
+            "page": 0, "size": 5,
+        })
     return KNF_ROOT + "/v1/valuations/units?" + urlencode(params)
 
 
@@ -94,7 +138,7 @@ def evaluate_sample(preview_raw: bytes, kid_page_raw: bytes,
                     at: datetime) -> dict:
     at_utc=_utc(at)
     chosen=_first_record("primary_pln_valuations",preview_raw,at)
-    kid=_first_record("kid_units",kid_page_raw,at)
+    kid=_matching_kid(kid_page_raw,chosen,at)
     history_url=_url("history",chosen)
     kid_url=_url("kid",kid)
     try:
@@ -117,7 +161,10 @@ def evaluate_sample(preview_raw: bytes, kid_page_raw: bytes,
     if (detail.get("documentUuid") != kid["documentUuid"]
             or detail.get("publicationDate") != kid["publicationDate"]
             or detail.get("subfundId") != kid.get("subfundId")
-            or detail.get("fundId") != kid.get("fundId")):
+            or detail.get("fundId") != kid.get("fundId")
+            or detail.get("unit") != chosen.get("unit")
+            or detail.get("currency") != "PLN"
+            or detail.get("isPrimary") is not True):
         raise Blocked("KID_DETAIL_IDENTITY_CHANGED")
     seen={}
     for row in rows:
@@ -161,6 +208,8 @@ def evaluate_sample(preview_raw: bytes, kid_page_raw: bytes,
         "source_attribution":"https://wybieramfundusze-api.knf.gov.pl",
         "observed_at_utc":at_utc,
         "selected_fund_identity_stable":True,
+        "kid_exact_fund_unit_currency_match":True,
+        "kid_asof_cutoff":MONTH_END,
         "selected_currency":"PLN",
         "selected_primary_share_class":True,
         "daily_same_class_observations":len(seen),
@@ -196,9 +245,9 @@ def observe_once(*, fetch=None, clock=lambda:datetime.now(timezone.utc)):
     _utc(start)
     # 2 small initial pages + at most 2 tightly scoped follow-up GETs.
     initial_preview=fetch(KNF_URLS["primary_pln_valuations"])
-    initial_kid=fetch(KNF_URLS["kid_units"])
     chosen=_first_record("primary_pln_valuations",initial_preview,start)
-    kid=_first_record("kid_units",initial_kid,start)
+    initial_kid=fetch(_url("kid_list",chosen))
+    kid=_matching_kid(initial_kid,chosen,start)
     raw_hist=fetch(_url("history",chosen))
     raw_detail=fetch(_url("kid",kid))
     return evaluate_sample(initial_preview,initial_kid,raw_hist,raw_detail,at=clock())
@@ -209,8 +258,9 @@ def official_source_fetch(url: str) -> bytes:
     from scripts.knf_mf_official_source_probe_v06 import fetch_exact
     if url in (KNF_URLS["primary_pln_valuations"], KNF_URLS["kid_units"]):
         return fetch_exact(url)
-    if url.startswith(KNF_ROOT + "/v1/valuations/units?") or url.startswith(
-            KNF_ROOT + "/v1/key-information/units/"):
+    if (url.startswith(KNF_ROOT + "/v1/valuations/units?") or
+            url.startswith(KNF_ROOT + "/v1/key-information/units?") or
+            url.startswith(KNF_ROOT + "/v1/key-information/units/")):
         return fetch_followup(url, expected_url=url)
     raise Blocked("NOT_AN_APPROVED_UKNF_FOLLOWUP")
 
