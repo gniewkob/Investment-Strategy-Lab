@@ -1,0 +1,45 @@
+name: ISL v0.7 official MF original turnover semantic discovery
+on:
+  pull_request:
+    paths:
+      - 'scripts/mf_original_turnover_schema_v07.py'
+      - 'tests/test_mf_original_turnover_schema_v07.py'
+      - '.github/workflows/isl-mf-market-quality-v07-ci.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  offline-mf-schema:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: |
+          python - <<'PY'
+          import socket,unittest
+          def forbidden(*a,**kw): raise RuntimeError("OFFLINE_NETWORK")
+          socket.socket.connect=forbidden
+          socket.socket.connect_ex=forbidden
+          socket.create_connection=forbidden
+          suite=unittest.defaultTestLoader.loadTestsFromName("tests.test_mf_original_turnover_schema_v07")
+          result=unittest.TextTestRunner(verbosity=2).run(suite)
+          if not result.wasSuccessful() or result.testsRun!=5:
+              raise SystemExit("OFFLINE_MF_SCHEMA_TEST_FAILURE")
+          PY
+  official-mf-schema-probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: |
+          python -m scripts.mf_original_turnover_schema_v07 --allow-public-mf-read
