@@ -202,3 +202,30 @@ def observe_once(*, fetch=None, clock=lambda:datetime.now(timezone.utc)):
     raw_hist=fetch(_url("history",chosen))
     raw_detail=fetch(_url("kid",kid))
     return evaluate_sample(initial_preview,initial_kid,raw_hist,raw_detail,at=clock())
+
+
+def official_source_fetch(url: str) -> bytes:
+    """Only the four controlled URLs generated within observe_once."""
+    from scripts.knf_mf_official_source_probe_v06 import fetch_exact
+    if url in (KNF_URLS["primary_pln_valuations"], KNF_URLS["kid_units"]):
+        return fetch_exact(url)
+    if url.startswith(KNF_ROOT + "/v1/valuations/units?") or url.startswith(
+            KNF_ROOT + "/v1/key-information/units/"):
+        return fetch_followup(url, expected_url=url)
+    raise Blocked("NOT_AN_APPROVED_UKNF_FOLLOWUP")
+
+
+def main() -> None:
+    import argparse
+    parser=argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--allow-public-original-source-read",action="store_true")
+    args=parser.parse_args()
+    if not args.allow_public_original_source_read:
+        parser.error("Explicit --allow-public-original-source-read required")
+    receipt=observe_once(fetch=official_source_fetch)
+    print("ISL_UKNF_ORIGINAL_SINGLE_UNIT_HISTORY="+json.dumps(
+        receipt,sort_keys=True,separators=(",",":")))
+
+
+if __name__ == "__main__":
+    main()
