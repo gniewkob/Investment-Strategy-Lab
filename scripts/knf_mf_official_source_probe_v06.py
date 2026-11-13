@@ -138,6 +138,39 @@ def inspect_knf_page(kind: str, raw: bytes, *, completed_at: datetime) -> dict:
         "financial_operations": 0,
     }
 
+def inspect_mf_zip_structure(raw: bytes, *, completed_at: datetime) -> dict:
+    """Bounded original document metadata only, without reading spreadsheet cells."""
+    when = _utc(completed_at)
+    if type(raw) is not bytes or not 0 < len(raw) <= MAX_MF_BYTES or not raw.startswith(b"PK\x03\x04"):
+        raise OriginalEvidenceBlocked("MF_ORIGINAL_ZIP_REQUIRED")
+    try:
+        with ZipFile(BytesIO(raw)) as z:
+            names = z.namelist()
+            if len(names) > 300 or len(names) != len(set(names)):
+                raise OriginalEvidenceBlocked("MF_BAD_ZIP_MEMBERS")
+            for x in z.infolist():
+                if (x.file_size > 6_000_000 or x.compress_size > MAX_MF_BYTES
+                        or ".." in x.filename or x.filename.startswith("/")):
+                    raise OriginalEvidenceBlocked("MF_ZIP_MEMBER_UNSAFE")
+    except (BadZipFile, OSError, RuntimeError) as exc:
+        raise OriginalEvidenceBlocked("MF_UNREADABLE_ZIP") from exc
+    return {
+        "state": "STRUCTURE_ONLY_NOT_XLSX_SEMANTIC_ACCEPTANCE",
+        "source": "Ministry of Finance gov.pl official document",
+        "sha256": sha256(raw).hexdigest(),
+        "size": len(raw),
+        "retrieved_at_utc": when,
+        "total_zip_members": len(names),
+        "content_types": "[Content_Types].xml" in names,
+        "workbook_xml": "xl/workbook.xml" in names,
+        "worksheets": sum(x.startswith("xl/worksheets/sheet") and x.endswith(".xml") for x in names),
+        "vba_members": sum("vbaproject" in x.lower() for x in names),
+        "external_links": sum("externallink" in x.lower() for x in names),
+        "bin_members": sum(x.endswith(".bin") for x in names),
+        "no_source_cells_read": True,
+        "financial_operations": 0,
+    }
+
 def inspect_mf_workbook(raw: bytes, *, completed_at: datetime) -> dict:
     when = _utc(completed_at)
     if type(raw) is not bytes or not 0 < len(raw) <= MAX_MF_BYTES or not raw.startswith(b"PK\x03\x04"):
@@ -177,6 +210,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", choices=("knf", "mf"), required=True)
     parser.add_argument("--allow-public-original-source-read", action="store_true")
+    parser.add_argument("--mf-structure-only", action="store_true")
     a = parser.parse_args()
     if not a.allow_public_original_source_read:
         parser.error("Explicit opt-in to original free official HTTP required")
@@ -184,7 +218,9 @@ def main() -> None:
         output = [inspect_knf_page(kind, fetch_exact(url), completed_at=datetime.now(timezone.utc))
                   for kind, url in KNF_URLS.items()]
     else:
-        output = [inspect_mf_workbook(fetch_exact(MF_URL), completed_at=datetime.now(timezone.utc))]
+        raw = fetch_exact(MF_URL)
+        output = [(inspect_mf_zip_structure(raw, completed_at=datetime.now(timezone.utc))
+                   if a.mf_structure_only else inspect_mf_workbook(raw, completed_at=datetime.now(timezone.utc)))]
     print("ISL_UKNF_MF_OFFICIAL_SOURCE_PROBE=" + json.dumps({
         "schema": SCHEMA, "sources": output,
         "model_admission": [], "historical_pit_certified": False,
