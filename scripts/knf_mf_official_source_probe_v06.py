@@ -167,6 +167,7 @@ def inspect_mf_zip_structure(raw: bytes, *, completed_at: datetime) -> dict:
         "vba_members": sum("vbaproject" in x.lower() for x in names),
         "external_links": sum("externallink" in x.lower() for x in names),
         "bin_members": sum(x.endswith(".bin") for x in names),
+        "only_printer_settings_binary": all(x.startswith("xl/printerSettings/") for x in names if x.endswith(".bin")),
         "no_source_cells_read": True,
         "financial_operations": 0,
     }
@@ -182,7 +183,9 @@ def inspect_mf_workbook(raw: bytes, *, completed_at: datetime) -> dict:
                     "[Content_Types].xml" not in names or
                     "xl/workbook.xml" not in names or
                     not any(n.startswith("xl/worksheets/sheet") and n.endswith(".xml") for n in names) or
-                    any("vbaProject" in n or "externalLink" in n or n.endswith(".bin") for n in names)):
+                    any("vbaproject" in n.lower() or "externallink" in n.lower()
+                        or n.endswith(".bin") and not n.startswith("xl/printerSettings/")
+                        for n in names)):
                 raise OriginalEvidenceBlocked("MF_XLSX_STRUCTURE_UNSUPPORTED")
             for info in z.infolist():
                 if (info.file_size > 4_000_000 or info.compress_size > MAX_MF_BYTES
