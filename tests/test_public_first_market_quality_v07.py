@@ -22,6 +22,15 @@ NOW=datetime(2026,11,13,tzinfo=timezone.utc)
 def synthetic_three_sources():
     mf=analyze_mf_original(synth(),completed_at=NOW)
     a,b,c,d=sample()
+    from datetime import date
+    business=[date(2026,9,day) for day in range(1,31)
+              if date(2026,9,day).weekday()<5]
+    assert len(business)==22
+    template=c["content"][0]
+    c["content"]=[{**template,"date":day.isoformat(),
+                   "valuation":100.0 + ix*0.02}
+                  for ix,day in enumerate(business)]
+    c["page"]["totalElements"]=22
     b["content"][0]["subfundId"]=9999  # intentionally unrelated KID
     nav=evaluate_sample(raw(a),raw(b),raw(c),None,at=NOW)
     n,h,y=inputs()
@@ -35,7 +44,7 @@ class CrossMarketQualityTests(unittest.TestCase):
         self.assertEqual(out["schema"],SCHEMA)
         self.assertEqual(out["aligned_observation_month"],"2026-09")
         self.assertEqual(out["source_quality_gate"]["mf_complete_history_months"],202)
-        self.assertEqual(out["source_quality_gate"]["uknf_same_primary_class_nav_days"],3)
+        self.assertEqual(out["source_quality_gate"]["uknf_same_primary_class_nav_days"],22)
         self.assertFalse(out["source_quality_gate"]["uknf_kid_exact_asof_match"])
         self.assertFalse(out["historical_first_publication_vintages_proven"])
         self.assertFalse(out["cross_source_return_correlation_calculated"])
