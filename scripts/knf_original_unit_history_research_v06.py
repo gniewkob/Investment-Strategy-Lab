@@ -194,6 +194,8 @@ def evaluate_sample(preview_raw: bytes, kid_page_raw: bytes,
     days=sorted(seen)
     if days[-1] != date.fromisoformat(chosen["date"]):
         raise Blocked("HISTORY_NOT_SAME_CURRENT_SAMPLE")
+    if _number(chosen.get("valuation")) != seen[days[-1]]:
+        raise Blocked("HISTORY_PREVIEW_VALUATION_CONFLICT")
     risk=detail.get("riskLevel") if detail is not None else None
     if risk is not None and (type(risk) is not int or not 1 <= risk <= 7):
         raise Blocked("KID_RISK_LEVEL_INVALID")
