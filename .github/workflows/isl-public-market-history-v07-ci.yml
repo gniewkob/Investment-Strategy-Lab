@@ -1,0 +1,58 @@
+name: ISL public v0.7 MF market history and quality audit
+# Original XLSX read only, no trading or scheduled tasks.
+on:
+  pull_request:
+    paths:
+      - 'scripts/mf_bond_market_history_v07.py'
+      - 'tests/test_mf_bond_market_history_v07.py'
+      - 'scripts/public_first_market_quality_v07.py'
+      - 'tests/test_public_first_market_quality_v07.py'
+      - 'docs/ISL_PUBLIC_FIRST_MARKET_QUALITY_V07_20261113_PL.md'
+      - '.github/workflows/isl-public-market-history-v07-ci.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  offline-original-source:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test without any network, raw XLSX provenance and formula denial
+        run: |
+          python - <<'PY'
+          import socket,unittest
+          def deny(*a,**k): raise RuntimeError("OFFLINE_SOURCE_NETWORK_FORBIDDEN")
+          socket.socket.connect=deny
+          socket.socket.connect_ex=deny
+          socket.create_connection=deny
+          names=("tests.test_mf_bond_market_history_v07",)
+          suite=unittest.TestSuite()
+          for name in names:
+              suite.addTests(unittest.defaultTestLoader.loadTestsFromName(name))
+          result=unittest.TextTestRunner(verbosity=2).run(suite)
+          if not result.wasSuccessful() or result.skipped or result.testsRun != 6:
+              raise SystemExit("SOURCE_CONTRACT_FAILED")
+          PY
+  original-mf-layout:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Original current gov.pl XLSX sample, small safe XML schema excerpt
+        run: |
+          python -m scripts.mf_bond_market_history_v07 --audit-schema --allow-public-mf-source-read
