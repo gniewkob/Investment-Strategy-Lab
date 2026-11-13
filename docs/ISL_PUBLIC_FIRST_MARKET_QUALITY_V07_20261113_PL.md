@@ -33,3 +33,11 @@
 Pierwsza próba uruchomienia nowego PR #159 w GitHub Actions [run #43392165899](https://github.com/gniewkob/Investment-Strategy-Lab/actions/runs/43392165899) zakończyła się **FAIL przed uruchomieniem kroków**, podobnie istniejące workflow G1 i stack. W logach Jobs brak wykonanych kroków, próba ponowienia pojedynczego joba też zakończyła się przed jego startem. Jest to **nierozstrzygnięty problem uruchamiania GitHub Actions**, nie uzyskano z tej próby danych o poprawności parsera i nie należy na tej podstawie uznać źródła za zweryfikowane. Status PR pozostaje DRAFT do chwili realnego uruchomienia i przejścia testów.
 
 Warunkiem DONE jest 24/24 testów offline, poprawny realny odczyt XLSX i 202 miesięcy, pełne CI + CodeQL i GitGuardian na końcowym SHA, review, merge i regresja na `main`. Jeśli źródło ma układ macierzowy/transponowany, parser ma zgłosić `MF_TABLE_HEADER_UNSUPPORTED`, nie zgadywać kolumn ani publikować błędnych danych. Niezależne issue #116 dotyczące licencji GPW/BondSpot i oryginalnych PIT pozostaje **OPEN**. M1–M3 nadal `HOLD_CASH`, żadnych zleceń, realnego inwestowania, kont, baz danych, harmonogramów ani transferów.
+
+## 5. Dodatkowy defekt jakości NAV wyeliminowany w ramach v0.7
+
+W istniejącym module UKNF v0.6 potwierdzano zgodność daty ostatniej wyceny z podglądem kategorii jednostki, ale nie porównywano bezpośrednio wartości NAV. Po poprawce moduł odrzuca zestawienie, gdy **wycena z podglądu różni się od ostatniego punktu historii dla tej samej daty i klasy** (`HISTORY_PREVIEW_VALUATION_CONFLICT`). Uniemożliwia to niejawne połączenie danych z dwóch wersji tego samego punktu bez rozpoznania rewizji. Test regresyjny używa celowo różniących się wartości. To zabezpieczenie analityczne, **nie** dowód historycznej dostępności oryginalnych wycen.
+
+Dodatkowo kontroler arkusza MF odrzuca niedozwolone elementy binarne ZIP **niezależnie od wielkości liter rozszerzenia** (`.bin`, `.BIN`); dopuszczane pozostają tylko dane ustawień drukarki `xl/printerSettings/`. Nie są wykonywane makra, funkcje Excela ani zewnętrzne łącza.
+
+**Wniosek o statusie:** implementacja v0.7 i zestawy testów są przygotowane na gałęzi PR #159, lecz do czasu realnego startu Actions i otrzymania wyników nie oznaczamy ich jako przetestowanych, zaś historyczne 202 miesiące MF pozostają **SOURCE_LAYOUT_UNVERIFIED**. Nie ma akceptacji do scalania na `main`.
