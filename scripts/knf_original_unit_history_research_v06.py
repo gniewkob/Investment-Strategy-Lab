@@ -150,7 +150,8 @@ def evaluate_sample(preview_raw: bytes, kid_page_raw: bytes,
         detail=json.loads(kid_detail_raw) if kid is not None else None
     except (UnicodeError, json.JSONDecodeError) as exc:
         raise Blocked("FOLLOWUP_JSON_INVALID") from exc
-    if (not isinstance(history,dict) or not isinstance(detail,dict)
+    if (not isinstance(history,dict)
+            or (kid is not None and not isinstance(detail,dict))
             or not isinstance(history.get("content"),list)
             or not isinstance(history.get("page"),dict)):
         raise Blocked("FOLLOWUP_WRONG_STRUCTURE")
