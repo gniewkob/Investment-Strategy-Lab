@@ -105,6 +105,12 @@ class KNFSingleShareClassTests(unittest.TestCase):
         c["content"][1]["unit"]="X"
         with self.assertRaisesRegex(Blocked,"HISTORY_DIFFERENT_FUND_UNIT"):
             evaluate(a,b,c,d)
+    def test_preview_last_nav_not_equal_to_history_rejected(self):
+        a,b,c,d=sample()
+        a["content"][0]["valuation"]=101.0
+        with self.assertRaisesRegex(Blocked,"HISTORY_PREVIEW_VALUATION_CONFLICT"):
+            evaluate(a,b,c,d)
+
     def test_history_wrong_currency_blocks(self):
         a,b,c,d=sample()
         c["content"][1]["currency"]="USD"

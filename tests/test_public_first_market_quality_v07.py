@@ -31,6 +31,7 @@ def synthetic_three_sources():
                    "valuation":100.0 + ix*0.02}
                   for ix,day in enumerate(business)]
     c["page"]["totalElements"]=22
+    a["content"][0]["valuation"]=c["content"][-1]["valuation"]
     b["content"][0]["subfundId"]=9999  # intentionally unrelated KID
     nav=evaluate_sample(raw(a),raw(b),raw(c),None,at=NOW)
     n,h,y=inputs()
