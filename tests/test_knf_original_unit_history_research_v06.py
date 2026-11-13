@@ -29,7 +29,7 @@ def sample():
     kid_page={
         "content":[
             {"fundId":None,"subfundId":210,"documentUuid":KID_ID,
-             "publicationDate":"2026-09-09","currency":"PLN","unit":"A"}
+             "publicationDate":"2026-09-09","currency":"PLN","unit":"A","isPrimary":True}
         ],
         "page":{"size":2,"number":0,"totalElements":1}
     }
@@ -141,22 +141,41 @@ class KNFSingleShareClassTests(unittest.TestCase):
         d["maxEntryFeeRate"]=10
         with self.assertRaises(Blocked):
             evaluate(a,b,c,d)
-    def test_kid_for_other_subfund_rejected(self):
+    def test_kid_for_other_subfund_not_used(self):
         a,b,c,d=sample()
         b["content"][0]["subfundId"]=300
-        with self.assertRaisesRegex(Blocked,"MATCHING_KID_DIFFERENT_FUND_OR_UNIT"):
-            evaluate(a,b,c,d)
+        receipt=evaluate_sample(raw(a),raw(b),raw(c),None,at=NOW)
+        self.assertFalse(receipt["kid_exact_fund_unit_currency_match"])
+        self.assertIsNone(receipt["kid_risk_level_descriptive_not_recommendation"])
+        self.assertIsNone(receipt["kid_stated_costs_rates_not_actual_fees"]["maxEntryFeeRate"])
+        self.assertIsNone(receipt["source_documents"]["kid_detail_sha256"])
 
-    def test_kid_future_to_history_cutoff_rejected(self):
+    def test_kid_future_to_history_cutoff_not_used(self):
         a,b,c,d=sample()
         b["content"][0]["publicationDate"]="2026-10-01"
-        with self.assertRaisesRegex(Blocked,"MATCHING_KID_LOOKAHEAD_PUBLICATION"):
-            evaluate(a,b,c,d)
+        receipt=evaluate_sample(raw(a),raw(b),raw(c),None,at=NOW)
+        self.assertFalse(receipt["kid_exact_fund_unit_currency_match"])
+        self.assertIsNone(receipt["kid_document_publication_date_not_first_ever"])
 
     def test_kid_detail_different_class_rejected(self):
         a,b,c,d=sample()
         d["unit"]="B"
         with self.assertRaisesRegex(Blocked,"KID_DETAIL_IDENTITY_CHANGED"):
+            evaluate(a,b,c,d)
+
+    def test_empty_kid_page_still_has_valid_nav_only_evidence(self):
+        a,b,c,d=sample()
+        b["content"]=[]
+        b["page"]["totalElements"]=0
+        receipt=evaluate_sample(raw(a),raw(b),raw(c),None,at=NOW)
+        self.assertEqual(receipt["daily_same_class_observations"],3)
+        self.assertFalse(receipt["kid_exact_fund_unit_currency_match"])
+        self.assertEqual(receipt["kid_linkage_status"],"NOT_LINKED_DO_NOT_USE_OTHER_FUNDS_KID")
+
+    def test_unlinked_kid_detail_disallowed(self):
+        a,b,c,d=sample()
+        b["content"][0]["subfundId"]=300
+        with self.assertRaisesRegex(Blocked,"UNLINKED_KID_DETAIL_MUST_NOT_BE_USED"):
             evaluate(a,b,c,d)
 
     def test_explicit_fetch_and_bounded_requests(self):
