@@ -7,6 +7,10 @@ on:
     paths:
       - 'scripts/eurostat_pl_*.py'
       - 'tests/test_eurostat_pl_*.py'
+      - 'scripts/mf_original_turnover_schema_v07.py'
+      - 'tests/test_mf_original_turnover_schema_v07.py'
+      - 'scripts/research_readiness_quality_v07.py'
+      - 'tests/test_research_readiness_quality_v07.py'
       - 'scripts/knf_*.py'
       - 'tests/test_knf_*.py'
       - 'scripts/knf_mf_official_source_probe_v06.py'
