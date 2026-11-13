@@ -1,5 +1,7 @@
 name: ISL public market originals KNF fund valuation and MF bond trading probe
-# One small page per official KNF endpoint and one original MF XLSX, no schedules.
+# One scoped UKNF primary-unit history query + one MF original XLSX.
+# Original fund directory/KID list pages already audited in CI run 43335870547.
+# No parallel redundant UKNF batch calls, avoiding provider load.
 on:
   pull_request:
     paths:
@@ -43,19 +45,6 @@ jobs:
           if not result.wasSuccessful() or result.skipped or result.testsRun != 32:
               raise SystemExit("MARKET_ORIGINAL_NEGATIVE_CONTRACT_FAIL")
           PY
-  real-uknf-fund-kid-valuations:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 8
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - name: At most three small pages, public UKNF original market API
-        run: |
-          python -m scripts.knf_mf_official_source_probe_v06 --source knf --allow-public-original-source-read
   real-mf-secondary-bond-market-original:
     runs-on: ubuntu-24.04
     timeout-minutes: 8
@@ -80,6 +69,6 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: One actual primary PLN share class 2026-09 history and one KID, 4 UKNF GET max
+      - name: One actual primary PLN share class 2026-09 NAV history; attach matching KID only (3-4 GET)
         run: |
           python -m scripts.knf_original_unit_history_research_v06 --allow-public-original-source-read
