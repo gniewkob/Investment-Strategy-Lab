@@ -40,7 +40,7 @@ jobs:
                        "tests.test_knf_original_unit_history_research_v06"):
               suite.addTests(unittest.defaultTestLoader.loadTestsFromName(name))
           result=unittest.TextTestRunner(verbosity=2).run(suite)
-          if not result.wasSuccessful() or result.skipped or result.testsRun != 30:
+          if not result.wasSuccessful() or result.skipped or result.testsRun != 32:
               raise SystemExit("MARKET_ORIGINAL_NEGATIVE_CONTRACT_FAIL")
           PY
   real-uknf-fund-kid-valuations:
