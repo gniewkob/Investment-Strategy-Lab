@@ -56,10 +56,11 @@ def _matching_kid(raw: bytes, chosen: dict, at: datetime) -> dict:
     if not isinstance(page,dict) or not isinstance(page.get("content"),list) or not isinstance(page.get("page"),dict):
         raise Blocked("MATCHING_KID_PAGE_MALFORMED")
     rows,pg=page["content"],page["page"]
-    if (not 1 <= len(rows) <= 5 or type(pg.get("number")) is not int or pg["number"] != 0
+    if (not 0 <= len(rows) <= 5 or type(pg.get("number")) is not int or pg["number"] != 0
             or type(pg.get("size")) is not int or not 1 <= pg["size"] <= 5
             or type(pg.get("totalElements")) is not int or pg["totalElements"] < len(rows)):
-        raise Blocked("MATCHING_KID_ASOF_UNAVAILABLE")
+        raise Blocked("MATCHING_KID_PAGE_INVALID")
+    matches=[]
     for kid in rows:
         if not isinstance(kid,dict):
             raise Blocked("MATCHING_KID_ROW_INVALID")
@@ -68,17 +69,18 @@ def _matching_kid(raw: bytes, chosen: dict, at: datetime) -> dict:
                 or kid.get("unit") != chosen.get("unit")
                 or kid.get("currency") != "PLN"
                 or kid.get("isPrimary") is not True):
-            raise Blocked("MATCHING_KID_DIFFERENT_FUND_OR_UNIT")
+            continue  # Never attach another fund/class even if provider ignores filters.
         try:
             published=date.fromisoformat(kid["publicationDate"])
         except (TypeError,KeyError,ValueError) as exc:
             raise Blocked("MATCHING_KID_PUBLICATION_INVALID") from exc
         if published > date.fromisoformat(MONTH_END):
-            raise Blocked("MATCHING_KID_LOOKAHEAD_PUBLICATION")
+            continue  # Today's KID must not be backdated to September.
         if (type(kid.get("documentUuid")) is not str
                 or not ID_PATTERN.fullmatch(kid["documentUuid"])):
             raise Blocked("MATCHING_KID_DOCUMENT_UUID_INVALID")
-    return max(rows,key=lambda row:row["publicationDate"])
+        matches.append(kid)
+    return max(matches,key=lambda row:row["publicationDate"]) if matches else None
 
 
 def _url(kind: str, initial_row: dict) -> str:
@@ -139,11 +141,13 @@ def evaluate_sample(preview_raw: bytes, kid_page_raw: bytes,
     at_utc=_utc(at)
     chosen=_first_record("primary_pln_valuations",preview_raw,at)
     kid=_matching_kid(kid_page_raw,chosen,at)
+    if kid is None and kid_detail_raw is not None:
+        raise Blocked("UNLINKED_KID_DETAIL_MUST_NOT_BE_USED")
     history_url=_url("history",chosen)
-    kid_url=_url("kid",kid)
+    kid_url=_url("kid",kid) if kid is not None else None
     try:
         history=json.loads(history_raw)
-        detail=json.loads(kid_detail_raw)
+        detail=json.loads(kid_detail_raw) if kid is not None else None
     except (UnicodeError, json.JSONDecodeError) as exc:
         raise Blocked("FOLLOWUP_JSON_INVALID") from exc
     if (not isinstance(history,dict) or not isinstance(detail,dict)
@@ -158,7 +162,7 @@ def evaluate_sample(preview_raw: bytes, kid_page_raw: bytes,
             or pg["totalElements"] != len(rows)
             or type(pg.get("size")) is not int or pg["size"] > MAX_ROWS):
         raise Blocked("HISTORY_INCOMPLETE_SINGLE_PAGE")
-    if (detail.get("documentUuid") != kid["documentUuid"]
+    if kid is not None and (detail.get("documentUuid") != kid["documentUuid"]
             or detail.get("publicationDate") != kid["publicationDate"]
             or detail.get("subfundId") != kid.get("subfundId")
             or detail.get("fundId") != kid.get("fundId")
@@ -189,13 +193,13 @@ def evaluate_sample(preview_raw: bytes, kid_page_raw: bytes,
     days=sorted(seen)
     if days[-1] != date.fromisoformat(chosen["date"]):
         raise Blocked("HISTORY_NOT_SAME_CURRENT_SAMPLE")
-    risk=detail.get("riskLevel")
+    risk=detail.get("riskLevel") if detail is not None else None
     if risk is not None and (type(risk) is not int or not 1 <= risk <= 7):
         raise Blocked("KID_RISK_LEVEL_INVALID")
     costs={}
     for field in ("maxEntryFeeRate","maxExitFeeRate",
                   "managementAndOtherFeesRate","transactionCostsRate"):
-        val=detail.get(field)
+        val=detail.get(field) if detail is not None else None
         costs[field]=None if val is None else str(_number(
             val,minimum=Decimal("0"),maximum=Decimal("1")))
     with localcontext() as ctx:
@@ -208,7 +212,8 @@ def evaluate_sample(preview_raw: bytes, kid_page_raw: bytes,
         "source_attribution":"https://wybieramfundusze-api.knf.gov.pl",
         "observed_at_utc":at_utc,
         "selected_fund_identity_stable":True,
-        "kid_exact_fund_unit_currency_match":True,
+        "kid_exact_fund_unit_currency_match":kid is not None,
+        "kid_linkage_status": "EXACT_SOURCE_MATCH" if kid is not None else "NOT_LINKED_DO_NOT_USE_OTHER_FUNDS_KID",
         "kid_asof_cutoff":MONTH_END,
         "selected_currency":"PLN",
         "selected_primary_share_class":True,
@@ -217,7 +222,7 @@ def evaluate_sample(preview_raw: bytes, kid_page_raw: bytes,
         "last_observation_day":days[-1].isoformat(),
         "observed_nav_level_change_pct_not_total_return":format(delta.quantize(Decimal("0.0001")),"f"),
         "kid_risk_level_descriptive_not_recommendation":risk,
-        "kid_document_publication_date_not_first_ever":kid["publicationDate"],
+        "kid_document_publication_date_not_first_ever":kid["publicationDate"] if kid is not None else None,
         "kid_stated_costs_rates_not_actual_fees":costs,
         "provider_current_snapshot_not_original_historic_asof":True,
         "cash_distributions_verified":False,
@@ -229,7 +234,7 @@ def evaluate_sample(preview_raw: bytes, kid_page_raw: bytes,
             "valuation_preview_sha256":sha256(preview_raw).hexdigest(),
             "history_sha256":sha256(history_raw).hexdigest(),
             "kid_list_sha256":sha256(kid_page_raw).hexdigest(),
-            "kid_detail_sha256":sha256(kid_detail_raw).hexdigest(),
+            "kid_detail_sha256":sha256(kid_detail_raw).hexdigest() if kid is not None else None,
         },
         "history_original_url":history_url,
         "kid_original_url":kid_url,
@@ -249,7 +254,7 @@ def observe_once(*, fetch=None, clock=lambda:datetime.now(timezone.utc)):
     initial_kid=fetch(_url("kid_list",chosen))
     kid=_matching_kid(initial_kid,chosen,start)
     raw_hist=fetch(_url("history",chosen))
-    raw_detail=fetch(_url("kid",kid))
+    raw_detail=fetch(_url("kid",kid)) if kid is not None else None
     return evaluate_sample(initial_preview,initial_kid,raw_hist,raw_detail,at=clock())
 
 
