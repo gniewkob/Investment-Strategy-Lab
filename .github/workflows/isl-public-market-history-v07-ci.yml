@@ -5,6 +5,8 @@ on:
     paths:
       - 'scripts/mf_bond_market_history_v07.py'
       - 'tests/test_mf_bond_market_history_v07.py'
+      - 'scripts/mf_bond_turnover_metrics_v07.py'
+      - 'tests/test_mf_bond_turnover_metrics_v07.py'
       - 'scripts/public_first_market_quality_v07.py'
       - 'tests/test_public_first_market_quality_v07.py'
       - 'docs/ISL_PUBLIC_FIRST_MARKET_QUALITY_V07_20261113_PL.md'
@@ -35,12 +37,14 @@ jobs:
           socket.socket.connect=deny
           socket.socket.connect_ex=deny
           socket.create_connection=deny
-          names=("tests.test_mf_bond_market_history_v07",)
+          names=("tests.test_mf_bond_market_history_v07",
+                 "tests.test_mf_bond_turnover_metrics_v07",
+                 "tests.test_public_first_market_quality_v07")
           suite=unittest.TestSuite()
           for name in names:
               suite.addTests(unittest.defaultTestLoader.loadTestsFromName(name))
           result=unittest.TextTestRunner(verbosity=2).run(suite)
-          if not result.wasSuccessful() or result.skipped or result.testsRun != 6:
+          if not result.wasSuccessful() or result.skipped or result.testsRun != 24:
               raise SystemExit("SOURCE_CONTRACT_FAILED")
           PY
   original-mf-layout:
@@ -55,4 +59,31 @@ jobs:
           python-version: '3.12'
       - name: Original current gov.pl XLSX sample, small safe XML schema excerpt
         run: |
-          python -m scripts.mf_bond_market_history_v07 --audit-schema --allow-public-mf-source-read
+          python - <<'PY'
+          from datetime import datetime,timezone
+          import json
+          from scripts.knf_mf_official_source_probe_v06 import MF_URL,fetch_exact
+          from scripts.mf_bond_market_history_v07 import audit_mf_schema
+          from scripts.mf_bond_turnover_metrics_v07 import analyze_mf_original
+          raw=fetch_exact(MF_URL) # exactly ONE source HTTPS read
+          at=datetime.now(timezone.utc)
+          schema=audit_mf_schema(raw,completed_at=at)
+          print("ISL_MF_ORIGINAL_SOURCE_LAYOUT="+json.dumps({
+              "source_sha256":schema["original_raw_sha256"],
+              "size_bytes":schema["size_bytes"],
+              "xml_rows":schema["xml_rows"],
+              "formula_cells":schema["formula_cells"],
+              "layout_excerpt":schema["schema_preview_first13_last4"],
+              "source_original_first_publication_certified":False,
+              "financial_operations":0,
+          },sort_keys=True,separators=(",",":")))
+          metrics=analyze_mf_original(raw,completed_at=at)
+          if (metrics["unique_month_count"]!=202
+                  or metrics["last_month"]!="2026-09"
+                  or metrics["latest_total_mln_pln"]!="3140385.25"
+                  or metrics["financial_operations"]!=0
+                  or metrics["tradable_bond_total_return_series_qualified"] is not False):
+              raise SystemExit("MF_ORIGINAL_HISTORICAL_SOURCE_VALIDATION_BLOCKED")
+          print("ISL_MF_ORIGINAL_HISTORY="+json.dumps(
+              metrics,sort_keys=True,separators=(",",":")))
+          PY
