@@ -249,13 +249,24 @@ def verify_receipt(receipt: object) -> dict:
             or not isinstance(fingerprints, dict) or set(fingerprints) != set(SOURCE_TYPES)
             or not isinstance(times, dict) or set(times) != set(SOURCE_TYPES)):
         raise SourceObservationBlocked("RECEIPT_SCOPE_INVALID")
-    _bounded_day(nbp["start"])
-    _bounded_day(nbp["end"])
-    if (not nbp["start"] <= nbp["end"] <= finished.date().isoformat()
-            or not re.fullmatch(r"20\d{2}-(0[1-9]|1[0-2])", est.get("since", ""))
-            or not re.fullmatch(r"20\d{2}-(0[1-9]|1[0-2])", est.get("until", ""))
+    start, end = _bounded_day(nbp["start"]), _bounded_day(nbp["end"])
+    if (not start <= end <= finished.date() or (end - start).days > 92
+            or not isinstance(est["since"], str)
+            or not isinstance(est["until"], str)
+            or not re.fullmatch(r"20\d{2}-(0[1-9]|1[0-2])", est["since"])
+            or not re.fullmatch(r"20\d{2}-(0[1-9]|1[0-2])", est["until"])
             or not est["since"] <= est["until"] <= finished.strftime("%Y-%m")):
         raise SourceObservationBlocked("RECEIPT_SCOPE_INVALID")
+    counts = receipt.get("nbp_observation_counts")
+    months = receipt.get("eurostat_observation_months")
+    first_year, first_month = map(int, est["since"].split("-"))
+    last_year, last_month = map(int, est["until"].split("-"))
+    expected_months = (last_year - first_year) * 12 + last_month - first_month + 1
+    if (not isinstance(counts, dict) or set(counts) != {"usdpln", "eurpln", "gold"}
+            or any(type(count) is not int or not 1 <= count <= (end - start).days + 1
+                   for count in counts.values())
+            or type(months) is not int or months != expected_months):
+        raise SourceObservationBlocked("RECEIPT_OBSERVATION_COUNTS_INVALID")
     for key in SOURCE_TYPES:
         _sha(fingerprints[key])
         seen_at = _read_utc(times[key])
