@@ -32,7 +32,7 @@ python3 -m scripts.public_first_prospective_source_observation_v03 \
   --allow-public-source-fetch
 ```
 
-Wyjście zawiera tylko potwierdzenie ISL_PROSPECTIVE_PUBLIC_SOURCE_RECEIPT i hashe. W celu lokalnego porównania przyszłych potwierdzeń, zachowaj JSON (bez prefiksu tekstowego) w prywatnym pliku z prawami właściciela, a przy kolejnym odczycie tego samego okresu podaj --previous-receipt. Dokumentacja NIE twierdzi, że samo wywołanie tworzy trwały lub uwierzytelniony łańcuch PIT.
+Wyjście zawiera tylko potwierdzenie ISL_PROSPECTIVE_PUBLIC_SOURCE_RECEIPT i hashe. W celu lokalnego porównania przyszłych potwierdzeń, zachowaj JSON (bez prefiksu tekstowego) w prywatnym pliku z prawami właściciela, a przy kolejnym odczycie tego samego okresu podaj --previous-receipt. Przed pobraniem walidowane są również długość okna NBP oraz liczby obserwacji NBP i miesięcy Eurostatu względem zadeklarowanych zakresów. Hash potwierdza wyłącznie spójność, a nie autentyczność danych. Dokumentacja NIE twierdzi, że samo wywołanie tworzy trwały lub uwierzytelniony łańcuch PIT.
 
 ## Granice decyzji
 

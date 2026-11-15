@@ -4,6 +4,7 @@ from __future__ import annotations
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 import json
+from hashlib import sha256
 import os
 from pathlib import Path
 import tempfile
@@ -172,6 +173,41 @@ class ProspectivePublicSourceTests(unittest.TestCase):
             with self.subTest(stamp=stamp), self.assertRaisesRegex(
                 SourceObservationBlocked, "EUROSTAT_PROVIDER_UPDATED_INVALID"):
                 snap(hicp=fake)
+
+    def test_rehashed_invalid_receipt_metadata_rejected_before_fetch(self):
+        cases = [
+            ("nbp_observation_counts", {"usdpln": 0, "eurpln": 1, "gold": 1}),
+            ("nbp_observation_counts", {"usdpln": True, "eurpln": 1, "gold": 1}),
+            ("nbp_observation_counts", {"usdpln": 999, "eurpln": 1, "gold": 1}),
+            ("nbp_observation_counts", {}),
+            ("eurostat_observation_months", 1),
+            ("eurostat_observation_months", True),
+            ("nbp_window", {"start": "2026-01-01", "end": END}),
+            ("eurostat_window", {"since": None, "until": UNTIL}),
+        ]
+        for key, value in cases:
+            item = deepcopy(snap())
+            item[key] = value
+            payload = {k: v for k, v in item.items() if k != "receipt_sha256"}
+            item["receipt_sha256"] = sha256(json.dumps(
+                payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True
+            ).encode()).hexdigest()
+            with self.subTest(key=key, value=value):
+                with self.assertRaises(SourceObservationBlocked):
+                    verify_receipt(item)
+                with tempfile.TemporaryDirectory() as d:
+                    path = Path(d) / "prior.json"
+                    path.write_text(json.dumps(item), encoding="utf-8")
+                    argv = ["source-observe", "--nbp-start", START, "--nbp-end", END,
+                            "--hicp-since", SINCE, "--hicp-until", UNTIL,
+                            "--allow-public-source-fetch", "--previous-receipt", str(path)]
+                    with patch("sys.argv", argv), patch("sys.stderr", new=StringIO()), \
+                         patch("scripts.public_first_prospective_source_observation_v03.official_fetch") as nbp, \
+                         patch("scripts.public_first_prospective_source_observation_v03.official_hicp_fetch") as hicp:
+                        with self.assertRaises(SystemExit):
+                            main()
+                        nbp.assert_not_called()
+                        hicp.assert_not_called()
 
     def test_previous_receipt_regular_file_round_trip(self):
         with tempfile.TemporaryDirectory() as d:
