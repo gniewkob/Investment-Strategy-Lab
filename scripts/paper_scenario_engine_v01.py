@@ -95,3 +95,55 @@ def run_scenario(*, observations: list[dict], monthly_contribution: str = "100",
             "total_fees_pln": str(total_fees), "monthly_path": rows,
             "historical_pit_certified": False, "model_admitted": False,
             "orders_sent": 0, "database_writes": 0, "financial_operations": 0}
+
+
+def compare_scenarios(*, observations: list[dict], strategies: list[dict],
+                      monthly_contribution: str = "100",
+                      source_class: str = "SYNTHETIC") -> dict:
+    """Compare explicitly configured strategies on identical monthly observations.
+
+    Rank by terminal scenario value only; no annualized-return or investment
+    recommendation claims. Include cash as a mandatory zero-cost baseline.
+    """
+    if not isinstance(strategies, list) or not 1 <= len(strategies) <= 12:
+        raise ScenarioBlocked("STRATEGY_COUNT_INVALID")
+    names = set()
+    configured = []
+    for candidate in strategies:
+        if (not isinstance(candidate, dict)
+                or set(candidate) != {"name", "fee_fixed_pln", "fee_rate"}):
+            raise ScenarioBlocked("STRATEGY_SCHEMA_INVALID")
+        name = candidate["name"]
+        if (not isinstance(name, str) or not 1 <= len(name) <= 40
+                or not all(c.isalnum() or c in " _-." for c in name)
+                or name.lower() == "cash" or name.lower() in names):
+            raise ScenarioBlocked("STRATEGY_NAME_INVALID_OR_DUPLICATE")
+        names.add(name.lower())
+        configured.append((name, candidate))
+
+    baseline = run_scenario(observations=observations,
+                            monthly_contribution=monthly_contribution,
+                            mode="cash", source_class=source_class)
+    result = [{"name": "cash", "ending_value_pln": baseline["ending_value_pln"],
+               "difference_vs_cash_pln": "0", "total_fees_pln": "0",
+               "scenario_mode": "cash"}]
+    for name, strategy in configured:
+        scenario = run_scenario(
+            observations=observations, monthly_contribution=monthly_contribution,
+            fee_fixed_pln=strategy["fee_fixed_pln"], fee_rate=strategy["fee_rate"],
+            source_class=source_class)
+        result.append({"name": name, "ending_value_pln": scenario["ending_value_pln"],
+                       "difference_vs_cash_pln": scenario["difference_vs_cash_pln"],
+                       "total_fees_pln": scenario["total_fees_pln"],
+                       "scenario_mode": "asset"})
+    # A single terminal valuation ranking is intentionally not a risk-adjusted
+    # performance claim: no future return or investment signal is inferred.
+    ranked = sorted(result, key=lambda item: (-Decimal(item["ending_value_pln"]),
+                                               item["name"]))
+    return {"schema": "ISL_PAPER_SCENARIO_COMPARISON_V01",
+            "status": "DESCRIPTIVE_SYNTHETIC_OR_UNVERIFIED_SCENARIOS_ONLY",
+            "source_class": source_class, "months": baseline["months"],
+            "contributions_pln": baseline["contributions_pln"],
+            "comparison": ranked, "ranking_is_investment_recommendation": False,
+            "historical_pit_certified": False, "model_admitted": False,
+            "orders_sent": 0, "database_writes": 0, "financial_operations": 0}
