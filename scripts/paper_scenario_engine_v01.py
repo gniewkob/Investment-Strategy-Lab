@@ -97,6 +97,7 @@ def run_scenario(*, observations: list[dict], monthly_contribution: str = "100",
             "orders_sent": 0, "database_writes": 0, "financial_operations": 0}
 
 
+
 def compare_scenarios(*, observations: list[dict], strategies: list[dict],
                       monthly_contribution: str = "100",
                       source_class: str = "SYNTHETIC") -> dict:
