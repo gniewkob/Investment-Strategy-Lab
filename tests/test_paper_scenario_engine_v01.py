@@ -67,3 +67,53 @@ class PaperScenarioEngineTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+from scripts.paper_scenario_engine_v01 import compare_scenarios
+
+
+class PaperScenarioComparisonTests(unittest.TestCase):
+    def test_cash_and_fee_sensitive_comparison(self):
+        strategies = [
+            {"name": "zero fee", "fee_fixed_pln": "0", "fee_rate": "0"},
+            {"name": "charged", "fee_fixed_pln": "1", "fee_rate": "0.01"},
+        ]
+        result = compare_scenarios(observations=sample(), strategies=strategies)
+        self.assertEqual([x["name"] for x in result["comparison"]],
+                         ["zero fee", "charged", "cash"])
+        by_name = {x["name"]: x for x in result["comparison"]}
+        self.assertEqual(Decimal(by_name["zero fee"]["ending_value_pln"]), Decimal("400"))
+        self.assertEqual(Decimal(by_name["charged"]["ending_value_pln"]), Decimal("392"))
+        self.assertEqual(by_name["cash"]["ending_value_pln"], "300")
+        self.assertFalse(result["ranking_is_investment_recommendation"])
+        self.assertFalse(result["model_admitted"])
+
+    def test_different_prices_can_rank_cash_higher(self):
+        result = compare_scenarios(observations=sample(("20", "10", "5")),
+                                   strategies=[{"name": "asset", "fee_fixed_pln": "0", "fee_rate": "0"}])
+        self.assertEqual(result["comparison"][0]["name"], "cash")
+        self.assertEqual(Decimal(result["comparison"][1]["ending_value_pln"]), Decimal("175"))
+
+    def test_reject_duplicate_and_bad_strategies(self):
+        cases = [
+            [],
+            [{"name": "Cash", "fee_fixed_pln": "0", "fee_rate": "0"}],
+            [{"name": "a", "fee_fixed_pln": "0", "fee_rate": "0"},
+             {"name": "A", "fee_fixed_pln": "0", "fee_rate": "0"}],
+            [{"name": "x", "fee_fixed_pln": "0"}],
+            [{"name": "a\nline", "fee_fixed_pln": "0", "fee_rate": "0"}],
+        ]
+        for strategies in cases:
+            with self.subTest(strategies=strategies), self.assertRaises(ScenarioBlocked):
+                compare_scenarios(observations=sample(), strategies=strategies)
+
+    def test_unverified_prices_remain_unqualified(self):
+        result = compare_scenarios(observations=sample(), source_class="UNVERIFIED_EXTERNAL",
+                                   strategies=[{"name": "asset", "fee_fixed_pln": "0", "fee_rate": "0"}])
+        self.assertEqual(result["source_class"], "UNVERIFIED_EXTERNAL")
+        self.assertFalse(result["historical_pit_certified"])
+        self.assertEqual(result["orders_sent"], 0)
+
+    def test_rejects_missing_month_in_all_strategies(self):
+        with self.assertRaisesRegex(ScenarioBlocked, "NONCONTIGUOUS"):
+            compare_scenarios(observations=sample()[:1] + sample()[2:],
+                              strategies=[{"name": "asset", "fee_fixed_pln": "0", "fee_rate": "0"}])
