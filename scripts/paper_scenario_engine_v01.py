@@ -5,10 +5,19 @@ portfolio storage, live execution, or strategy admission. Cash is the baseline.
 """
 from __future__ import annotations
 
+import argparse
 from datetime import date
 from decimal import Decimal, InvalidOperation
+from hashlib import sha256
+import json
+from pathlib import Path
 
 SCHEMA = "ISL_PAPER_SCENARIO_ENGINE_V01"
+MANIFEST_FIELDS = frozenset({
+    "mode", "source_class", "currency", "price_basis", "monthly_contribution_pln",
+    "observations", "strategies",
+})
+DEMO_PATTERN = (3, -2, 1, 4, -1, -3, 2, 0, -4, 5, 1, -1)
 
 
 class ScenarioBlocked(ValueError):
@@ -18,12 +27,19 @@ class ScenarioBlocked(ValueError):
 def _money(value: object, *, allow_zero: bool = True) -> Decimal:
     if type(value) not in (str, int, Decimal):
         raise ScenarioBlocked("DECIMAL_INPUT_REQUIRED")
+    if isinstance(value, str) and (len(value) > 80 or value.strip() != value):
+        raise ScenarioBlocked("DECIMAL_INPUT_INVALID")
     try:
         number = Decimal(value)
     except (InvalidOperation, ValueError) as exc:
         raise ScenarioBlocked("DECIMAL_INPUT_INVALID") from exc
     if not number.is_finite() or number < 0 or (not allow_zero and number == 0):
         raise ScenarioBlocked("NONNEGATIVE_FINITE_VALUE_REQUIRED")
+    # Bound both scale and precision before unit division; Decimal('1e-999999')
+    # is finite but would otherwise overflow or exhaust arithmetic resources.
+    if number and (not -18 <= number.adjusted() <= 18
+                   or len(number.as_tuple().digits) > 32):
+        raise ScenarioBlocked("DECIMAL_MAGNITUDE_OR_PRECISION_INVALID")
     return number
 
 
@@ -148,3 +164,117 @@ def compare_scenarios(*, observations: list[dict], strategies: list[dict],
             "comparison": ranked, "ranking_is_investment_recommendation": False,
             "historical_pit_certified": False, "model_admitted": False,
             "orders_sent": 0, "database_writes": 0, "financial_operations": 0}
+
+
+def synthetic_demo_manifest() -> dict:
+    """Five years of fully invented observations for offline acceptance only."""
+    price = Decimal("100")
+    rows = []
+    for index in range(60):
+        price = (price * (Decimal("1") + Decimal(DEMO_PATTERN[index % 12]) / 100))
+        month = f"{2021 + index // 12:04d}-{index % 12 + 1:02d}"
+        rows.append({"month": month, "available_month": month,
+                     "price_pln": str(price.quantize(Decimal("0.0001")))})
+    return {"mode": "EDUCATIONAL_PAPER_ONLY", "source_class": "SYNTHETIC",
+            "currency": "PLN", "price_basis": "EXPLICIT_MONTHLY_PLN_SCENARIO_PRICE",
+            "monthly_contribution_pln": "100", "observations": rows,
+            "strategies": [
+                {"name": "zero cost", "fee_fixed_pln": "0", "fee_rate": "0"},
+                {"name": "cost 0.2pct", "fee_fixed_pln": "0", "fee_rate": "0.002"},
+                {"name": "cost 0.7pct", "fee_fixed_pln": "0", "fee_rate": "0.007"},
+                {"name": "cost 1.5pct", "fee_fixed_pln": "0", "fee_rate": "0.015"},
+                {"name": "fixed 1pln plus 0.7pct", "fee_fixed_pln": "1", "fee_rate": "0.007"},
+            ]}
+
+
+def analyze_manifest(payload: object) -> dict:
+    """Read-only deterministic comparison; provenance is never self-certified."""
+    if not isinstance(payload, dict) or set(payload) != MANIFEST_FIELDS:
+        raise ScenarioBlocked("MANIFEST_SCHEMA_INVALID")
+    if (payload["mode"] != "EDUCATIONAL_PAPER_ONLY" or payload["currency"] != "PLN"
+            or payload["price_basis"] != "EXPLICIT_MONTHLY_PLN_SCENARIO_PRICE"):
+        raise ScenarioBlocked("MANIFEST_RESEARCH_ONLY_PLN_PRICE_BASIS_REQUIRED")
+    # No VERIFIED status: source origin, first-release timestamps, corporate
+    # actions and an executable quote are not established by this manifest.
+    if payload["source_class"] not in ("SYNTHETIC", "UNVERIFIED_EXTERNAL"):
+        raise ScenarioBlocked("MANIFEST_SOURCE_UNQUALIFIED")
+    result = compare_scenarios(
+        observations=payload["observations"], strategies=payload["strategies"],
+        monthly_contribution=payload["monthly_contribution_pln"],
+        source_class=payload["source_class"])
+    try:
+        canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"),
+                               ensure_ascii=True, allow_nan=False)
+    except (TypeError, ValueError) as exc:
+        raise ScenarioBlocked("MANIFEST_NOT_CANONICAL_JSON") from exc
+    result.update({"input_sha256": sha256(canonical.encode("utf-8")).hexdigest(),
+                   "first_month": payload["observations"][0]["month"],
+                   "last_month": payload["observations"][-1]["month"],
+                   "currency": "PLN", "price_basis": payload["price_basis"],
+                   "paper_decision": "HOLD_CASH",
+                   "input_hash_proves_source_authenticity": False})
+    return result
+
+
+def render_markdown_report(result: dict) -> str:
+    """A descriptive cost-sensitivity report, not a return forecast."""
+    def pln(value: str) -> str:
+        return format(Decimal(value).quantize(Decimal("0.01")), ".2f")
+
+    lines = [
+        "# Investment Strategy Lab — monthly paper scenario report",
+        "",
+        "**Decision: HOLD_CASH** — educational comparison only; not an investment signal.",
+        "",
+        f"- Input class: `{result['source_class']}` (unqualified for model admission)",
+        f"- Period: {result['first_month']} to {result['last_month']} ({result['months']} monthly marks)",
+        f"- Fictional contribution: {pln(result['contributions_pln'])} PLN per alternative scenario",
+        f"- Input SHA-256: `{result['input_sha256']}` (integrity fingerprint, not authenticity or PIT proof)",
+        "- Pricing: explicit PLN scenario levels; not independently verified total-return indices or executable quotes",
+        "- Costs: named scenarios differ in fees on purchases of fractional units; cash has zero fees and zero interest",
+        "",
+        "| Scenario | Terminal value (PLN) | Difference vs cash (PLN) | Total fees (PLN) |",
+        "| --- | ---: | ---: | ---: |",
+    ]
+    for row in result["comparison"]:
+        lines.append(f"| {row['name']} | {pln(row['ending_value_pln'])} | "
+                     f"{pln(row['difference_vs_cash_pln'])} | {pln(row['total_fees_pln'])} |")
+    lines.extend(["", "Synthetic/unverified price levels cannot prove historical "
+                  "point-in-time availability, execution feasibility, annualized "
+                  "returns or future performance. The ranking is descriptive. "
+                  "No orders, transfers, database writes or allocation changes.", ""])
+    return "\n".join(lines)
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Offline paper scenario cost sensitivity")
+    choice = parser.add_mutually_exclusive_group(required=True)
+    choice.add_argument("--input", type=Path, help="Strict JSON research-only input")
+    choice.add_argument("--synthetic-demo", action="store_true", help="Generate 60 fictional months")
+    parser.add_argument("--out-dir", type=Path, required=True,
+                        help="Local directory for comparison.json and report.md")
+    args = parser.parse_args(argv)
+    try:
+        if args.synthetic_demo:
+            payload = synthetic_demo_manifest()
+        else:
+            data = args.input.read_bytes()
+            if len(data) > 1_000_000:
+                raise ScenarioBlocked("MANIFEST_TOO_LARGE")
+            payload = json.loads(data)
+        result = analyze_manifest(payload)
+    except (ScenarioBlocked, OSError, UnicodeError, ValueError) as exc:
+        parser.error(f"input rejected: {exc}")
+    args.out_dir.mkdir(parents=True, exist_ok=True)
+    (args.out_dir / "comparison.json").write_text(
+        json.dumps(result, indent=2, sort_keys=True, ensure_ascii=True) + "\n",
+        encoding="utf-8")
+    (args.out_dir / "report.md").write_text(render_markdown_report(result),
+                                             encoding="utf-8")
+    print(f"OFFLINE_PAPER_REPORT {args.out_dir / 'comparison.json'} "
+          f"{args.out_dir / 'report.md'} HOLD_CASH")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

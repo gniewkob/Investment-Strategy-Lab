@@ -1,7 +1,14 @@
 """Deterministic offline tests, using synthetic price observations only."""
 from decimal import Decimal
+import json
+from pathlib import Path
+import subprocess
+import sys
+import tempfile
 import unittest
-from scripts.paper_scenario_engine_v01 import run_scenario, ScenarioBlocked
+from scripts.paper_scenario_engine_v01 import (
+    run_scenario, ScenarioBlocked, analyze_manifest, synthetic_demo_manifest,
+)
 
 
 def sample(prices=("10", "20", "20")):
@@ -48,6 +55,13 @@ class PaperScenarioEngineTests(unittest.TestCase):
             rows = sample()
             rows[0]["price_pln"] = bad
             with self.subTest(bad=bad), self.assertRaises(ScenarioBlocked):
+                run_scenario(observations=rows)
+
+    def test_extreme_price_exponents_fail_closed(self):
+        for price in ("1e-999999", "1e999999", "1e-999", "1e999", "9" * 300):
+            rows = sample()
+            rows[0]["price_pln"] = price
+            with self.subTest(price=price[:20]), self.assertRaises(ScenarioBlocked):
                 run_scenario(observations=rows)
 
     def test_fees_cannot_use_more_than_contribution(self):
@@ -117,3 +131,90 @@ class PaperScenarioComparisonTests(unittest.TestCase):
         with self.assertRaisesRegex(ScenarioBlocked, "NONCONTIGUOUS"):
             compare_scenarios(observations=sample()[:1] + sample()[2:],
                               strategies=[{"name": "asset", "fee_fixed_pln": "0", "fee_rate": "0"}])
+
+
+class PaperScenarioReportTests(unittest.TestCase):
+    def test_synthetic_demo_is_reproducible_and_cash_gated(self):
+        payload = synthetic_demo_manifest()
+        result = analyze_manifest(payload)
+        self.assertEqual(result["months"], 60)
+        self.assertEqual(result["first_month"], "2021-01")
+        self.assertEqual(result["last_month"], "2025-12")
+        self.assertEqual(result["contributions_pln"], "6000")
+        self.assertEqual(result["source_class"], "SYNTHETIC")
+        self.assertEqual(len(result["comparison"]), 6)  # five fee cases + cash
+        self.assertFalse(result["model_admitted"])
+        self.assertFalse(result["historical_pit_certified"])
+        self.assertEqual(result["financial_operations"], 0)
+        self.assertEqual(analyze_manifest(payload), result)
+        self.assertEqual(len(result["input_sha256"]), 64)
+
+    def test_manifest_rejects_ambiguous_provenance_and_schema(self):
+        base = synthetic_demo_manifest()
+        for changes in (
+            {"currency": "USD"},
+            {"mode": "LIVE_TRADING"},
+            {"source_class": "VERIFIED_MARKET_DATA"},
+            {"price_basis": "TOTAL_RETURN_INDEX"},
+            {"monthly_contribution_pln": 100.0},
+        ):
+            payload = dict(base, **changes)
+            with self.subTest(changes=changes), self.assertRaises(ScenarioBlocked):
+                analyze_manifest(payload)
+        payload = dict(base, trust_me=True)
+        with self.assertRaises(ScenarioBlocked):
+            analyze_manifest(payload)
+
+    def test_unverified_inputs_keep_hold_cash_gate(self):
+        payload = synthetic_demo_manifest()
+        payload["source_class"] = "UNVERIFIED_EXTERNAL"
+        result = analyze_manifest(payload)
+        self.assertEqual(result["source_class"], "UNVERIFIED_EXTERNAL")
+        self.assertEqual(result["paper_decision"], "HOLD_CASH")
+        self.assertFalse(result["model_admitted"])
+
+    def test_cli_produces_reproducible_json_and_markdown_report(self):
+        with tempfile.TemporaryDirectory() as work:
+            command = [sys.executable, "-m", "scripts.paper_scenario_engine_v01",
+                       "--synthetic-demo", "--out-dir", work]
+            first = subprocess.run(command, text=True, capture_output=True, check=True)
+            output = Path(work, "comparison.json")
+            report = Path(work, "report.md")
+            self.assertTrue(output.is_file())
+            self.assertTrue(report.is_file())
+            result = json.loads(output.read_text(encoding="utf-8"))
+            self.assertEqual(result["months"], 60)
+            self.assertIn("HOLD_CASH", report.read_text(encoding="utf-8"))
+            self.assertIn("SYNTHETIC", report.read_text(encoding="utf-8"))
+            self.assertIn("| cash | 6000.00 | 0.00 | 0.00 |",
+                          report.read_text(encoding="utf-8"))
+            self.assertIn("comparison.json", first.stdout)
+            saved = (output.read_bytes(), report.read_bytes())
+            subprocess.run(command, text=True, capture_output=True, check=True)
+            self.assertEqual((output.read_bytes(), report.read_bytes()), saved)
+
+    def test_cli_rejects_bad_manifest_before_creating_report(self):
+        with tempfile.TemporaryDirectory() as work:
+            invalid = Path(work, "bad.json")
+            payload = dict(synthetic_demo_manifest(), source_class="VERIFIED_MARKET_DATA")
+            invalid.write_text(json.dumps(payload), encoding="utf-8")
+            out_dir = Path(work, "report")
+            command = [sys.executable, "-m", "scripts.paper_scenario_engine_v01",
+                       "--input", str(invalid), "--out-dir", str(out_dir)]
+            failed = subprocess.run(command, text=True, capture_output=True)
+            self.assertNotEqual(failed.returncode, 0)
+            self.assertIn("MANIFEST_SOURCE_UNQUALIFIED", failed.stderr)
+            self.assertFalse(out_dir.exists())
+
+    def test_cli_accepts_explicit_unverified_external_schema(self):
+        with tempfile.TemporaryDirectory() as work:
+            src = Path(work, "input.json")
+            payload = dict(synthetic_demo_manifest(), source_class="UNVERIFIED_EXTERNAL")
+            src.write_text(json.dumps(payload), encoding="utf-8")
+            out_dir = Path(work, "report")
+            subprocess.run([sys.executable, "-m", "scripts.paper_scenario_engine_v01",
+                            "--input", str(src), "--out-dir", str(out_dir)],
+                           check=True, text=True, capture_output=True)
+            result = json.loads(Path(out_dir, "comparison.json").read_text(encoding="utf-8"))
+            self.assertEqual(result["source_class"], "UNVERIFIED_EXTERNAL")
+            self.assertEqual(result["paper_decision"], "HOLD_CASH")
