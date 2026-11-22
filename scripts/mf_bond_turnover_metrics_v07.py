@@ -83,23 +83,43 @@ def _header(rows):
         "total":("RAZEM","OGOL","SUMA","TOTAL"),
         "month":("MIESIAC","OKRES","DATA","MONTH","PERIOD"),
     }
+    def number(col):
+        out=0
+        for letter in col:
+            out=out*26+ord(letter)-64
+        return out
+    def letters(idx):
+        out=""
+        while idx:
+            idx,offset=divmod(idx-1,26)
+            out=chr(65+offset)+out
+        return out
+    # Official MF sheet has a second "Razem" in an independent F:J
+    # category-breakdown table. Match the contiguous dated market-channel
+    # header A:E, never the nearest keyword in an unrelated second table.
+    kinds=("interbank","bondspot","gpw","total")
     for row in rows[:80]:
-        cols={}
+        matches=[]
         for col,c in row["cells"].items():
-            if c["t"]!="text":continue
-            val=_clean(c["value"] or "")
-            for k,variants in words.items():
-                if any(v in val for v in variants):
-                    if k in cols:
-                        raise OriginalEvidenceBlocked("MF_AMBIGUOUS_COLUMN")
-                    cols[k]=col
-        if all(k in cols for k in ("interbank","bondspot","gpw","total")):
-            if "month" not in cols:
-                candidates=[col for col in row["cells"] if col not in cols.values()]
-                if len(candidates)!=1:
-                    raise OriginalEvidenceBlocked("MF_NO_UNAMBIGUOUS_PERIOD_COLUMN")
-                cols["month"]=candidates[0]
-            return row["row"],cols
+            if (c["t"]!="text" or not any(
+                    word in _clean(c["value"] or "") for word in words["month"])):
+                continue
+            start=number(col)
+            selected={"month":col}
+            for offset,kind in enumerate(kinds,1):
+                expected=letters(start+offset)
+                candidate=row["cells"].get(expected)
+                if (candidate is None or candidate["t"]!="text"
+                        or not any(word in _clean(candidate["value"] or "")
+                                   for word in words[kind])):
+                    break
+                selected[kind]=expected
+            if len(selected)==5:
+                matches.append(selected)
+        if len(matches)>1:
+            raise OriginalEvidenceBlocked("MF_AMBIGUOUS_MARKET_TABLE_HEADER")
+        if matches:
+            return row["row"],matches[0]
     raise OriginalEvidenceBlocked("MF_TABLE_HEADER_UNSUPPORTED")
 
 

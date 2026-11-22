@@ -23,7 +23,16 @@ def synth(*,bad=None):
     xml=[f'<worksheet xmlns="{N}"><sheetData><row r="1">']
     for i,head in enumerate(labels):
         col="ABCDE"[i]
+        if bad=="nonadjacent_total" and col=="E":
+            head="Pozostale"
         xml.append(f'<c r="{col}1" t="inlineStr"><is><t>{head}</t></is></c>')
+    if bad in ("other_category_total","nonadjacent_total"):
+        # The real original MF sheet contains an independent F:J breakdown
+        # with a second "Razem" in column J. It must not replace E.
+        for col,head in zip("FGHIJ",(
+                "Fundusze inwestycyjne","Osoby fizyczne",
+                "Podmioty niefinansowe","Inne podmioty","Razem")):
+            xml.append(f'<c r="{col}1" t="inlineStr"><is><t>{head}</t></is></c>')
     xml.append("</row>")
     for ix,(y,m) in enumerate(YEARS):
         rn=ix+2
@@ -80,6 +89,13 @@ class MFBondMarketHistoryTests(unittest.TestCase):
         self.assertFalse(o["tradable_bond_total_return_series_qualified"])
         self.assertEqual(o["financial_operations"],0)
         self.assertEqual(o["orders"],0)
+    def test_secondary_category_total_does_not_ambiguitize_primary_turnover(self):
+        out=analyze_mf_original(synth(bad="other_category_total"),completed_at=NOW)
+        self.assertEqual(out["latest_total_mln_pln"],"3140385.25")
+        self.assertEqual(out["unique_month_count"],202)
+    def test_nonadjacent_secondary_total_cannot_replace_main_total(self):
+        with self.assertRaisesRegex(OriginalEvidenceBlocked,"MF_TABLE_HEADER_UNSUPPORTED"):
+            analyze_mf_original(synth(bad="nonadjacent_total"),completed_at=NOW)
     def test_invalid_duplicate_month_rejected(self):
         with self.assertRaisesRegex(OriginalEvidenceBlocked,"DUPLICATE_MONTH"):
             analyze_mf_original(synth(bad="duplicated"),completed_at=NOW)

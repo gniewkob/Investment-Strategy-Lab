@@ -33,7 +33,7 @@ TESTS = (
     "tests.test_knf_mf_official_source_probe_v06",
     "tests.test_knf_original_unit_history_research_v06",
 )
-EXPECTED_TESTS = 94
+EXPECTED_TESTS = 100
 
 
 def _deny_network(*_args, **_kwargs):

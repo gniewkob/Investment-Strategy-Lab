@@ -13,7 +13,9 @@ NOW=datetime(2026,11,13,tzinfo=timezone.utc)
 N="http://schemas.openxmlformats.org/spreadsheetml/2006/main"
 
 
-def xlsx(*, shared=True, malformed=False, macro=False):
+def xlsx(*, shared=True, malformed=False, macro=False,
+         styled_blank_wide=False, wide_value=False,
+         wide_formula=False, duplicate_wide=False):
     workbook=f'<workbook xmlns="{N}"/>'
     sheet=(f'<worksheet xmlns="{N}"><sheetData><row r="1">'
            f'<c r="A1" t="s"><v>0</v></c>' if shared else
@@ -21,6 +23,17 @@ def xlsx(*, shared=True, malformed=False, macro=False):
            f'<c r="A1" t="inlineStr"><is><t>Data</t></is></c>')
     sheet += '<c r="B1"><v>1234.5</v></c></row><row r="2"><c r="A2"><f>1+1</f><v>2</v></c></row></sheetData></worksheet>'
     if malformed: sheet=sheet.replace("r=\"B1\"","r=\"B2\"")
+    extra=""
+    if styled_blank_wide or duplicate_wide:
+        extra='<c r="XFA1" s="6" t="n"/>'
+        if duplicate_wide:
+            extra += '<c r="XFA1" s="6" t="n"/>'
+    if wide_value:
+        extra='<c r="XFA1" t="n"><v>123.45</v></c>'
+    if wide_formula:
+        extra='<c r="XFA1"><f>1+2</f><v>3</v></c>'
+    if extra:
+        sheet=sheet.replace('</row><row r="2">',extra+'</row><row r="2">')
     b=BytesIO()
     with ZipFile(b,"w") as z:
         z.writestr("[Content_Types].xml",b"<Types/>")
@@ -59,3 +72,17 @@ class MFHistoryParserSafetyTests(unittest.TestCase):
     def test_utc_clock_required(self):
         with self.assertRaisesRegex(OriginalEvidenceBlocked,"UTC_AWARE"):
             read_mf_cells(xlsx(),completed_at=datetime(2026,11,13))
+    def test_excel_far_column_format_only_cannot_block_valid_data(self):
+        receipt,rows=read_mf_cells(xlsx(styled_blank_wide=True),completed_at=NOW)
+        self.assertEqual(receipt["xml_rows"],2)
+        self.assertEqual(set(rows[0]["cells"]),{"A","B"})
+        self.assertEqual(receipt["ignored_far_style_only_cells"],1)
+    def test_far_column_with_data_blocks_not_silently_discarded(self):
+        with self.assertRaisesRegex(OriginalEvidenceBlocked,"MF_NONEMPTY_WIDE_COLUMN"):
+            read_mf_cells(xlsx(wide_value=True),completed_at=NOW)
+    def test_far_column_with_formula_blocks(self):
+        with self.assertRaisesRegex(OriginalEvidenceBlocked,"MF_NONEMPTY_WIDE_COLUMN"):
+            read_mf_cells(xlsx(wide_formula=True),completed_at=NOW)
+    def test_duplicate_far_style_only_cell_blocks(self):
+        with self.assertRaisesRegex(OriginalEvidenceBlocked,"MF_DUPLICATE_CELL"):
+            read_mf_cells(xlsx(duplicate_wide=True),completed_at=NOW)

@@ -28,6 +28,8 @@ MAX_STRINGS_BYTES = 1_000_000
 MAX_TEXT = 96
 MAX_ROWS = 5_000
 MAX_COLS = 48
+MAX_STYLE_ONLY_IGNORED = 10_000
+EXCEL_MAX_COLS = 16_384
 
 
 def _read_member(z: ZipFile, path: str, limit: int) -> bytes:
@@ -84,6 +86,7 @@ def read_mf_cells(raw: bytes, *, completed_at: datetime) -> tuple[dict, list[dic
             raise OriginalEvidenceBlocked("MF_SHEET_NO_DATA")
         output=[]
         seen_rows=set()
+        ignored_far_style_only=0
         for row in data.findall(NS+"row"):
             try:
                 rn=int(row.attrib["r"])
@@ -93,6 +96,7 @@ def read_mf_cells(raw: bytes, *, completed_at: datetime) -> tuple[dict, list[dic
                 raise OriginalEvidenceBlocked("MF_DUPLICATE_OR_EXCESS_ROW")
             seen_rows.add(rn)
             cells={}
+            seen_cols=set()
             for c in row.findall(NS+"c"):
                 addr=c.attrib.get("r", "")
                 match=CELL.fullmatch(addr)
@@ -102,8 +106,23 @@ def read_mf_cells(raw: bytes, *, completed_at: datetime) -> tuple[dict, list[dic
                 pos=0
                 for letter in col:
                     pos=pos*26+ord(letter)-64
-                if pos>MAX_COLS or col in cells:
-                    raise OriginalEvidenceBlocked("MF_DUPLICATE_OR_WIDE_CELL")
+                if col in seen_cols:
+                    raise OriginalEvidenceBlocked("MF_DUPLICATE_CELL")
+                seen_cols.add(col)
+                if pos>MAX_COLS:
+                    # The official MF workbook includes 8,168 style-only
+                    # cells reaching XFA, but no market observations there.
+                    # Drop only empty, style-marked XML elements. Any value,
+                    # inline text or formula outside the admitted table
+                    # remains an explicit hard failure, never missing data.
+                    if (pos>EXCEL_MAX_COLS or len(c)!=0
+                            or c.attrib.get("t","n") not in ("n","")
+                            or "s" not in c.attrib):
+                        raise OriginalEvidenceBlocked("MF_NONEMPTY_WIDE_COLUMN")
+                    ignored_far_style_only+=1
+                    if ignored_far_style_only>MAX_STYLE_ONLY_IGNORED:
+                        raise OriginalEvidenceBlocked("MF_STYLE_ONLY_CELLS_EXCESSIVE")
+                    continue
                 typ=c.attrib.get("t","n")
                 v=c.find(NS+"v")
                 formula=c.find(NS+"f")
@@ -137,6 +156,7 @@ def read_mf_cells(raw: bytes, *, completed_at: datetime) -> tuple[dict, list[dic
         "last_populated_row":max(seen_rows) if seen_rows else None,
         "formula_cells":sum(c["t"]=="formula" for x in output for c in x["cells"].values()),
         "distinct_columns":sorted(set(c for x in output for c in x["cells"])),
+        "ignored_far_style_only_cells":ignored_far_style_only,
         "source_sha256_rechecked":sha256(raw).hexdigest(),
         "source_rights":"PUBLIC_MINISTRY_STATISTICS_SOURCE_NOT_INDEX_PRICE_OR_TR",
         "historic_original_first_publication_verified":False,

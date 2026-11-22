@@ -50,7 +50,7 @@ Na gałęzi PR #159 dodano bezsieciowy kontroler `scripts/isl_v07_offline_accept
 python3 -m scripts.isl_v07_offline_acceptance
 ```
 
-Po konsolidacji z #161 sprawdza składnię dziewięciu modułów i wykonuje **94 testy syntetyczne offline**, w tym zgodność SHA-256 źródeł, odrzucanie przyszłych obserwacji i powtarzalność raportów JSON/Markdown. Wynik `ISL_V07_OFFLINE_ACCEPTANCE` zawiera status, liczby testów i jawne `network=DENIED`. Jest to **alternatywna weryfikacja kodu**, ale **nie zastępuje** odczytu rzeczywistego oryginalnego skoroszytu MF i nie może samoistnie kwalifikować go do wykorzystania.
+Po konsolidacji z #161 sprawdza składnię dziewięciu modułów i wykonuje **100 testów syntetycznych offline**, w tym zgodność SHA-256 źródeł, odrzucanie przyszłych obserwacji i powtarzalność raportów JSON/Markdown. Wynik `ISL_V07_OFFLINE_ACCEPTANCE` zawiera status, liczby testów i jawne `network=DENIED`. Jest to **alternatywna weryfikacja kodu**, ale **nie zastępuje** odczytu rzeczywistego oryginalnego skoroszytu MF i nie może samoistnie kwalifikować go do wykorzystania.
 
 GitHub Actions nadal kończy wszystkie hostowane joby przed wykonaniem pierwszego kroku (także niezmienione workflow), więc bez poprawy infrastruktury albo lokalnego dowodu odbioru kod pozostaje **NIE DONE**.
 
@@ -73,4 +73,13 @@ python3 -m scripts.public_first_market_research_v07 \
   --observed-at-utc 2026-11-14T00:00:00+00:00
 ```
 
-Reporter nie pobiera danych z sieci ani nie dotyka kont czy bazy. SHA-256 jest kontrolą spójności, **nie dowodem autentyczności ani historycznej dostępności źródła**. Zestaw testów: **94/94 PASS lokalnie na syntetycznych danych**. Realny układ 202 miesięcy MF pozostaje **UNVERIFIED**, podobnie hostowane CI na dokładnym SHA. Dla M1–M3 utrzymujemy `INSUFFICIENT_DATA_HOLD_CASH`, bez żadnych realnych operacji finansowych.
+Reporter nie pobiera danych z sieci ani nie dotyka kont czy bazy. SHA-256 jest kontrolą spójności, **nie dowodem autentyczności ani historycznej dostępności źródła**. Zestaw testów: **100/100 PASS lokalnie na syntetycznych danych**. Osobny odczyt rzeczywistego XLSX MF i jego 202 miesięcy przeszedł po naprawie parsera (sekcja 8); hostowane CI na dokładnym SHA nadal pozostaje zablokowane. Dla M1–M3 utrzymujemy `INSUFFICIENT_DATA_HOLD_CASH`, bez żadnych realnych operacji finansowych.
+
+## 8. Dwa błędy parsera ujawnione na oryginalnym XLSX (2026-11-22)
+
+Właściciel odtworzył błąd `MF_DUPLICATE_OR_WIDE_CELL` na pliku MF. Niezależnie pobrano **dokładnie ten sam publiczny XLSX** z oficjalnego `gov.pl`: HTTP 200, 56 050 bajtów, SHA-256 `5fd7f4fceb1403f1978553079e3a566a70e04d849af29c6a9c7ee41a7d5f42c8`. Pozwoliło to odtworzyć błąd bez danych syntetycznych.
+
+1. Wiersze 114 i 144 mają łącznie **8168 komórek wyłącznie z formatowaniem**, od kolumny AW do XFA (bez wartości, formuł i tekstu). Czytnik pomija tylko komórki o pustej strukturze XML z atrybutem stylu w dozwolonym zakresie Excela, z górnym limitem 10 000; **nie** pomija niepustych odległych kolumn ani duplikatów adresów.
+2. Oficjalny nagłówek w wierszu 2 zawiera **dwa pola `Razem`**: `E` zamyka tabelę obrotów A–E, `J` zamyka odrębne zestawienie F–J. Dopasowanie semantyczne wybiera teraz wyłącznie jednoznaczny, sąsiadujący układ kolumn daty i trzech kanałów obrotu; nie używa `J` jako sumy rynku.
+
+**PASS realnego źródła:** pełne 202 miesiące XII 2009–IX 2026, oficjalna suma września `3140385.25` mln PLN oraz dotychczasowe kontrole kanałów i dynamiki. Dodatkowe sześć regresji syntetycznych obejmuje dopuszczalne wyłącznie puste formatowanie, odrzucenie formuł i liczb w odległych kolumnach, duplikaty oraz dwa warianty dodatkowego pola `Razem`. **Nie** potwierdza to archiwalnych chwil pierwszej publikacji, praw licencyjnych ani pełnych stóp zwrotu portfela.
