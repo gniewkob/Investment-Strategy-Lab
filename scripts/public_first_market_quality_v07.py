@@ -72,9 +72,12 @@ def integrate_market_quality(mf: dict, nav: dict, macro: dict) -> dict:
             or nav.get("historical_pit_certified") is not False
             or nav.get("fund_holding_period_total_return_qualified") is not False):
         raise MarketQualityBlocked("NAV_ORIGINAL_SHARE_CLASS_CONTEXT_INVALID")
+    nbp_days=macro.get("nbp_observed_business_days")
+    # Sep 2026 has 22 Monday-Friday dates. Partial source coverage must
+    # remain visible, not be silently completed with synthetic observations.
     if (macro.get("schema")!="ISL_PUBLIC_MULTISOURCE_MACRO_EVIDENCE_V05"
             or macro.get("joint_reference_month")!="2026-09"
-            or macro.get("nbp_observed_business_days")!=22
+            or type(nbp_days) is not int or not 1<=nbp_days<=22
             or macro.get("hicp_months")!=13
             or macro.get("government_yield_months")!=59
             or macro.get("historical_point_in_time_certified") is not False
@@ -144,6 +147,7 @@ def integrate_market_quality(mf: dict, nav: dict, macro: dict) -> dict:
             "uknf_same_primary_class_nav_days":nav["daily_same_class_observations"],
             "uknf_kid_exact_asof_match":nav.get("kid_exact_fund_unit_currency_match") is True,
             "macro_nbp_publication_days":macro["nbp_observed_business_days"],
+            "macro_nbp_full_22_day_coverage":nbp_days==22,
             "macro_hicp_months":macro["hicp_months"],
             "macro_10y_yield_months":macro["government_yield_months"],
         },

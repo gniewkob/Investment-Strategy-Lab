@@ -50,6 +50,27 @@ Na gałęzi PR #159 dodano bezsieciowy kontroler `scripts/isl_v07_offline_accept
 python3 -m scripts.isl_v07_offline_acceptance
 ```
 
-Wykonuje kontrolę składni pięciu głównych modułów i **57 syntetycznych testów** bez połączeń sieciowych: 24 nowo dodane testy v0.7 oraz 33 testy źródeł UKNF/MF z v0.6, w tym dopasowania KID i dat/wycen NAV. Wynik `ISL_V07_OFFLINE_ACCEPTANCE` zawiera status, liczby testów i jawne `network=DENIED`. Jest to **alternatywna weryfikacja kodu**, ale **nie zastępuje** odczytu rzeczywistego oryginalnego skoroszytu MF i nie może samoistnie kwalifikować go do wykorzystania.
+Po konsolidacji z #161 sprawdza składnię dziewięciu modułów i wykonuje **94 testy syntetyczne offline**, w tym zgodność SHA-256 źródeł, odrzucanie przyszłych obserwacji i powtarzalność raportów JSON/Markdown. Wynik `ISL_V07_OFFLINE_ACCEPTANCE` zawiera status, liczby testów i jawne `network=DENIED`. Jest to **alternatywna weryfikacja kodu**, ale **nie zastępuje** odczytu rzeczywistego oryginalnego skoroszytu MF i nie może samoistnie kwalifikować go do wykorzystania.
 
 GitHub Actions nadal kończy wszystkie hostowane joby przed wykonaniem pierwszego kroku (także niezmienione workflow), więc bez poprawy infrastruktury albo lokalnego dowodu odbioru kod pozostaje **NIE DONE**.
+
+## 7. Konsolidacja MF / UKNF / NBP / Eurostat
+
+Do #159 przeniesiono z [#161](https://github.com/gniewkob/Investment-Strategy-Lab/pull/161) trzy uzupełniające moduły i ich testy: `mf_original_turnover_schema_v07.py` (metadane XLSX, nie zweryfikowany obrót), `knf_one_class_nav_quality_v07.py` (poziomy NAV jednej klasy, nie stopa zwrotu) i `research_readiness_quality_v07.py` (przekrojowy stan gotowości).
+
+Nowy `scripts/public_first_market_research_v07.py` generuje spójne raporty JSON/Markdown z dostarczonych lokalnie pokwitowań:
+
+- `SCHEMA_ONLY`: tylko jakość danych i ograniczenia źródeł; brak agregatów rynku.
+- `DESCRIPTIVE_MARKET_CONTEXT`: wymaga również zweryfikowanych metryk MF, oryginalnego UKNF NAV i makro; porównuje SHA-256 *tego samego* XLSX w dwóch odczytach MF i *tej samej* historii UKNF w dwóch odczytach NAV; blokuje przyszłe czasy obserwacji i mieszanie niepełnego zestawu.
+
+**Naprawa regresji #159:** początkowy odbiór offline miał 8/57 niepowodzeń przez wymuszony warunek `nbp_observed_business_days == 22`. Referencja syntetyczna v0.5 zawiera 1 dzień. Walidacja dopuszcza wyłącznie całkowitą liczbę dni z zakresu 1–22 i osobno ujawnia flagę `macro_nbp_full_22_day_coverage`; nie dopisuje ani nie interpoluje obserwacji.
+
+```bash
+python3 -m scripts.isl_v07_offline_acceptance
+python3 -m scripts.public_first_market_research_v07 \
+  --input local-receipts.json \
+  --out-dir local-reports \
+  --observed-at-utc 2026-11-14T00:00:00+00:00
+```
+
+Reporter nie pobiera danych z sieci ani nie dotyka kont czy bazy. SHA-256 jest kontrolą spójności, **nie dowodem autentyczności ani historycznej dostępności źródła**. Zestaw testów: **94/94 PASS lokalnie na syntetycznych danych**. Realny układ 202 miesięcy MF pozostaje **UNVERIFIED**, podobnie hostowane CI na dokładnym SHA. Dla M1–M3 utrzymujemy `INSUFFICIENT_DATA_HOLD_CASH`, bez żadnych realnych operacji finansowych.

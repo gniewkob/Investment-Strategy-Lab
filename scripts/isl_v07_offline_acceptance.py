@@ -15,6 +15,10 @@ MODULES = (
     "scripts.mf_bond_market_history_v07",
     "scripts.mf_bond_turnover_metrics_v07",
     "scripts.public_first_market_quality_v07",
+    "scripts.public_first_market_research_v07",
+    "scripts.knf_one_class_nav_quality_v07",
+    "scripts.mf_original_turnover_schema_v07",
+    "scripts.research_readiness_quality_v07",
     "scripts.knf_mf_official_source_probe_v06",
     "scripts.knf_original_unit_history_research_v06",
 )
@@ -22,10 +26,14 @@ TESTS = (
     "tests.test_mf_bond_market_history_v07",
     "tests.test_mf_bond_turnover_metrics_v07",
     "tests.test_public_first_market_quality_v07",
+    "tests.test_public_first_market_research_v07",
+    "tests.test_knf_one_class_nav_quality_v07",
+    "tests.test_mf_original_turnover_schema_v07",
+    "tests.test_research_readiness_quality_v07",
     "tests.test_knf_mf_official_source_probe_v06",
     "tests.test_knf_original_unit_history_research_v06",
 )
-EXPECTED_TESTS = 57
+EXPECTED_TESTS = 94
 
 
 def _deny_network(*_args, **_kwargs):

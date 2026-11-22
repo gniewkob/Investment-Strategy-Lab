@@ -55,7 +55,18 @@ class CrossMarketQualityTests(unittest.TestCase):
         self.assertEqual(out["orders_sent"],0)
         self.assertEqual(out["financial_operations"],0)
         self.assertEqual(out["database_writes"],0)
+        # A partial NBP observation window is valid source evidence.
+        self.assertEqual(out["source_quality_gate"]["macro_nbp_publication_days"],1)
+        self.assertFalse(out["source_quality_gate"]["macro_nbp_full_22_day_coverage"])
         self.assertRegex(out["receipt_sha256"],"^[a-f0-9]{64}$")
+    def test_invalid_nbp_business_day_coverage_blocks(self):
+        mf,nav,macro=synthetic_three_sources()
+        for invalid in (0,23,True,1.5,"1"):
+            with self.subTest(invalid=invalid):
+                bad=copy.deepcopy(macro)
+                bad["nbp_observed_business_days"]=invalid
+                with self.assertRaisesRegex(MarketQualityBlocked,"MACRO_ORIGINAL"):
+                    integrate_market_quality(mf,nav,bad)
     def test_four_original_source_fingerprints_present(self):
         out=integrate_market_quality(*synthetic_three_sources())
         self.assertEqual(len(out["original_source_payload_fingerprints"]),4)

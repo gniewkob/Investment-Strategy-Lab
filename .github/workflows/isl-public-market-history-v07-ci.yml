@@ -10,6 +10,14 @@ on:
       - 'tests/test_mf_bond_turnover_metrics_v07.py'
       - 'scripts/public_first_market_quality_v07.py'
       - 'tests/test_public_first_market_quality_v07.py'
+      - 'scripts/public_first_market_research_v07.py'
+      - 'tests/test_public_first_market_research_v07.py'
+      - 'scripts/knf_one_class_nav_quality_v07.py'
+      - 'tests/test_knf_one_class_nav_quality_v07.py'
+      - 'scripts/mf_original_turnover_schema_v07.py'
+      - 'tests/test_mf_original_turnover_schema_v07.py'
+      - 'scripts/research_readiness_quality_v07.py'
+      - 'tests/test_research_readiness_quality_v07.py'
       - 'docs/ISL_PUBLIC_FIRST_MARKET_QUALITY_V07_20261113_PL.md'
       - '.github/workflows/isl-public-market-history-v07-ci.yml'
   workflow_dispatch:
@@ -50,9 +58,21 @@ jobs:
           from scripts.knf_mf_official_source_probe_v06 import MF_URL,fetch_exact
           from scripts.mf_bond_market_history_v07 import audit_mf_schema
           from scripts.mf_bond_turnover_metrics_v07 import analyze_mf_original
+          from scripts.mf_original_turnover_schema_v07 import inspect_market_sheet
           raw=fetch_exact(MF_URL) # exactly ONE source HTTPS read
           at=datetime.now(timezone.utc)
           schema=audit_mf_schema(raw,completed_at=at)
+          schema_quality=inspect_market_sheet(raw,observed_at=at)
+          if (schema_quality["sha256"]!=schema["original_raw_sha256"]
+                  or schema_quality["source_data_rows_in_report"]!=0
+                  or schema_quality["turnover_units_validated"] is not False):
+              raise SystemExit("MF_ORIGINAL_SCHEMA_RECONCILIATION_BLOCKED")
+          print("ISL_MF_ORIGINAL_SCHEMA="+json.dumps({
+              "sha256":schema_quality["sha256"],
+              "rows_in_first_sheet":schema_quality["rows_in_first_sheet"],
+              "workbook_worksheet_count":schema_quality["workbook_worksheet_count"],
+              "turnover_units_validated":False,
+          },sort_keys=True,separators=(",",":")))
           print("ISL_MF_ORIGINAL_SOURCE_LAYOUT="+json.dumps({
               "source_sha256":schema["original_raw_sha256"],
               "size_bytes":schema["size_bytes"],
