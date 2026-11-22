@@ -841,3 +841,20 @@ Wcześniej wykonane kroki są w opisach PR oraz [Issue #4](https://github.com/gn
 - Zawsze linkuj **konkretny GitHub run/PR/commit**; rozdzielaj „offline CI passed” od „rzeczywisty staging workflow przeszedł”. Test CI na disposable PostgreSQL **nie oznacza** uruchomienia SQL na Neon.
 - Jeśli aktualny HEAD jest nowszy niż snapshot, sprawdź zmiany i popraw dokument zamiast w ciemno wykonywać kroki.
 - Nie wrzucaj prywatnych źródeł lub sekretów do publicznej dokumentacji.
+
+## 11. Aneks 2026-11-23 — publiczne badania rynku, PR #159
+
+- Uruchomienie `scripts/public_first_one_shot_v08.py` jednorazowo czyta
+  oryginalne MF/UKNF i próbuje NBP/Eurostat. Jest wyłącznie read-only,
+  bez konta, bez Neon, bez realnych zleceń.
+- Wrześniowy NBP zwraca sporadycznie HTTP 404 również dla krótszych zakresów.
+  Nowa `scripts/nbp_reference_chunked_v09.py` łączy jedynie osobno
+  zweryfikowane pokwitowania oryginalnych odpowiedzi; zamrożony A2 adapter
+  `scripts/nbp_reference_capture.py` ma zachowany wymagany SHA Git blob.
+- Faktyczny fallback daje `PARTIAL`: 202 miesięcy MF, 22 dni UKNF,
+  13 miesięcy HICP, 59 miesięcy rentowności Eurostat PL 10Y, NBP niepełne.
+  Ostatnie poziomy są opisowe, nie stanowią szeregu total-return ani PIT.
+- Szczegóły, odciski oryginalnych źródeł i komenda odtworzenia:
+  [`ISL_PUBLIC_FIRST_ONE_SHOT_V08_20261123_PL.md`](ISL_PUBLIC_FIRST_ONE_SHOT_V08_20261123_PL.md).
+- PR #159 pozostaje Draft. GitHub Actions nie jest lokalnym dowodem regresji;
+  nie scalać z pominięciem wymaganych kontroli.

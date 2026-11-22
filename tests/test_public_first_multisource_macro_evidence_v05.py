@@ -49,6 +49,22 @@ def inputs():
 
 
 class MultiSourceMacroEvidenceTests(unittest.TestCase):
+    def test_observation_can_reconcile_three_original_nbp_subranges(self):
+        def nbp_fetch(url):
+            day = url.split("/")[-3]
+            if "/cenyzlota/" in url:
+                return json.dumps([{"data": day, "cena": 410}]).encode()
+            return json.dumps([{"table": "A", "no": "A/2026", "effectiveDate": day,
+                                "rates": [{"code": "USD", "mid": 4},
+                                          {"code": "EUR", "mid": 4.5}]}]).encode()
+        out = observe_once(
+            nbp_fetch=nbp_fetch, hicp_fetch=lambda _: data_fixture(),
+            yield_fetch=lambda: json.dumps(original_shape()).encode(),
+            clock=lambda: AT, nbp_chunk_days=10)
+        self.assertEqual(out["nbp_observed_business_days"], 3)
+        self.assertEqual(len(out["nbp_original_response_receipts"]["gold"]), 3)
+        self.assertEqual(out["m1_m2_m3"], "INSUFFICIENT_DATA_HOLD_CASH")
+
     def test_five_source_series_and_derived_backward_gap(self):
         n, h, y = inputs()
         out = evaluate_combined_sources(n, h, y, completed_at=AT)

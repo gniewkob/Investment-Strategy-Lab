@@ -14,6 +14,7 @@ import json
 from typing import Callable
 
 from scripts.nbp_reference_capture import capture
+from scripts.nbp_reference_chunked_v09 import capture_chunked
 from scripts.public_first_nbp_reference_research_v01 import official_fetch
 from scripts.eurostat_hicp_macro_context_v01 import (
     _fetch as official_hicp_fetch, _query as hicp_query, inspect_hicp,
@@ -210,20 +211,26 @@ def evaluate_combined_sources(nbp: object, hicp: object, yield_raw: bytes, *,
         "paper_events_created": 0,
         "orders_sent": 0,
     }
+    if "nbp_original_response_receipts" in joint:
+        report["nbp_original_response_receipts"] = joint["nbp_original_response_receipts"]
     report["receipt_sha256"] = sha256(_canonical(report)).hexdigest()
     return report
 
 
 def observe_once(*, nbp_fetch: Callable | None, hicp_fetch: Callable | None,
                  yield_fetch: Callable | None,
-                 clock: Callable = lambda: datetime.now(timezone.utc)) -> dict:
+                 clock: Callable = lambda: datetime.now(timezone.utc),
+                 nbp_chunk_days: int | None = None) -> dict:
     if nbp_fetch is None or hicp_fetch is None or yield_fetch is None:
         raise MultiSourceBlocked("EXPLICIT_PUBLIC_SOURCE_FETCH_REQUIRED")
     # Validate clock before opening any network connection.
     started = _utc(clock())
     if started.date().isoformat() < NBP_END:
         raise MultiSourceBlocked("FUTURE_SOURCE_WINDOW")
-    nbp = capture(NBP_START, NBP_END, fetch=nbp_fetch, clock=clock)
+    nbp = (capture(NBP_START, NBP_END, fetch=nbp_fetch, clock=clock)
+           if nbp_chunk_days is None else capture_chunked(
+               NBP_START, NBP_END, fetch=nbp_fetch, clock=clock,
+               chunk_days=nbp_chunk_days))
     hicp = inspect_hicp(
         hicp_fetch(hicp_query(HICP_SINCE, HICP_UNTIL)),
         since=HICP_SINCE, until=HICP_UNTIL,

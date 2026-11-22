@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 from datetime import datetime, timezone
+from decimal import Decimal, localcontext
 import json
 from pathlib import Path
 from typing import Callable
@@ -24,7 +25,12 @@ from scripts.mf_bond_turnover_metrics_v07 import analyze_mf_original
 from scripts.public_first_multisource_macro_evidence_v05 import (
     observe_once as observe_macro, official_fetch as official_nbp_fetch,
     official_hicp_fetch, official_yield_fetch,
+    HICP_SINCE, HICP_UNTIL, _sep2026_bond_yield,
 )
+from scripts.eurostat_hicp_macro_context_v01 import (
+    _query as hicp_query, inspect_hicp, HICPContextError,
+)
+from scripts.eurostat_pl_government_bond_yield_context_v04 import parse_original_yields
 from scripts.public_first_market_research_v07 import (
     compose_market_research, render_markdown,
 )
@@ -34,7 +40,7 @@ MAX_SOURCE_BYTES = 2_000_000
 MAX_READS = {
     "uknf": 4,
     "mf": 1,
-    "nbp": 2,
+    "nbp": 6,
     "eurostat_hicp": 1,
     "eurostat_yield": 1,
 }
@@ -80,11 +86,29 @@ def run_once(*, knf_fetch: Callable | None, mf_fetch: Callable | None,
             raise OneShotBlocked("SOURCE_CLOCK_MOVED_BACKWARDS")
         return current
 
-    def read(name: str, source: Callable, *args) -> bytes:
+    def read(name: str, source: Callable, *args) -> object:
         if attempts[name] >= MAX_READS[name]:
             raise OneShotBlocked("SOURCE_READ_LIMIT_EXCEEDED:" + name)
         attempts[name] += 1
-        raw = _bytes(source(*args))
+        try:
+            raw = source(*args)
+        except HICPContextError as exc:
+            # The official HICP adapter wraps transport failures, but its
+            # structural validation errors must continue to fail closed.
+            if name == "eurostat_hicp" and isinstance(exc.__cause__, OSError):
+                raise URLError("OFFICIAL_EUROSTAT_HICP_NETWORK_UNAVAILABLE") from exc
+            raise
+        if name == "eurostat_hicp":
+            # The established HICP official adapter already parses JSON-stat.
+            # Never misinterpret its typed response as original HTTP bytes.
+            try:
+                size = len(json.dumps(raw, allow_nan=False).encode("utf-8"))
+            except (TypeError, ValueError, RecursionError, OverflowError) as exc:
+                raise OneShotBlocked("HICP_JSONSTAT_INVALID") from exc
+            if type(raw) is not dict or not 0 < size <= MAX_SOURCE_BYTES:
+                raise OneShotBlocked("HICP_JSONSTAT_INVALID")
+        else:
+            raw = _bytes(raw)
         counts[name] += 1
         return raw
 
@@ -115,12 +139,14 @@ def run_once(*, knf_fetch: Callable | None, mf_fetch: Callable | None,
         raise OneShotBlocked("ORIGINAL_SOURCE_FINGERPRINT_MISMATCH")
 
     macro_unavailable = False
+    separate_eurostat = {}
     try:
         macro = observe_macro(
             nbp_fetch=lambda url: read("nbp", nbp_fetch, url),
             hicp_fetch=lambda url: read("eurostat_hicp", hicp_fetch, url),
             yield_fetch=lambda: read("eurostat_yield", yield_fetch),
             clock=stamp,
+            nbp_chunk_days=10,
         )
     except (HTTPError, URLError):
         if not allow_macro_unavailable:
@@ -129,8 +155,32 @@ def run_once(*, knf_fetch: Callable | None, mf_fetch: Callable | None,
         # observation or a reason to synthesize NBP/Eurostat levels.
         macro = None
         macro_unavailable = True
+        # Independent Eurostat originals remain worth validating after an
+        # NBP HTTP failure. Never retry a request that was already attempted.
+        if attempts["eurostat_hicp"] == 0:
+            try:
+                hicp = inspect_hicp(
+                    read("eurostat_hicp", hicp_fetch,
+                         hicp_query(HICP_SINCE, HICP_UNTIL)),
+                    since=HICP_SINCE, until=HICP_UNTIL,
+                    retrieval_scope="EUROSTAT_PUBLIC_READ_ONLY")
+                if (hicp["status"] != "AVAILABLE_CONTEXT_NOT_HISTORICAL_PIT"
+                        or hicp["observed_month_count"] != 13):
+                    raise OneShotBlocked("INCOMPLETE_EUROSTAT_HICP")
+                separate_eurostat["hicp"] = hicp
+            except (HTTPError, URLError):
+                pass
+        if attempts["eurostat_yield"] == 0:
+            try:
+                yield_raw = read("eurostat_yield", yield_fetch)
+                yields = parse_original_yields(yield_raw, observed_at=stamp())
+                if yields["observed_months"] != 59:
+                    raise OneShotBlocked("INCOMPLETE_EUROSTAT_YIELD")
+                separate_eurostat["yield"] = (yields, yield_raw)
+            except (HTTPError, URLError):
+                pass
     if not macro_unavailable and (
-            counts["mf"] != 1 or counts["nbp"] != 2
+            counts["mf"] != 1 or counts["nbp"] != 6
             or counts["eurostat_hicp"] != 1 or counts["eurostat_yield"] != 1):
         raise OneShotBlocked("PUBLIC_SOURCE_SET_INCOMPLETE")
     completed = stamp()
@@ -162,6 +212,29 @@ def run_once(*, knf_fetch: Callable | None, mf_fetch: Callable | None,
             "uknf_level_change_not_total_return_pct": nav_quality.get(
                 "first_to_last_nav_level_change_pct_not_total_return"),
         }
+        if "hicp" in separate_eurostat:
+            hicp = separate_eurostat["hicp"]
+            standalone.update(
+                eurostat_hicp_months=hicp["observed_month_count"],
+                eurostat_hicp_canonical_sha256=hicp["source_payload_canonical_sha256"])
+        if "yield" in separate_eurostat:
+            yields, _ = separate_eurostat["yield"]
+            standalone.update(
+                eurostat_yield_months=yields["observed_months"],
+                eurostat_yield_original_sha256=yields["original_response_sha256"])
+        if len(separate_eurostat) == 2:
+            hicp = separate_eurostat["hicp"]
+            _, yield_raw = separate_eurostat["yield"]
+            with localcontext() as context:
+                context.prec = 40
+                observations = hicp["observations"]
+                inflation = (Decimal(observations[-1]["index_2025_100"]) /
+                             Decimal(observations[0]["index_2025_100"]) - 1) * 100
+                nominal = _sep2026_bond_yield(yield_raw)
+                standalone.update(
+                    eurostat_pl_nominal_10y_yield_pct=str(nominal),
+                    eurostat_trailing_12m_hicp_pct=f"{inflation:.4f}",
+                    eurostat_level_gap_pp_not_real_yield=f"{nominal-inflation:.4f}")
     return {
         "schema": SCHEMA,
         "status": ("PARTIAL_MACRO_HTTP_UNAVAILABLE" if macro_unavailable else
@@ -171,8 +244,9 @@ def run_once(*, knf_fetch: Callable | None, mf_fetch: Callable | None,
         "source_read_counts": counts,
         "source_read_attempts": attempts,
         "total_public_reads": sum(counts.values()),
-        "macro_source_status": ("HTTP_UNAVAILABLE_NO_VALUES_FABRICATED" if
-                                macro_unavailable else "VALIDATED"),
+        "macro_source_status": (
+            "HTTP_UNAVAILABLE_NO_VALUES_FABRICATED" if macro_unavailable
+            else "VALIDATED"),
         "independent_descriptive_context": standalone,
         "original_market_bytes_saved": 0,
         "historical_pit_certified": False,
@@ -217,13 +291,23 @@ def main(argv: list[str] | None = None, *, runner: Callable = run_once) -> int:
         if result["independent_descriptive_context"] is not None:
             separate = result["independent_descriptive_context"]
             handle.write("\n## Częściowy odczyt źródeł — bez agregacji\n\n")
-            handle.write("- NBP/Eurostat: niedostępne przez HTTP; brak danych, "
-                         "nie uzupełniono ich szacunkami.\n")
+            handle.write("- Pełny zestaw NBP/Eurostat: niedostępny przez HTTP; "
+                         "nie uzupełniono braków szacunkami.\n")
             handle.write(f"- MF: {separate['mf_months']} miesięcy, "
                          f"ostatni obrót {separate['mf_latest_total_mln_pln']} mln PLN "
                          "(to nie stopa zwrotu).\n")
             handle.write(f"- UKNF: {separate['uknf_same_class_nav_days']} dni NAV "
                          "(nie całkowity zwrot inwestora).\n")
+            if "eurostat_hicp_months" in separate:
+                handle.write(f"- Eurostat HICP: {separate['eurostat_hicp_months']} "
+                             "zweryfikowanych miesięcy indeksu cen.\n")
+            if "eurostat_yield_months" in separate:
+                handle.write(f"- Eurostat PL 10Y: {separate['eurostat_yield_months']} "
+                             "zweryfikowanych miesięcy nominalnej rentowności.\n")
+            if "eurostat_level_gap_pp_not_real_yield" in separate:
+                handle.write("- Nominalna rentowność minus roczna zmiana HICP: "
+                             f"{separate['eurostat_level_gap_pp_not_real_yield']} p.p. "
+                             "(tylko różnica poziomów, nie realny zwrot).\n")
     with (target / "public_source_run_v08.json").open("x", encoding="utf-8") as handle:
         json.dump(receipt, handle, ensure_ascii=False, sort_keys=True, indent=2)
         handle.write("\n")

@@ -92,6 +92,39 @@ def _sha(value: object) -> str:
     return value
 
 
+def _nbp_chunk_manifest(kind: str, fragments: object, start: date,
+                        end: date, finished: datetime) -> tuple[str, str, dict]:
+    """Validate actual NBP subrange URLs, hashes, times and exact interval tiling."""
+    if not isinstance(fragments, list) or not 1 <= len(fragments) <= 93:
+        raise SourceObservationBlocked("NBP_CHUNK_MANIFEST_INVALID")
+    prefix = ("exchangerates/tables/a" if kind == "fx" else "cenyzlota")
+    pattern = re.compile(
+        rf"https://api\.nbp\.pl/api/{prefix}/(20\d{{2}}-\d{{2}}-\d{{2}})/"
+        r"(20\d{2}-\d{2}-\d{2})/\?format=json")
+    expected_day = start
+    lookups = {}
+    times = []
+    for part in fragments:
+        if not isinstance(part, dict) or set(part) != {"url", "sha256", "retrieved_at"}:
+            raise SourceObservationBlocked("NBP_CHUNK_MANIFEST_INVALID")
+        match = pattern.fullmatch(part["url"]) if isinstance(part["url"], str) else None
+        if match is None:
+            raise SourceObservationBlocked("NBP_SOURCE_URL_MISMATCH")
+        first, last = _bounded_day(match[1]), _bounded_day(match[2])
+        if first != expected_day or last < first or last > end or (last - first).days > 30:
+            raise SourceObservationBlocked("NBP_CHUNK_WINDOW_NOT_CONTIGUOUS")
+        digest = _sha(part["sha256"])
+        seen_at = _read_utc(part["retrieved_at"])
+        if not timedelta(0) <= finished - seen_at <= MAX_ELAPSED:
+            raise SourceObservationBlocked("SOURCE_CAPTURE_CLOCK_INVALID")
+        lookups[part["url"]] = (digest, seen_at.isoformat(), first, last)
+        times.append(seen_at)
+        expected_day = last + timedelta(days=1)
+    if expected_day != end + timedelta(days=1):
+        raise SourceObservationBlocked("NBP_CHUNK_WINDOW_NOT_CONTIGUOUS")
+    return sha256(_json(fragments)).hexdigest(), max(times).isoformat(), lookups
+
+
 def assemble_receipt(nbp: object, hicp: object, *, nbp_start: str,
                      nbp_end: str, hicp_since: str, hicp_until: str,
                      completed_at: datetime) -> dict:
@@ -123,8 +156,18 @@ def assemble_receipt(nbp: object, hicp: object, *, nbp_start: str,
 
     source_hashes = {}
     capture_times = {}
+    original_fragments = {}
+    lookup_by_kind = {}
     for kind in ("fx", "gold"):
         part = receipts[kind]
+        if isinstance(part, dict) and set(part) == {"chunks"}:
+            chunks = part["chunks"]
+            digest, latest, lookups = _nbp_chunk_manifest(kind, chunks, start, end, finished)
+            source_hashes["nbp_" + kind] = digest
+            capture_times["nbp_" + kind] = latest
+            original_fragments[kind] = chunks
+            lookup_by_kind[kind] = lookups
+            continue
         path = ("exchangerates/tables/a" if kind == "fx" else "cenyzlota")
         expected_url = f"https://api.nbp.pl/api/{path}/{nbp_start}/{nbp_end}/?format=json"
         if not isinstance(part, dict) or part.get("url") != expected_url:
@@ -142,11 +185,21 @@ def assemble_receipt(nbp: object, hicp: object, *, nbp_start: str,
                or row.get("currency") != "PLN"
                or row.get("historical_vintage_verified") is not False
                or row.get("available_at") is not None
-               or row.get("source_sha256") != source_hashes[
-                   "nbp_gold" if code == "gold" else "nbp_fx"]
+               or (("gold" if code == "gold" else "fx") not in original_fragments
+                   and row.get("source_sha256") != source_hashes[
+                   "nbp_gold" if code == "gold" else "nbp_fx"])
                or not nbp_start <= row.get("publication_date", "") <= nbp_end
                for row in rows):
             raise SourceObservationBlocked("NBP_REFERENCE_SEMANTICS_INVALID")
+        receipt_kind = "gold" if code == "gold" else "fx"
+        if receipt_kind in original_fragments:
+            lookups = lookup_by_kind[receipt_kind]
+            for row in rows:
+                item = lookups.get(row.get("source_url"))
+                if (item is None or row.get("source_sha256") != item[0]
+                        or row.get("retrieved_at") != item[1]
+                        or not item[2].isoformat() <= row["publication_date"] <= item[3].isoformat()):
+                    raise SourceObservationBlocked("NBP_REFERENCE_SEMANTICS_INVALID")
 
     if (not isinstance(hicp, dict)
             or hicp.get("schema") != "ISL_EUROSTAT_HICP_PL_MACRO_CONTEXT_V01"
@@ -202,6 +255,8 @@ def assemble_receipt(nbp: object, hicp: object, *, nbp_start: str,
         "orders_sent": 0,
         "financial_operations": 0,
     }
+    if original_fragments:
+        rec["nbp_original_response_receipts"] = original_fragments
     rec["receipt_sha256"] = sha256(_json(rec)).hexdigest()
     return rec
 
@@ -221,7 +276,9 @@ def verify_receipt(receipt: object) -> dict:
         "paper_events_created", "database_writes", "orders_sent",
         "financial_operations", "receipt_sha256",
     }
-    if (set(receipt) != expected or receipt.get("schema") != SCHEMA
+    allowed_keys = expected | ({"nbp_original_response_receipts"}
+                               if "nbp_original_response_receipts" in receipt else set())
+    if (set(receipt) != allowed_keys or receipt.get("schema") != SCHEMA
             or receipt.get("source_mode") != "PUBLIC_OFFICIAL_READ_ONLY_CAPTURE"
             or receipt.get("source_semantics") != SOURCE_TYPES
             or receipt.get("historical_first_publication_timestamp_verified") is not False
@@ -261,6 +318,16 @@ def verify_receipt(receipt: object) -> dict:
         seen_at = _read_utc(times[key])
         if not timedelta(0) <= finished - seen_at <= MAX_ELAPSED:
             raise SourceObservationBlocked("RECEIPT_CAPTURE_CLOCK_INVALID")
+    if "nbp_original_response_receipts" in receipt:
+        chunks = receipt["nbp_original_response_receipts"]
+        if not isinstance(chunks, dict) or set(chunks) != {"fx", "gold"}:
+            raise SourceObservationBlocked("NBP_CHUNK_MANIFEST_INVALID")
+        for kind in ("fx", "gold"):
+            digest, latest, _ = _nbp_chunk_manifest(
+                kind, chunks[kind], _bounded_day(nbp["start"]),
+                _bounded_day(nbp["end"]), finished)
+            if fingerprints["nbp_" + kind] != digest or times["nbp_" + kind] != latest:
+                raise SourceObservationBlocked("RECEIPT_INTEGRITY_OR_SAFETY_INVALID")
     return receipt
 
 
