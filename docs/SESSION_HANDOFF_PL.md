@@ -1,3 +1,27 @@
+## 2026-11-23 — public-first v0.8: jednorazowy przebieg oryginalnych źródeł (DEV)
+
+W ramach kontynuacji Draft PR #159 przygotowano `scripts/public_first_one_shot_v08.py`:
+na jedno jawne wywołanie pobiera w pamięci oryginalne pliki/odpowiedzi UKNF,
+MF, NBP i Eurostat, stosuje już istniejące walidatory v0.5–v0.7 i tworzy lokalny
+JSON+Markdown oraz receipt z licznikami i SHA raportu. Domyślny błąd dowolnego
+źródła przerywa przebieg bez utworzenia katalogu. Jawna opcja
+`--allow-macro-unavailable` umożliwia tylko **PARTIAL** z osobnymi, zweryfikowanymi
+wartościami MF/UKNF po HTTP/network failure NBP/Eurostat, bez ich przekrojowego
+łączenia, dopowiadania braków ani uznania ich za total-return.
+
+**Prawdziwy lokalny przebieg 23.11.2026:** UKNF 3 publiczne GET i 22 dni
+NAV jednej klasy; MF 1 GET oraz oryginalne 202 miesiące XII2009–IX2026,
+ostatni obrót 3 140 385,25 mln PLN. Archiwalny endpoint NBP za wrzesień 2026
+odpowiedział HTTP 404; nie wykonano Eurostat, wynik jawnie **PARTIAL**, nie
+pełna weryfikacja źródeł. Raport `SCHEMA_ONLY` + osobny kontekst MF/UKNF,
+**0** transakcji, zleceń, DB writes, kont, harmonogramów czy eksportu raw XLSX.
+Dokumentacja, polecenie i granice: [ISL_PUBLIC_FIRST_ONE_SHOT_V08_20261123_PL.md](ISL_PUBLIC_FIRST_ONE_SHOT_V08_20261123_PL.md).
+
+Lokalna pełna regresja dla zmiany musi zostać uruchomiona na **czystym commicie**:
+istniejący test atestacji odrzuca dirty worktree. Nie mylić realnego częściowego
+odczytu z PASS wszystkich czterech rodzin źródeł; CI GitHub Actions nie jest
+dowodem testów, jeżeli zadania nie wystartowały z powodu billing lock.
+
 ## 2026-10-24 — ntfy wdrożone do obu watchdogów; odbiór na iOS oczekuje potwierdzenia
 
 Po jawnej zgodzie użytkownika [PR #82](https://github.com/gniewkob/Investment-Strategy-Lab/pull/82)
