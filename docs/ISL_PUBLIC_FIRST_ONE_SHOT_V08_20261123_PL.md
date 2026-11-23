@@ -35,6 +35,13 @@ jej z brakującym NBP i nie udaje zwrotu inwestora. Błąd struktury, sum,
 identyfikatorów, jednostek lub SHA nadal blokuje raport; brakujące wartości
 nie są szacowane. Niezależne Eurostat nie stanowią `PASS` pełnego zestawu.
 
+Jeśli API NBP zawiedzie, runner próbuje ponadto **jeden oficjalny CSV z
+archiwum tabeli A za rok 2026**. Parser waliduje strukturę, daty, numery
+tabel i kursy USD/EUR dla września. To niezależna obserwacja kursów walut,
+nie zastępcza seria ceny złota; bez złota zestaw nadal ma status `PARTIAL`.
+Oryginalne roczne bajty CSV nie są zapisywane do raportu, natomiast SHA
+oryginału, URL, liczba dni i ostatnie kursy są raportowane jawnie.
+
 ## Kontrakt i ograniczenia
 
 | Źródło | Pobrania maksymalne | Interpretacja |
@@ -42,9 +49,11 @@ nie są szacowane. Niezależne Eurostat nie stanowią `PASS` pełnego zestawu.
 | UKNF | 4 | dzienna historia jednej kategorii jednostek PLN, nie total-return |
 | MF | 1 | oryginalny XLSX z miesięcznymi obrotami, nie cena obligacji |
 | NBP | 6 | trzy autentyczne odpowiedzi każdej rodziny, zakresy 1–10, 11–20, 21–30 września; złoto i średnie USD/EUR w PLN |
+| NBP static (opcjonalny fallback) | 1 | jeden oryginalny roczny CSV tabeli A; tylko średnie USD/EUR |
 | Eurostat | 2 | HICP i nominalna rentowność PL 10Y, nie zwrot z obligacji |
 
-Łącznie **12–13 dozwolonych pobrań**, bez automatycznego ponawiania, bez
+Łącznie **do 14 dozwolonych pobrań** (w trybie pełnym 12–13), bez
+automatycznego ponawiania, bez
 harmonogramu, bez płatnych API. Wykorzystane są wyłącznie istniejące
 walidatory, limity i allowlisty źródeł z v0.5–v0.7. Stały zakres raportu:
 **wrzesień 2026** (historia MF do 2026-09), z dłuższymi archiwami
@@ -98,6 +107,12 @@ walidatory oryginalnych odpowiedzi:
   `acc302b641ca981b5c8e22259a613d092e5c12d0cb01e39e7e093c07c59c3abf`.
 - Opisowa różnica nominalnej rentowności i rocznej zmiany HICP: `2.2408` p.p.,
   **nie** realny zwrot obligacji.
+- NBP oficjalne [roczne archiwum tabeli A (CSV)](https://nbp.pl/statystyka-i-sprawozdawczosc/kursy/archiwum-tabela-a-csv-xls/):
+  22 wrześniowe dni kursów, na 2026-09-30 średnie USD/PLN `3.8449` i
+  EUR/PLN `4.3672`; SHA oryginalnego rocznego CSV
+  `01181925e70dff77e2ca995e288b2558f741a846ae7eb13b1e5b0011787b004c`.
+  Archiwum NBP jest niezależną drogą odczytu kursów, ale **nie zawiera serii
+  złota** i nie kwalifikuje pełnego raportu.
 
 Brak dowodu pierwszej historycznej publikacji; nie przekształcać tych
 poziomów w inwestowalne PLN total-return, nie wykonywać zleceń.

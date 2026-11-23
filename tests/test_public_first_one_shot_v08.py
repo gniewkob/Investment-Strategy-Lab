@@ -14,6 +14,7 @@ from scripts.eurostat_hicp_macro_context_v01 import HICPContextError
 from tests.test_public_first_market_research_v07 import three_source_receipts
 from tests.test_public_first_multisource_macro_evidence_v05 import data_fixture
 from tests.test_eurostat_pl_government_bond_yield_context_v04 import original_shape
+from tests.test_nbp_table_a_archive_v09 import csv_sample
 
 from scripts.public_first_one_shot_v08 import OneShotBlocked, run_once, main
 
@@ -83,6 +84,18 @@ def fake_sources(*, fail=None):
 
 
 class PublicFirstOneShotTests(unittest.TestCase):
+    def test_nbp_api_404_can_preserve_verified_official_annual_fx_archive(self):
+        kwargs, patches, _ = fake_sources(fail="macro")
+        kwargs["nbp_archive_fetch"] = lambda url: csv_sample()
+        with patches[0], patches[1], patches[2], patches[3], patches[4]:
+            out = run_once(**kwargs, allow_macro_unavailable=True)
+        self.assertEqual(out["source_read_counts"]["nbp_archive_fx"], 1)
+        archive = out["independent_descriptive_context"]
+        self.assertEqual(archive["nbp_fx_archive_september_days"], 2)
+        self.assertEqual(archive["nbp_fx_archive_latest_usdpln_mid"], "3.7423")
+        self.assertEqual(archive["nbp_fx_archive_latest_eurpln_mid"], "4.3311")
+        self.assertEqual(out["report"]["mode"], "SCHEMA_ONLY")
+
     def test_eurostat_network_error_after_nbp_failure_does_not_erase_mf(self):
         kwargs, patches, _ = fake_sources(fail="macro")
         def connection_error(_url):
@@ -140,7 +153,8 @@ class PublicFirstOneShotTests(unittest.TestCase):
         self.assertEqual(result["report"]["mode"], "DESCRIPTIVE_MARKET_CONTEXT")
         self.assertEqual(result["report"]["m1_m2_m3"], "INSUFFICIENT_DATA_HOLD_CASH")
         self.assertEqual(result["source_read_counts"], {
-            "uknf": 3, "mf": 1, "nbp": 6, "eurostat_hicp": 1,
+            "uknf": 3, "mf": 1, "nbp": 6, "nbp_archive_fx": 0,
+            "eurostat_hicp": 1,
             "eurostat_yield": 1,
         })
         self.assertEqual(len(calls), 12)

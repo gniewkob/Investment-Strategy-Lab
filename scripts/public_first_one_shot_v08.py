@@ -31,6 +31,10 @@ from scripts.eurostat_hicp_macro_context_v01 import (
     _query as hicp_query, inspect_hicp, HICPContextError,
 )
 from scripts.eurostat_pl_government_bond_yield_context_v04 import parse_original_yields
+from scripts.nbp_table_a_archive_v09 import (
+    ARCHIVE_URL as NBP_FX_ARCHIVE_URL, inspect_archive as inspect_nbp_fx_archive,
+    fetch_official as official_nbp_fx_archive_fetch,
+)
 from scripts.public_first_market_research_v07 import (
     compose_market_research, render_markdown,
 )
@@ -41,6 +45,7 @@ MAX_READS = {
     "uknf": 4,
     "mf": 1,
     "nbp": 6,
+    "nbp_archive_fx": 1,
     "eurostat_hicp": 1,
     "eurostat_yield": 1,
 }
@@ -67,7 +72,8 @@ def run_once(*, knf_fetch: Callable | None, mf_fetch: Callable | None,
              nbp_fetch: Callable | None, hicp_fetch: Callable | None,
              yield_fetch: Callable | None,
              clock: Callable = lambda: datetime.now(timezone.utc),
-             allow_macro_unavailable: bool = False) -> dict:
+             allow_macro_unavailable: bool = False,
+             nbp_archive_fetch: Callable | None = None) -> dict:
     """Gather all originals and build a report only if every source validates.
 
     All network behavior is injected. Callers must explicitly opt in at CLI;
@@ -140,6 +146,7 @@ def run_once(*, knf_fetch: Callable | None, mf_fetch: Callable | None,
 
     macro_unavailable = False
     separate_eurostat = {}
+    independent_nbp_fx_archive = None
     try:
         macro = observe_macro(
             nbp_fetch=lambda url: read("nbp", nbp_fetch, url),
@@ -155,6 +162,13 @@ def run_once(*, knf_fetch: Callable | None, mf_fetch: Callable | None,
         # observation or a reason to synthesize NBP/Eurostat levels.
         macro = None
         macro_unavailable = True
+        if nbp_archive_fetch is not None:
+            try:
+                independent_nbp_fx_archive = inspect_nbp_fx_archive(
+                    read("nbp_archive_fx", nbp_archive_fetch,
+                         NBP_FX_ARCHIVE_URL), observed_at=stamp())
+            except (HTTPError, URLError):
+                pass
         # Independent Eurostat originals remain worth validating after an
         # NBP HTTP failure. Never retry a request that was already attempted.
         if attempts["eurostat_hicp"] == 0:
@@ -212,6 +226,14 @@ def run_once(*, knf_fetch: Callable | None, mf_fetch: Callable | None,
             "uknf_level_change_not_total_return_pct": nav_quality.get(
                 "first_to_last_nav_level_change_pct_not_total_return"),
         }
+        if independent_nbp_fx_archive is not None:
+            ref = independent_nbp_fx_archive
+            standalone.update(
+                nbp_fx_archive_url=ref["source_url"],
+                nbp_fx_archive_original_sha256=ref["original_csv_sha256"],
+                nbp_fx_archive_september_days=ref["september_2026_days"],
+                nbp_fx_archive_latest_usdpln_mid=ref["latest_usdpln_mid"],
+                nbp_fx_archive_latest_eurpln_mid=ref["latest_eurpln_mid"])
         if "hicp" in separate_eurostat:
             hicp = separate_eurostat["hicp"]
             standalone.update(
@@ -277,6 +299,7 @@ def main(argv: list[str] | None = None, *, runner: Callable = run_once) -> int:
         knf_fetch=official_source_fetch, mf_fetch=fetch_exact,
         nbp_fetch=official_nbp_fetch, hicp_fetch=official_hicp_fetch,
         yield_fetch=official_yield_fetch,
+        nbp_archive_fetch=official_nbp_fx_archive_fetch,
         allow_macro_unavailable=args.allow_macro_unavailable,
     )
     report = result["report"]
@@ -298,6 +321,11 @@ def main(argv: list[str] | None = None, *, runner: Callable = run_once) -> int:
                          "(to nie stopa zwrotu).\n")
             handle.write(f"- UKNF: {separate['uknf_same_class_nav_days']} dni NAV "
                          "(nie całkowity zwrot inwestora).\n")
+            if "nbp_fx_archive_september_days" in separate:
+                handle.write(
+                    f"- NBP archiwum A: {separate['nbp_fx_archive_september_days']} "
+                    "dni kursów USD/EUR, tylko ceny referencyjne; "
+                    "seria NBP złota nadal niekompletna.\n")
             if "eurostat_hicp_months" in separate:
                 handle.write(f"- Eurostat HICP: {separate['eurostat_hicp_months']} "
                              "zweryfikowanych miesięcy indeksu cen.\n")

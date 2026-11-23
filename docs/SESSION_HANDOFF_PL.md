@@ -851,6 +851,9 @@ Wcześniej wykonane kroki są w opisach PR oraz [Issue #4](https://github.com/gn
   Nowa `scripts/nbp_reference_chunked_v09.py` łączy jedynie osobno
   zweryfikowane pokwitowania oryginalnych odpowiedzi; zamrożony A2 adapter
   `scripts/nbp_reference_capture.py` ma zachowany wymagany SHA Git blob.
+- Alternatywny `scripts/nbp_table_a_archive_v09.py` odczytuje bezpośrednio
+  oficjalny roczny CSV NBP (22 dni USD/EUR z września 2026) i pozostaje
+  odrębny od niedostępnej serii złota; 1 GET, oryginalny SHA/URL, bez DB.
 - Faktyczny fallback daje `PARTIAL`: 202 miesięcy MF, 22 dni UKNF,
   13 miesięcy HICP, 59 miesięcy rentowności Eurostat PL 10Y, NBP niepełne.
   Ostatnie poziomy są opisowe, nie stanowią szeregu total-return ani PIT.
