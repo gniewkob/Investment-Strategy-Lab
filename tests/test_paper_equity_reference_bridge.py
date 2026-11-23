@@ -45,6 +45,12 @@ class EquityBridgeTests(unittest.TestCase):
             with self.subTest(mutate=mutate), self.assertRaises(MultiAssetBlocked):
                 compare_with_equity_marks(self.manifest, marks)
 
+    def test_rejects_fx_after_equity_date(self):
+        marks = copy.deepcopy(self.marks)
+        marks[0]["fx_date"] = "2021-01-26"
+        with self.assertRaisesRegex(MultiAssetBlocked, "EQUITY_FX_DATE_MISMATCH"):
+            compare_with_equity_marks(self.manifest, marks)
+
     def test_rejects_invalid_values_and_wrong_source_class(self):
         for value in ("0", "NaN", "-1", 1.0, True):
             marks = copy.deepcopy(self.marks)
