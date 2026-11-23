@@ -1,3 +1,16 @@
+## 2026-11-23 — v0.11: 48-miesięczny benchmark POLSTR CI kontra HICP PL (DEV)
+
+Dodano `scripts/polstr_hicp_purchasing_power_v11.py`, 8 syntetycznych
+testów i [opis źródłowy v0.11](ISL_POLSTR_CI_HICP_PURCHASING_POWER_V11_20261123_PL.md).
+Nowy jednorazowy odczyt czterech oryginalnych PDF GPW Benchmark i Eurostat
+`prc_hicp_minr` potwierdził pełne 48/48 miesięcy 2022–2025. Fikcyjne 48 ×
+100 PLN = 4 800 PLN; terminalny odpowiednik POLSTR CI 5 345,55 PLN;
+odniesienie wpłat skorygowanych do ostatniego miesiąca HICP 5 188,39 PLN;
+różnica +157,16 PLN (nie zrealizowany zysk, bez kosztów i podatków).
+HICP I 2022–XII 2025 +28,47% w obecnie przeliczonym szeregu, a 40 miesięcy
+POLSTR CI są preprodukcyjne. Ani dane bieżące, ani SHA nie certyfikują PIT.
+Zero operacji finansowych, DB, promocji M1–M3 i surowych szeregów w GitHub.
+
 ## 2026-11-23 — public-first v0.8: jednorazowy przebieg oryginalnych źródeł (DEV)
 
 **Nowy niezależny moduł v0.10 — gotówkowy benchmark GPW POLSTR CI:**
