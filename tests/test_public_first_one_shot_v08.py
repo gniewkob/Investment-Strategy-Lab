@@ -22,9 +22,19 @@ from scripts.public_first_one_shot_v08 import OneShotBlocked, run_once, main
 NOW = datetime(2026, 11, 14, tzinfo=timezone.utc)
 
 
-def fake_sources(*, fail=None):
+def fake_sources(*, fail=None, with_nav_metrics=False):
     """Offline adapters for the already-tested v0.7 cross-receipt contract."""
     fixtures = three_source_receipts()
+    if with_nav_metrics:
+        fixtures["nav_quality"].update({
+            "observed_first_day": "2026-09-01",
+            "observed_last_day": "2026-09-30",
+            "observed_adjacent_nav_level_changes": 21,
+            "mean_adjacent_observed_nav_level_change_pct": "-0.0234",
+            "population_stddev_adjacent_observed_nav_level_change_pct_not_annualized":
+                "0.1742",
+            "unobserved_weekday_calendar_dates_not_verified_market_holidays": 0,
+        })
     calls = []
 
     def knf_fetch(url):
@@ -84,6 +94,49 @@ def fake_sources(*, fail=None):
 
 
 class PublicFirstOneShotTests(unittest.TestCase):
+    def test_partial_includes_descriptive_mf_trend_and_nav_dispersion(self):
+        kwargs, patches, _ = fake_sources(fail="macro", with_nav_metrics=True)
+        with patches[0], patches[1], patches[2], patches[3], patches[4]:
+            out = run_once(**kwargs, allow_macro_unavailable=True)
+        separate = out["independent_descriptive_context"]
+        self.assertEqual(separate["mf_latest_month"], "2026-09")
+        self.assertEqual(separate["mf_latest_mom_change_pct"], "16.7998")
+        self.assertEqual(separate["mf_latest_yoy_change_pct"], "69.7047")
+        self.assertEqual(separate["mf_latest_month_channel_shares_pct"], {
+            "interbank": "88.6098", "bondspot": "11.3703", "gpw": "0.0199",
+        })
+        self.assertEqual(separate["mf_trailing12m_channel_shares_pct"]["bondspot"],
+                         "13.3355")
+        self.assertEqual(separate["uknf_observed_adjacent_nav_changes"], 21)
+        self.assertEqual(separate["uknf_mean_adjacent_nav_level_change_pct"],
+                         "-0.0234")
+        self.assertEqual(separate["uknf_population_stddev_adjacent_nav_change_pct_not_annualized"],
+                         "0.1742")
+        self.assertEqual(separate["uknf_unobserved_weekdays_not_holidays"], 0)
+        self.assertEqual(out["report"]["mode"], "SCHEMA_ONLY")
+        self.assertEqual(out["report"]["asset_total_return_qualified"], [])
+
+    def test_partial_markdown_presents_independent_metrics_without_return_claims(self):
+        kwargs, patches, _ = fake_sources(fail="macro", with_nav_metrics=True)
+        kwargs["nbp_archive_fetch"] = lambda url: csv_sample()
+        with tempfile.TemporaryDirectory() as folder:
+            out = Path(folder) / "partial"
+            with patches[0], patches[1], patches[2], patches[3], patches[4]:
+                self.assertEqual(main(["--allow-public-official-read",
+                                       "--allow-macro-unavailable", "--out-dir", str(out)],
+                                      runner=lambda **_: run_once(
+                                          **kwargs, allow_macro_unavailable=True)), 0)
+            md = (out / "market_research_v07.md").read_text()
+            self.assertIn("wrzesień 2026", md)
+            self.assertIn("16.7998%", md)
+            self.assertIn("88.6098%", md)
+            self.assertIn("13.3355%", md)
+            self.assertIn("0.1742%", md)
+            self.assertIn("3.7423", md)
+            self.assertIn("-0.2200 p.p.", md)
+            self.assertIn("nie jest stopą zwrotu", md)
+            self.assertIn("M1/M2/M3", md)
+
     def test_nbp_api_404_can_preserve_verified_official_annual_fx_archive(self):
         kwargs, patches, _ = fake_sources(fail="macro")
         kwargs["nbp_archive_fetch"] = lambda url: csv_sample()
@@ -268,7 +321,8 @@ class PublicFirstOneShotTests(unittest.TestCase):
             receipt = json.loads((out / "public_source_run_v08.json").read_text())
             self.assertIn("Częściowy odczyt źródeł", md)
             self.assertIn("nie uzupełniono braków szacunkami", md)
-            self.assertIn("Eurostat HICP: 13", md)
+            self.assertIn("| Eurostat HICP | 13", md)
+            self.assertNotIn("None%", md)
             self.assertEqual(receipt["status"], "PARTIAL_MACRO_HTTP_UNAVAILABLE")
             self.assertEqual(receipt["macro_source_status"],
                              "HTTP_UNAVAILABLE_NO_VALUES_FABRICATED")

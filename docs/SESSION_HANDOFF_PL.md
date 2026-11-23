@@ -1,5 +1,14 @@
 ## 2026-11-23 — public-first v0.8: jednorazowy przebieg oryginalnych źródeł (DEV)
 
+**Rozszerzenie raportu częściowego, ten sam Draft PR #159:**
+`public_first_one_shot_v08.py` pokazuje teraz w lokalnym Markdown i JSON
+niezależne metryki już walidowanych źródeł: zmiany obrotu MF m/m i r/r,
+udział trzech kanałów w miesiącu i 12m oraz (gdy dostępne) nieannualizowaną
+zmienność zmian poziomu NAV UKNF. Nadal nie kwalifikuje tych danych jako
+stopy zwrotu, nie łączy brakującego NBP złota z innymi seriami i zachowuje
+`SCHEMA_ONLY` oraz `INSUFFICIENT_DATA_HOLD_CASH`. Szczegóły kontraktu:
+[ISL_PUBLIC_FIRST_ONE_SHOT_V08_20261123_PL.md](ISL_PUBLIC_FIRST_ONE_SHOT_V08_20261123_PL.md).
+
 W ramach kontynuacji Draft PR #159 przygotowano `scripts/public_first_one_shot_v08.py`:
 na jedno jawne wywołanie pobiera w pamięci oryginalne pliki/odpowiedzi UKNF,
 MF, NBP i Eurostat, stosuje już istniejące walidatory v0.5–v0.7 i tworzy lokalny

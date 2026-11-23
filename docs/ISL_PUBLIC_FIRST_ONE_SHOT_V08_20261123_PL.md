@@ -42,6 +42,29 @@ nie zastępcza seria ceny złota; bez złota zestaw nadal ma status `PARTIAL`.
 Oryginalne roczne bajty CSV nie są zapisywane do raportu, natomiast SHA
 oryginału, URL, liczba dni i ostatnie kursy są raportowane jawnie.
 
+### Użyteczny przegląd także przy częściowym odczycie
+
+Raport `market_research_v07.md` dołącza w trybie `PARTIAL` tabelę
+**niezależnych obserwacji źródłowych** zamiast samej listy dostępności:
+
+- MF: miesięczny obrót rynku wtórnego, dynamika m/m i r/r oraz udziały
+  kanałów międzybankowego, BondSpot i GPW — osobno dla ostatniego miesiąca
+  i ostatnich 12 miesięcy. To statystyki **obrotu**, nie ceny ani zwrotu.
+- UKNF: liczba zaobserwowanych wycen jednej klasy, poziomowa zmiana NAV,
+  średnia i nieannualizowane odchylenie standardowe zmian między
+  sąsiednimi obserwacjami, jeśli takie pola istnieją w zweryfikowanym
+  pokwitowaniu. Brak pola **nie** jest zerem i nie daje `None%` w raporcie.
+- NBP tabela A: ostatnie referencyjne USD/PLN i EUR/PLN, jeśli roczny
+  CSV został poprawnie odczytany; brak złota nadal oznacza `PARTIAL`.
+- Eurostat: odrębne obserwacje HICP i rentowności nominalnej oraz
+  **wyłącznie gdy oba zestawy są kompletne** — różnica ich poziomów w p.p.
+
+Wartości są również dostępne w `independent_descriptive_context` w
+`public_source_run_v08.json`. Oryginalny `market_research_v07.json` nadal
+ma `mode=SCHEMA_ONLY` w trybie częściowym; brak cross-market scoring,
+stóp total-return, certyfikacji historycznej PIT i sygnałów M1/M2/M3.
+Przegląd dotyczy września 2026, nie bieżącej rekomendacji.
+
 ## Kontrakt i ograniczenia
 
 | Źródło | Pobrania maksymalne | Interpretacja |

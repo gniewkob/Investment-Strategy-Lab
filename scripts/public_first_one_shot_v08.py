@@ -68,6 +68,76 @@ def _bytes(raw: object) -> bytes:
     return raw
 
 
+def render_independent_context(separate: dict) -> str:
+    """Present source-local observations without upgrading the joined report."""
+    lines = [
+        "\n## Częściowy odczyt źródeł — bez agregacji, wrzesień 2026\n",
+        "Pełny zestaw makroekonomiczny jest niekompletny przez HTTP; "
+        "nie uzupełniono braków szacunkami. Każde źródło opisano osobno.\n",
+        "| Źródło | Zaobserwowany wskaźnik | Ograniczenie |",
+        "|---|---|---|",
+        f"| MF | {separate['mf_months']} miesięcy; ostatni obrót "
+        f"{separate['mf_latest_total_mln_pln']} mln PLN | "
+        "Obrót nie jest stopą zwrotu obligacji. |",
+    ]
+    if "mf_latest_mom_change_pct" in separate:
+        lines.append(
+            f"| MF | Zmiana obrotu m/m {separate['mf_latest_mom_change_pct']}%; "
+            f"r/r {separate['mf_latest_yoy_change_pct']}% | "
+            "Zmiana wielkości rynku, nie zmiana ceny. |")
+        for key, description in (
+                ("mf_latest_month_channel_shares_pct", "Udziały kanałów w miesiącu"),
+                ("mf_trailing12m_channel_shares_pct", "Udziały kanałów w 12 miesiącach")):
+            shares = separate[key]
+            lines.append(
+                f"| MF | {description}: międzybankowy {shares['interbank']}%, "
+                f"BondSpot {shares['bondspot']}%, GPW {shares['gpw']}% | "
+                "Struktura obrotu, nie alokacja portfela. |")
+    nav_level_change = separate["uknf_level_change_not_total_return_pct"]
+    nav_level_text = (f"; zmiana poziomu pierwsza–ostatnia {nav_level_change}%"
+                      if nav_level_change is not None else "")
+    lines.append(
+        f"| UKNF | {separate['uknf_same_class_nav_days']} dni NAV"
+        f"{nav_level_text} | Bez korekt o dystrybucje i opłaty; "
+        "nie całkowity zwrot. |")
+    if "uknf_observed_adjacent_nav_changes" in separate:
+        lines.append(
+            f"| UKNF | {separate['uknf_observed_adjacent_nav_changes']} "
+            "sąsiednich zmian poziomu NAV; średnia "
+            f"{separate['uknf_mean_adjacent_nav_level_change_pct']}%; "
+            f"odchylenie populacyjne "
+            f"{separate['uknf_population_stddev_adjacent_nav_change_pct_not_annualized']}% | "
+            "Nieannualizowane; nie jest stopą zwrotu ani miarą ryzyka inwestora. |")
+    if "nbp_fx_archive_september_days" in separate:
+        lines.append(
+            f"| NBP, tabela A | {separate['nbp_fx_archive_september_days']} "
+            "dni kursów; ostatni USD/PLN "
+            f"{separate['nbp_fx_archive_latest_usdpln_mid']}, EUR/PLN "
+            f"{separate['nbp_fx_archive_latest_eurpln_mid']} | "
+            "Kursy referencyjne, bez serii złota i bez kosztów wymiany. |")
+    if "eurostat_hicp_months" in separate:
+        lines.append(f"| Eurostat HICP | {separate['eurostat_hicp_months']} "
+                     "miesięcy indeksu cen | Nie zwrot z inwestycji. |")
+    if "eurostat_yield_months" in separate:
+        lines.append(f"| Eurostat PL 10Y | {separate['eurostat_yield_months']} "
+                     "miesięcy rentowności nominalnej | Nie total-return obligacji. |")
+    if "eurostat_level_gap_pp_not_real_yield" in separate:
+        lines.append(
+            "| Eurostat (wyłącznie dwa poziomy) | Nominalna rentowność "
+            f"{separate['eurostat_pl_nominal_10y_yield_pct']}% minus zmiana "
+            f"HICP {separate['eurostat_trailing_12m_hicp_pct']}% = "
+            f"{separate['eurostat_level_gap_pp_not_real_yield']} p.p. | "
+            "To nie realna stopa zwrotu ani prognoza. |")
+    lines.extend((
+        "\n**Interpretacja:** brak serii inwestowalnych PLN total-return, "
+        "porównania zwrotów, korelacji i sygnału transakcyjnego. "
+        "M1/M2/M3: `INSUFFICIENT_DATA_HOLD_CASH`. "
+        "Weryfikacja historycznej dostępności danych (PIT): niepotwierdzona.",
+        "",
+    ))
+    return "\n".join(lines)
+
+
 def run_once(*, knf_fetch: Callable | None, mf_fetch: Callable | None,
              nbp_fetch: Callable | None, hicp_fetch: Callable | None,
              yield_fetch: Callable | None,
@@ -220,12 +290,31 @@ def run_once(*, knf_fetch: Callable | None, mf_fetch: Callable | None,
             "scope": "INDEPENDENT_ORIGINAL_REFERENCES_NOT_CROSS_MARKET_COMPARISON",
             "mf_source_sha256": mf_schema["sha256"],
             "mf_months": mf_turnover["unique_month_count"],
+            "mf_latest_month": mf_turnover["last_month"],
             "mf_latest_total_mln_pln": mf_turnover["latest_total_mln_pln"],
+            "mf_latest_mom_change_pct": mf_turnover["latest_mom_change_pct"],
+            "mf_latest_yoy_change_pct": mf_turnover["latest_yoy_change_pct"],
+            "mf_latest_month_channel_shares_pct": mf_turnover[
+                "latest_month_channel_shares_pct"],
+            "mf_trailing12m_channel_shares_pct": mf_turnover[
+                "trailing12m_channel_shares_pct"],
             "uknf_source_sha256": nav_quality["source_history_sha256"],
             "uknf_same_class_nav_days": nav_quality["distinct_valuation_days"],
             "uknf_level_change_not_total_return_pct": nav_quality.get(
                 "first_to_last_nav_level_change_pct_not_total_return"),
         }
+        nav_descriptive = (
+            ("observed_adjacent_nav_level_changes", "uknf_observed_adjacent_nav_changes"),
+            ("mean_adjacent_observed_nav_level_change_pct",
+             "uknf_mean_adjacent_nav_level_change_pct"),
+            ("population_stddev_adjacent_observed_nav_level_change_pct_not_annualized",
+             "uknf_population_stddev_adjacent_nav_change_pct_not_annualized"),
+            ("unobserved_weekday_calendar_dates_not_verified_market_holidays",
+             "uknf_unobserved_weekdays_not_holidays"),
+        )
+        if all(source_key in nav_quality for source_key, _ in nav_descriptive):
+            standalone.update({target: nav_quality[source]
+                               for source, target in nav_descriptive})
         if independent_nbp_fx_archive is not None:
             ref = independent_nbp_fx_archive
             standalone.update(
@@ -312,30 +401,8 @@ def main(argv: list[str] | None = None, *, runner: Callable = run_once) -> int:
     with (target / "market_research_v07.md").open("x", encoding="utf-8") as handle:
         handle.write(render_markdown(report))
         if result["independent_descriptive_context"] is not None:
-            separate = result["independent_descriptive_context"]
-            handle.write("\n## Częściowy odczyt źródeł — bez agregacji\n\n")
-            handle.write("- Pełny zestaw NBP/Eurostat: niedostępny przez HTTP; "
-                         "nie uzupełniono braków szacunkami.\n")
-            handle.write(f"- MF: {separate['mf_months']} miesięcy, "
-                         f"ostatni obrót {separate['mf_latest_total_mln_pln']} mln PLN "
-                         "(to nie stopa zwrotu).\n")
-            handle.write(f"- UKNF: {separate['uknf_same_class_nav_days']} dni NAV "
-                         "(nie całkowity zwrot inwestora).\n")
-            if "nbp_fx_archive_september_days" in separate:
-                handle.write(
-                    f"- NBP archiwum A: {separate['nbp_fx_archive_september_days']} "
-                    "dni kursów USD/EUR, tylko ceny referencyjne; "
-                    "seria NBP złota nadal niekompletna.\n")
-            if "eurostat_hicp_months" in separate:
-                handle.write(f"- Eurostat HICP: {separate['eurostat_hicp_months']} "
-                             "zweryfikowanych miesięcy indeksu cen.\n")
-            if "eurostat_yield_months" in separate:
-                handle.write(f"- Eurostat PL 10Y: {separate['eurostat_yield_months']} "
-                             "zweryfikowanych miesięcy nominalnej rentowności.\n")
-            if "eurostat_level_gap_pp_not_real_yield" in separate:
-                handle.write("- Nominalna rentowność minus roczna zmiana HICP: "
-                             f"{separate['eurostat_level_gap_pp_not_real_yield']} p.p. "
-                             "(tylko różnica poziomów, nie realny zwrot).\n")
+            handle.write(render_independent_context(
+                result["independent_descriptive_context"]))
     with (target / "public_source_run_v08.json").open("x", encoding="utf-8") as handle:
         json.dump(receipt, handle, ensure_ascii=False, sort_keys=True, indent=2)
         handle.write("\n")
