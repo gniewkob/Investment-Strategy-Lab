@@ -1,5 +1,16 @@
 ## 2026-11-23 — public-first v0.8: jednorazowy przebieg oryginalnych źródeł (DEV)
 
+**Nowy niezależny moduł v0.10 — gotówkowy benchmark GPW POLSTR CI:**
+`scripts/polstr_cash_reference_v10.py`, testy
+`tests/test_polstr_cash_reference_v10.py`, instrukcja
+[ISL_POLSTR_CI_CASH_REFERENCE_V10_20261123_PL.md](ISL_POLSTR_CI_CASH_REFERENCE_V10_20261123_PL.md).
+Oficjalne cztery PDF za 2022–2025 zostały odczytane rzeczywiście:
+48/48 miesięcy, 252+251+252+251 dni, SHA oryginałów w dokumentacji.
+100 PLN × 48 nominalnych wpłat = 4800 PLN, niekupowalny indeksowy odpowiednik
+5345,55 PLN; **nie jest** to zysk z depozytu, paper fill ani historycznie
+certyfikowana stopa zwrotu. Co najmniej 40 miesięcy przed produkcją POLSTR
+to retrospektywna rekonstrukcja. Brak DB, zamówień, PIT i zmiany M1–M3.
+
 **Rozszerzenie raportu częściowego, ten sam Draft PR #159:**
 `public_first_one_shot_v08.py` pokazuje teraz w lokalnym Markdown i JSON
 niezależne metryki już walidowanych źródeł: zmiany obrotu MF m/m i r/r,
