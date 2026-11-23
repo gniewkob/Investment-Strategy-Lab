@@ -6,7 +6,7 @@ to ASSET_A in the v0.2 paper engine. It is an experimental research bridge,
 not a verified Vanguard adapter. It does not download, authenticate, license,
 or distribute market data. It accepts only `UNVERIFIED_EXTERNAL` manifests;
 the other two assets, strategy weights and fees remain caller-supplied and
-unverified. The same-month dates may differ by up to seven calendar days;
+unverified. The same-month FX date must be on or before the equity date, at most seven calendar days earlier;
 there is no exchange calendar, month-end, completeness or publication-time
 verification. The product is a hypothetical reference mark, not a trade fill.
 The input and mark fingerprints prove neither provenance nor usage rights.

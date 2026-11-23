@@ -18,7 +18,7 @@ def compare_with_equity_marks(manifest, marks):
     """Replace ASSET_A with EUR equity mark times PLN per EUR reference FX.
 
     Each mark is for the same calendar month as its two dated inputs. The
-    observations may be asynchronous by up to seven days; this is descriptive
+    FX must be no later than the equity date and within seven days; this is descriptive
     valuation, not a simulation of an obtainable execution or PIT knowledge.
     Other assets and all strategy assumptions remain explicitly caller supplied.
     """
@@ -42,7 +42,7 @@ def compare_with_equity_marks(manifest, marks):
             raise MultiAssetBlocked("EQUITY_MARK_DATE_INVALID") from exc
         if (equity_date.strftime("%Y-%m") != row["month"] or
                 fx_date.strftime("%Y-%m") != row["month"] or
-                abs((equity_date - fx_date).days) > 7):
+                not 0 <= (equity_date - fx_date).days <= 7):
             raise MultiAssetBlocked("EQUITY_FX_DATE_MISMATCH")
         equity = number(row["equity_eur"], positive=True)
         fx = number(row["pln_per_eur"], positive=True)
