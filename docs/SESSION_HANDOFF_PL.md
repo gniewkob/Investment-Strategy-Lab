@@ -1,3 +1,18 @@
+## 2026-11-23 — v0.12: offline oryginalne archiwum TBSP.Index (DEV)
+
+Przygotowano `scripts/tbsp_original_archive_intake_v12.py` i 8 syntetycznych
+testów do odczytu kopii oryginalnych stron jednego dnia BondSpot, z kontrolą
+adresu, daty, tabeli (a nie sidebaru), SHA, kompletności 12–60 miesięcy
+oraz raportu agregatowego bez eksportowania surowych notowań. Pilot jednego
+oryginalnego HTML 16.11.2026: indeks zamknięcia 2238,09, oryginalny SHA
+`9b441099108a68d1a2dd92d06427e4726c3fb75ba5f390d42adc2e49f67db8c8`.
+Nie pobierano masowo danych, ponieważ uprawnienia do automatycznego użycia
+i dalszej dystrybucji historii TBSP pozostają niewyjaśnione. Nie uruchomiono
+rzeczywistego 12/48-miesięcznego porównania, nie ma oryginalnego PIT ani
+potwierdzonej ostatniej sesji każdego miesiąca. Testowy wynik 1200→1420
+PLN jest tylko SYNTHETIC; M1–M3 HOLD, 0 DB i 0 transakcji.
+[Źródła, warunki i przykład manifestu](ISL_TBSP_ORIGINAL_ARCHIVE_INTAKE_V12_20261123_PL.md).
+
 ## 2026-11-23 — v0.11: 48-miesięczny benchmark POLSTR CI kontra HICP PL (DEV)
 
 Dodano `scripts/polstr_hicp_purchasing_power_v11.py`, 8 syntetycznych
