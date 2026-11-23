@@ -1,3 +1,75 @@
+## 2026-11-23 — v0.12: offline oryginalne archiwum TBSP.Index (DEV)
+
+Przygotowano `scripts/tbsp_original_archive_intake_v12.py` i 8 syntetycznych
+testów do odczytu kopii oryginalnych stron jednego dnia BondSpot, z kontrolą
+adresu, daty, tabeli (a nie sidebaru), SHA, kompletności 12–60 miesięcy
+oraz raportu agregatowego bez eksportowania surowych notowań. Pilot jednego
+oryginalnego HTML 16.11.2026: indeks zamknięcia 2238,09, oryginalny SHA
+`9b441099108a68d1a2dd92d06427e4726c3fb75ba5f390d42adc2e49f67db8c8`.
+Nie pobierano masowo danych, ponieważ uprawnienia do automatycznego użycia
+i dalszej dystrybucji historii TBSP pozostają niewyjaśnione. Nie uruchomiono
+rzeczywistego 12/48-miesięcznego porównania, nie ma oryginalnego PIT ani
+potwierdzonej ostatniej sesji każdego miesiąca. Testowy wynik 1200→1420
+PLN jest tylko SYNTHETIC; M1–M3 HOLD, 0 DB i 0 transakcji.
+[Źródła, warunki i przykład manifestu](ISL_TBSP_ORIGINAL_ARCHIVE_INTAKE_V12_20261123_PL.md).
+
+## 2026-11-23 — v0.11: 48-miesięczny benchmark POLSTR CI kontra HICP PL (DEV)
+
+Dodano `scripts/polstr_hicp_purchasing_power_v11.py`, 8 syntetycznych
+testów i [opis źródłowy v0.11](ISL_POLSTR_CI_HICP_PURCHASING_POWER_V11_20261123_PL.md).
+Nowy jednorazowy odczyt czterech oryginalnych PDF GPW Benchmark i Eurostat
+`prc_hicp_minr` potwierdził pełne 48/48 miesięcy 2022–2025. Fikcyjne 48 ×
+100 PLN = 4 800 PLN; terminalny odpowiednik POLSTR CI 5 345,55 PLN;
+odniesienie wpłat skorygowanych do ostatniego miesiąca HICP 5 188,39 PLN;
+różnica +157,16 PLN (nie zrealizowany zysk, bez kosztów i podatków).
+HICP I 2022–XII 2025 +28,47% w obecnie przeliczonym szeregu, a 40 miesięcy
+POLSTR CI są preprodukcyjne. Ani dane bieżące, ani SHA nie certyfikują PIT.
+Zero operacji finansowych, DB, promocji M1–M3 i surowych szeregów w GitHub.
+
+## 2026-11-23 — public-first v0.8: jednorazowy przebieg oryginalnych źródeł (DEV)
+
+**Nowy niezależny moduł v0.10 — gotówkowy benchmark GPW POLSTR CI:**
+`scripts/polstr_cash_reference_v10.py`, testy
+`tests/test_polstr_cash_reference_v10.py`, instrukcja
+[ISL_POLSTR_CI_CASH_REFERENCE_V10_20261123_PL.md](ISL_POLSTR_CI_CASH_REFERENCE_V10_20261123_PL.md).
+Oficjalne cztery PDF za 2022–2025 zostały odczytane rzeczywiście:
+48/48 miesięcy, 252+251+252+251 dni, SHA oryginałów w dokumentacji.
+100 PLN × 48 nominalnych wpłat = 4800 PLN, niekupowalny indeksowy odpowiednik
+5345,55 PLN; **nie jest** to zysk z depozytu, paper fill ani historycznie
+certyfikowana stopa zwrotu. Co najmniej 40 miesięcy przed produkcją POLSTR
+to retrospektywna rekonstrukcja. Brak DB, zamówień, PIT i zmiany M1–M3.
+
+**Rozszerzenie raportu częściowego, ten sam Draft PR #159:**
+`public_first_one_shot_v08.py` pokazuje teraz w lokalnym Markdown i JSON
+niezależne metryki już walidowanych źródeł: zmiany obrotu MF m/m i r/r,
+udział trzech kanałów w miesiącu i 12m oraz (gdy dostępne) nieannualizowaną
+zmienność zmian poziomu NAV UKNF. Nadal nie kwalifikuje tych danych jako
+stopy zwrotu, nie łączy brakującego NBP złota z innymi seriami i zachowuje
+`SCHEMA_ONLY` oraz `INSUFFICIENT_DATA_HOLD_CASH`. Szczegóły kontraktu:
+[ISL_PUBLIC_FIRST_ONE_SHOT_V08_20261123_PL.md](ISL_PUBLIC_FIRST_ONE_SHOT_V08_20261123_PL.md).
+
+W ramach kontynuacji Draft PR #159 przygotowano `scripts/public_first_one_shot_v08.py`:
+na jedno jawne wywołanie pobiera w pamięci oryginalne pliki/odpowiedzi UKNF,
+MF, NBP i Eurostat, stosuje już istniejące walidatory v0.5–v0.7 i tworzy lokalny
+JSON+Markdown oraz receipt z licznikami i SHA raportu. Domyślny błąd dowolnego
+źródła przerywa przebieg bez utworzenia katalogu. Jawna opcja
+`--allow-macro-unavailable` umożliwia tylko **PARTIAL** z osobnymi, zweryfikowanymi
+wartościami MF/UKNF po HTTP/network failure NBP/Eurostat, bez ich przekrojowego
+łączenia, dopowiadania braków ani uznania ich za total-return.
+
+**Prawdziwy lokalny przebieg 23.11.2026:** UKNF 3 publiczne GET i 22 dni
+NAV jednej klasy; MF 1 GET oraz oryginalne 202 miesiące XII2009–IX2026,
+ostatni obrót 3 140 385,25 mln PLN. Archiwalny endpoint NBP za wrzesień 2026
+odpowiedział HTTP 404; nie wykonano Eurostat, wynik jawnie **PARTIAL**, nie
+pełna weryfikacja źródeł. Raport `SCHEMA_ONLY` + osobny kontekst MF/UKNF,
+**0** transakcji, zleceń, DB writes, kont, harmonogramów czy eksportu raw XLSX.
+Dokumentacja, polecenie i granice: [ISL_PUBLIC_FIRST_ONE_SHOT_V08_20261123_PL.md](ISL_PUBLIC_FIRST_ONE_SHOT_V08_20261123_PL.md).
+
+Lokalna pełna regresja dla zmiany musi zostać uruchomiona na **czystym commicie**:
+istniejący test atestacji odrzuca dirty worktree. Nie mylić realnego częściowego
+odczytu z PASS wszystkich czterech rodzin źródeł; CI GitHub Actions nie jest
+dowodem testów, jeżeli zadania nie wystartowały z powodu billing lock.
+
 ## 2026-10-24 — ntfy wdrożone do obu watchdogów; odbiór na iOS oczekuje potwierdzenia
 
 Po jawnej zgodzie użytkownika [PR #82](https://github.com/gniewkob/Investment-Strategy-Lab/pull/82)
@@ -817,3 +889,23 @@ Wcześniej wykonane kroki są w opisach PR oraz [Issue #4](https://github.com/gn
 - Zawsze linkuj **konkretny GitHub run/PR/commit**; rozdzielaj „offline CI passed” od „rzeczywisty staging workflow przeszedł”. Test CI na disposable PostgreSQL **nie oznacza** uruchomienia SQL na Neon.
 - Jeśli aktualny HEAD jest nowszy niż snapshot, sprawdź zmiany i popraw dokument zamiast w ciemno wykonywać kroki.
 - Nie wrzucaj prywatnych źródeł lub sekretów do publicznej dokumentacji.
+
+## 11. Aneks 2026-11-23 — publiczne badania rynku, PR #159
+
+- Uruchomienie `scripts/public_first_one_shot_v08.py` jednorazowo czyta
+  oryginalne MF/UKNF i próbuje NBP/Eurostat. Jest wyłącznie read-only,
+  bez konta, bez Neon, bez realnych zleceń.
+- Wrześniowy NBP zwraca sporadycznie HTTP 404 również dla krótszych zakresów.
+  Nowa `scripts/nbp_reference_chunked_v09.py` łączy jedynie osobno
+  zweryfikowane pokwitowania oryginalnych odpowiedzi; zamrożony A2 adapter
+  `scripts/nbp_reference_capture.py` ma zachowany wymagany SHA Git blob.
+- Alternatywny `scripts/nbp_table_a_archive_v09.py` odczytuje bezpośrednio
+  oficjalny roczny CSV NBP (22 dni USD/EUR z września 2026) i pozostaje
+  odrębny od niedostępnej serii złota; 1 GET, oryginalny SHA/URL, bez DB.
+- Faktyczny fallback daje `PARTIAL`: 202 miesięcy MF, 22 dni UKNF,
+  13 miesięcy HICP, 59 miesięcy rentowności Eurostat PL 10Y, NBP niepełne.
+  Ostatnie poziomy są opisowe, nie stanowią szeregu total-return ani PIT.
+- Szczegóły, odciski oryginalnych źródeł i komenda odtworzenia:
+  [`ISL_PUBLIC_FIRST_ONE_SHOT_V08_20261123_PL.md`](ISL_PUBLIC_FIRST_ONE_SHOT_V08_20261123_PL.md).
+- PR #159 pozostaje Draft. GitHub Actions nie jest lokalnym dowodem regresji;
+  nie scalać z pominięciem wymaganych kontroli.

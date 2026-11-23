@@ -16,6 +16,7 @@ from scripts.public_first_prospective_source_observation_v03 import (
     observe_once, verify_receipt, _load_previous, main,
 )
 from scripts.nbp_reference_capture import capture
+from scripts.nbp_reference_chunked_v09 import capture_chunked
 from scripts.eurostat_hicp_macro_context_v01 import inspect_hicp
 from tests.test_eurostat_hicp_macro_context_v01 import fixture
 
@@ -56,6 +57,33 @@ def snap(*, when=AT, usd=4.0, end=END, hicp=eurostat_fetch):
 
 
 class ProspectivePublicSourceTests(unittest.TestCase):
+    def test_chunked_receipt_exposes_real_original_hashes_and_verifies(self):
+        def fetch(url):
+            day = url.split("/")[-3]
+            if "/cenyzlota/" in url:
+                return json.dumps([{"data": day, "cena": 410}]).encode()
+            return json.dumps([{"table": "A", "no": "100/A/2026", "effectiveDate": day,
+                                "rates": [{"code": "USD", "mid": 4},
+                                          {"code": "EUR", "mid": 4.5}]}]).encode()
+        nbp = capture_chunked(START, END, fetch=fetch, clock=lambda: AT, chunk_days=10)
+        hicp = inspect_hicp(fixture(months=(SINCE, UNTIL), values=(101.2, 102.0)),
+                            since=SINCE, until=UNTIL,
+                            retrieval_scope="EUROSTAT_PUBLIC_READ_ONLY")
+        original = assemble_receipt(nbp, hicp, nbp_start=START, nbp_end=END,
+                                    hicp_since=SINCE, hicp_until=UNTIL, completed_at=AT)
+        self.assertEqual(len(original["nbp_original_response_receipts"]["fx"]), 3)
+        self.assertIn("/2026-09-11/2026-09-20/",
+                      original["nbp_original_response_receipts"]["gold"][1]["url"])
+        self.assertEqual(verify_receipt(original), original)
+        forged = deepcopy(original)
+        forged["nbp_original_response_receipts"]["fx"][1]["sha256"] = "0" * 64
+        with self.assertRaisesRegex(SourceObservationBlocked, "RECEIPT_INTEGRITY"):
+            verify_receipt(forged)
+        nbp["series"]["usdpln"][1]["source_sha256"] = "0" * 64
+        with self.assertRaisesRegex(SourceObservationBlocked, "NBP_REFERENCE_SEMANTICS"):
+            assemble_receipt(nbp, hicp, nbp_start=START, nbp_end=END,
+                             hicp_since=SINCE, hicp_until=UNTIL, completed_at=AT)
+
     def test_observed_receipt_is_metadata_only_and_unqualified(self):
         item = snap()
         self.assertEqual(item["schema"], SCHEMA)
